@@ -73,5 +73,10 @@ control must be `.app-no-drag`. `.titlebar-safe` reserves space for the native c
 ## Roadmap
 - **Milestone 1 (done):** frameless window, back/forward/reload-stop, address bar, title sync,
   Cmd/Ctrl+L and Cmd/Ctrl+R.
-- **Later (don't start until asked):** multiple tabs + tab strip, storage (history/bookmarks/
-  session restore), ad blocking.
+- **Home page (done):** `nebula://home/` with ChatGPT/Claude prompt; Google search.
+- **Current plan: browser essentials** — [docs/plans/browser-essentials.md](docs/plans/browser-essentials.md).
+  Approved but **not started**; begin only when the user says to build. Covers tabs, page
+  essentials (context menu, find, zoom, error pages, fullscreen), permissions, downloads,
+  bookmarks and ad blocking. It also changes one security rule: `window.open`/`target=_blank`
+  will open a new sandboxed tab instead of being denied.
+- **Later (don't start until asked):** history + address suggestions, session restore, design pass.
