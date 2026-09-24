@@ -1,0 +1,64 @@
+@import 'tailwindcss';
+
+@theme {
+  --color-bar: #15131f;
+  --color-field: #211e2f;
+  --color-field-hover: #2a2640;
+  --color-ink: #ece9f7;
+  --color-ink-muted: #8d88a6;
+  --color-ink-faint: #56516c;
+  --color-plasma: #9d7bff;
+
+  --font-sans: 'Segoe UI Variable Text', 'Segoe UI', system-ui, -apple-system, sans-serif;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  background: var(--color-bar);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  user-select: none;
+}
+
+.app-drag {
+  -webkit-app-region: drag;
+}
+
+.app-no-drag {
+  -webkit-app-region: no-drag;
+}
+
+/* Reserve space for native window controls: traffic lights on macOS, the overlay elsewhere. */
+.titlebar-safe {
+  padding-right: calc(100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, 100vw) + 8px);
+}
+[data-platform='darwin'] .titlebar-safe {
+  padding-left: 80px;
+  padding-right: 12px;
+}
+
+@keyframes load-sweep {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(250%);
+  }
+}
+
+.load-sweep {
+  animation: load-sweep 1.1s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .load-sweep {
+    animation: none;
+    transform: none;
+    width: 100%;
+    opacity: 0.6;
+  }
+}

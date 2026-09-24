@@ -1,0 +1,73 @@
+import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
+import { LockIcon, SearchIcon } from './icons'
+
+export function AddressBar({ url }: { url: string }): React.JSX.Element {
+  const inputRef = useRef<HTMLInputElement>(null)
+  const [draft, setDraft] = useState(url)
+  const [editing, setEditing] = useState(false)
+  // Set on Enter so the blur that follows keeps the typed text until the page navigates.
+  const submittedRef = useRef(false)
+
+  // Follow navigations, but never clobber what the user is typing.
+  useEffect(() => {
+    if (document.activeElement !== inputRef.current) setDraft(url)
+  }, [url])
+
+  useEffect(
+    () =>
+      window.browser.onFocusAddressBar(() => {
+        inputRef.current?.focus()
+        inputRef.current?.select()
+      }),
+    []
+  )
+
+  const submit = (event: FormEvent): void => {
+    event.preventDefault()
+    const input = draft.trim()
+    if (!input) return
+    window.browser.navigate(input)
+    submittedRef.current = true
+    inputRef.current?.blur()
+  }
+
+  const onKeyDown = (event: KeyboardEvent<HTMLInputElement>): void => {
+    if (event.key === 'Escape') inputRef.current?.blur()
+  }
+
+  const isSecure = url.startsWith('https://')
+
+  return (
+    <form onSubmit={submit} className="app-no-drag min-w-0 flex-1">
+      <label className="group flex h-8 items-center gap-2 rounded-lg bg-field px-3 ring-1 ring-transparent transition-[background-color,box-shadow] hover:bg-field-hover focus-within:bg-field focus-within:ring-plasma/70">
+        <span className="shrink-0 text-ink-faint group-focus-within:text-plasma">
+          {isSecure && !editing ? (
+            <LockIcon width={13} height={13} />
+          ) : (
+            <SearchIcon width={13} height={13} />
+          )}
+        </span>
+        <input
+          ref={inputRef}
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onFocus={(e) => {
+            setEditing(true)
+            e.target.select()
+          }}
+          onBlur={() => {
+            setEditing(false)
+            if (!submittedRef.current) setDraft(url)
+            submittedRef.current = false
+          }}
+          onKeyDown={onKeyDown}
+          aria-label="Address and search bar"
+          placeholder="Search DuckDuckGo or type a URL"
+          spellCheck={false}
+          autoComplete="off"
+          className="min-w-0 flex-1 bg-transparent text-[13px] text-ink outline-none placeholder:text-ink-faint selection:bg-plasma/40"
+        />
+      </label>
+    </form>
+  )
+}
