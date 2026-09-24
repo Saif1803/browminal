@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import type { TabState } from '@shared/types'
-import { BackIcon, ForwardIcon, ReloadIcon, StopIcon } from './icons'
+import { BackIcon, ForwardIcon, HomeIcon, ReloadIcon, StopIcon } from './icons'
 
 function NavButton({
   label,
@@ -48,6 +48,9 @@ export function NavButtons({ state }: { state: TabState }): React.JSX.Element {
           <ReloadIcon />
         </NavButton>
       )}
+      <NavButton label="Home" onClick={() => browser.home()}>
+        <HomeIcon />
+      </NavButton>
     </div>
   )
 }

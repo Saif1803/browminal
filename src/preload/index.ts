@@ -9,6 +9,7 @@ const browser: BrowserApi = {
   forward: () => ipcRenderer.invoke(IpcChannel.Forward),
   reload: () => ipcRenderer.invoke(IpcChannel.Reload),
   stop: () => ipcRenderer.invoke(IpcChannel.Stop),
+  home: () => ipcRenderer.invoke(IpcChannel.Home),
   getState: () => ipcRenderer.invoke(IpcChannel.GetState),
 
   onTabState(callback) {

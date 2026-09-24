@@ -1,10 +1,13 @@
 import { app, BrowserWindow, Menu } from 'electron'
 import { electronApp } from '@electron-toolkit/utils'
 import { registerIpc } from './ipc'
+import { handleInternalProtocol, registerInternalScheme } from './protocol'
 import { registerShortcuts } from './shortcuts'
 import { createMainWindow, type MainWindow } from './window'
 
 let main: MainWindow | null = null
+
+registerInternalScheme()
 
 function openWindow(): void {
   main = createMainWindow()
@@ -32,6 +35,7 @@ function setAppMenu(): void {
 app.whenReady().then(() => {
   electronApp.setAppUserModelId('com.nebula.browser')
   setAppMenu()
+  handleInternalProtocol()
   registerIpc(() => main)
   openWindow()
 

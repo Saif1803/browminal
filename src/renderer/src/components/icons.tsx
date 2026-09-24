@@ -46,6 +46,13 @@ export const StopIcon = (p: IconProps): React.JSX.Element => (
   </Icon>
 )
 
+export const HomeIcon = (p: IconProps): React.JSX.Element => (
+  <Icon {...p}>
+    <path d="M3 10.5L12 3l9 7.5" />
+    <path d="M5.5 8.5V20h13V8.5" />
+  </Icon>
+)
+
 export const LockIcon = (p: IconProps): React.JSX.Element => (
   <Icon strokeWidth="2.2" {...p}>
     <rect x="5" y="11" width="14" height="10" rx="2" />

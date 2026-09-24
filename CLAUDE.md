@@ -33,7 +33,13 @@ Run `bun run typecheck`, `bun test` and `bun run lint` before calling work done.
   `IpcChannel`); change it there first.
 - Address-bar input is resolved **in main** by `resolveInput` in `src/shared/url.ts`
   (http(s) as-is; bare domains get `https://`; localhost/IPs get `http://`; everything else,
-  including other schemes, is a DuckDuckGo search).
+  including other schemes, is a Google search; empty input goes home).
+- **Internal pages** use the privileged `nebula://` scheme (`src/main/protocol.ts`), served only
+  from `resources/pages/<page>/` via the allowlist in `src/main/internal-files.ts`. The start page
+  is `nebula://home/` (`resources/pages/home`): a prompt box that opens ChatGPT or Claude with
+  the question pre-filled, plus direct links. Internal pages are static HTML/CSS/JS loaded in a
+  normal sandboxed tab: they get no preload and no IPC, and a strict CSP. Typing `nebula://`
+  into the address bar never loads it.
 
 ### Main-process modules (`src/main`)
 | File | Responsibility |
@@ -43,6 +49,8 @@ Run `bun run typecheck`, `bun test` and `bun run lint` before calling work done.
 | `tabs.ts` | `Tab` class: one `WebContentsView`, its events, `TabState` |
 | `ipc.ts` | `ipcMain` handlers and sender validation |
 | `shortcuts.ts` | Cmd/Ctrl+L, Cmd/Ctrl+R via `before-input-event` on UI and tab |
+| `protocol.ts` | Registers and serves the `nebula://` scheme |
+| `internal-files.ts` | Pure URL → file mapping for `nebula://` (allowlist, traversal guard) |
 
 Keep new main-process code in focused modules like these rather than growing `index.ts`.
 

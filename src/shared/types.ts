@@ -16,6 +16,7 @@ export interface BrowserApi {
   forward(): Promise<void>
   reload(): Promise<void>
   stop(): Promise<void>
+  home(): Promise<void>
   getState(): Promise<TabState>
   /** Returns an unsubscribe function. */
   onTabState(callback: (state: TabState) => void): () => void
@@ -30,6 +31,7 @@ export const IpcChannel = {
   Forward: 'tab:forward',
   Reload: 'tab:reload',
   Stop: 'tab:stop',
+  Home: 'tab:home',
   GetState: 'tab:get-state',
   TabState: 'tab:state',
   FocusAddressBar: 'ui:focus-address-bar'

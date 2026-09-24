@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { TabState } from '@shared/types'
+import { isHomeUrl } from '@shared/url'
 import { AddressBar } from './components/AddressBar'
 import { NavButtons } from './components/NavButtons'
 
@@ -29,7 +30,7 @@ function App(): React.JSX.Element {
     <header data-platform={window.browser.platform} className="app-drag relative h-[44px]">
       <div className="titlebar-safe flex h-full items-center gap-2 pl-2">
         <NavButtons state={tab} />
-        <AddressBar url={tab.url} />
+        <AddressBar url={isHomeUrl(tab.url) ? '' : tab.url} />
       </div>
       {tab.isLoading && (
         <div

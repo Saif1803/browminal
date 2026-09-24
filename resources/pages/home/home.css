@@ -1,0 +1,247 @@
+:root {
+  color-scheme: dark;
+  --page: #0f0d17;
+  --surface: #1b1827;
+  --surface-raised: #25213a;
+  --line: rgb(255 255 255 / 0.08);
+  --ink: #ece9f7;
+  --ink-muted: #8d88a6;
+  --ink-faint: #5d5875;
+  --plasma: #9d7bff;
+  --plasma-soft: rgb(157 123 255 / 0.18);
+  --font: 'Segoe UI Variable Text', 'Segoe UI', system-ui, -apple-system, sans-serif;
+  --font-display: 'Segoe UI Variable Display', 'Segoe UI', system-ui, -apple-system, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background:
+    radial-gradient(60rem 28rem at 50% -8rem, rgb(157 123 255 / 0.14), transparent 70%), var(--page);
+  color: var(--ink);
+  font-family: var(--font);
+  font-size: 15px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.home {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: min(680px, 100% - 32px);
+  margin: 0 auto;
+  padding-top: max(12vh, 48px);
+  padding-bottom: 48px;
+}
+
+.greeting {
+  margin: 0 0 28px;
+  font-family: var(--font-display);
+  font-size: clamp(32px, 4.4vw, 44px);
+  font-weight: 300;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+  color: var(--ink);
+}
+
+/* Prompt box */
+
+.prompt {
+  width: 100%;
+  padding: 14px 14px 10px 18px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  box-shadow: 0 24px 60px -30px rgb(0 0 0 / 0.8);
+  transition:
+    border-color 150ms,
+    box-shadow 150ms;
+}
+
+.prompt:focus-within {
+  border-color: rgb(157 123 255 / 0.55);
+  box-shadow:
+    0 0 0 4px var(--plasma-soft),
+    0 24px 60px -30px rgb(0 0 0 / 0.8);
+}
+
+.prompt-input {
+  display: block;
+  width: 100%;
+  min-height: 28px;
+  max-height: 240px;
+  padding: 4px 0;
+  resize: none;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 17px;
+  line-height: 1.5;
+}
+
+.prompt-input::placeholder {
+  color: var(--ink-faint);
+}
+
+.prompt-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+/* ChatGPT / Claude picker */
+
+.picker {
+  display: inline-flex;
+  gap: 2px;
+  margin: 0;
+  padding: 3px;
+  border: 0;
+  border-radius: 999px;
+  background: rgb(0 0 0 / 0.28);
+}
+
+.picker-option {
+  position: relative;
+}
+
+.picker-option input {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.picker-option span {
+  display: block;
+  padding: 5px 14px;
+  border-radius: 999px;
+  color: var(--ink-muted);
+  font-size: 13px;
+  font-weight: 500;
+  transition:
+    background-color 150ms,
+    color 150ms;
+}
+
+.picker-option:hover span {
+  color: var(--ink);
+}
+
+.picker-option input:checked + span {
+  background: var(--surface-raised);
+  color: var(--ink);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+
+.picker-option input:focus-visible + span {
+  outline: 2px solid var(--plasma);
+  outline-offset: 1px;
+}
+
+.ask {
+  padding: 7px 16px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--plasma);
+  color: #140f26;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: filter 150ms;
+}
+
+.ask:hover {
+  filter: brightness(1.1);
+}
+
+.ask:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+.hint {
+  margin: 10px 0 0;
+  color: var(--ink-faint);
+  font-size: 12px;
+}
+
+/* Direct links */
+
+.shortcuts {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+  width: 100%;
+  margin-top: 56px;
+}
+
+.shortcut {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 16px 18px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  color: inherit;
+  text-decoration: none;
+  transition:
+    background-color 150ms,
+    border-color 150ms;
+}
+
+.shortcut:hover {
+  background: var(--surface);
+  border-color: rgb(255 255 255 / 0.14);
+}
+
+.shortcut:focus-visible {
+  outline: 2px solid var(--plasma);
+  outline-offset: 2px;
+}
+
+.shortcut-name {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.shortcut-host {
+  color: var(--ink-muted);
+  font-size: 13px;
+}
+
+@media (max-width: 480px) {
+  .shortcuts {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+  }
+}

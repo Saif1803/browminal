@@ -62,7 +62,7 @@ export function AddressBar({ url }: { url: string }): React.JSX.Element {
           }}
           onKeyDown={onKeyDown}
           aria-label="Address and search bar"
-          placeholder="Search DuckDuckGo or type a URL"
+          placeholder="Search Google or type a URL"
           spellCheck={false}
           autoComplete="off"
           className="min-w-0 flex-1 bg-transparent text-[13px] text-ink outline-none placeholder:text-ink-faint selection:bg-plasma/40"

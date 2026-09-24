@@ -3,7 +3,6 @@ import { join } from 'path'
 import { is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
 import { IpcChannel } from '../shared/types'
-import { HOME_URL } from '../shared/url'
 import { Tab } from './tabs'
 
 /** Height of the React top bar; the tab view is placed directly below it. */
@@ -92,7 +91,7 @@ export function createMainWindow(): MainWindow {
     window.loadFile(join(__dirname, '../renderer/index.html'))
   }
 
-  tab.navigate(HOME_URL)
+  tab.goHome()
 
   return { window, tab }
 }

@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { HOME_URL, SEARCH_URL, resolveInput } from './url'
+import { HOME_URL, SEARCH_URL, isHomeUrl, resolveInput } from './url'
 
 const search = (q: string): string => SEARCH_URL + encodeURIComponent(q)
 
@@ -39,5 +39,22 @@ describe('resolveInput', () => {
 
   test('empty input goes home', () => {
     expect(resolveInput('   ')).toBe(HOME_URL)
+  })
+})
+
+describe('search and home', () => {
+  test('searches Google, not DuckDuckGo', () => {
+    expect(resolveInput('best pizza')).toBe('https://www.google.com/search?q=best%20pizza')
+  })
+
+  test('home URL is the internal page', () => {
+    expect(HOME_URL).toBe('nebula://home/')
+    expect(isHomeUrl('nebula://home/')).toBe(true)
+    expect(isHomeUrl('nebula://home/#x')).toBe(true)
+    expect(isHomeUrl('https://nebula.home/')).toBe(false)
+  })
+
+  test('typing the internal scheme does not load it', () => {
+    expect(resolveInput('nebula://home/')).toBe(search('nebula://home/'))
   })
 })

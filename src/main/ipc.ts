@@ -54,5 +54,6 @@ export function registerIpc(getMain: () => MainWindow | null): void {
   ipcMain.handle(IpcChannel.Forward, (event) => assertTrustedSender(event).tab.forward())
   ipcMain.handle(IpcChannel.Reload, (event) => assertTrustedSender(event).tab.reload())
   ipcMain.handle(IpcChannel.Stop, (event) => assertTrustedSender(event).tab.stop())
+  ipcMain.handle(IpcChannel.Home, (event) => assertTrustedSender(event).tab.goHome())
   ipcMain.handle(IpcChannel.GetState, (event) => assertTrustedSender(event).tab.getState())
 }

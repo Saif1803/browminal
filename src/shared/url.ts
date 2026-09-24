@@ -1,5 +1,12 @@
-export const SEARCH_URL = 'https://duckduckgo.com/?q='
-export const HOME_URL = 'https://duckduckgo.com/'
+export const SEARCH_URL = 'https://www.google.com/search?q='
+
+/** Scheme for the browser's own pages, served from resources/ by src/main/protocol.ts. */
+export const INTERNAL_SCHEME = 'nebula'
+export const HOME_URL = `${INTERNAL_SCHEME}://home/`
+
+export function isHomeUrl(url: string): boolean {
+  return url === HOME_URL || url.startsWith(`${HOME_URL}#`) || url.startsWith(`${HOME_URL}?`)
+}
 
 const SCHEME = /^([a-z][a-z0-9+.-]*):\/\//i
 const LOCAL_HOST = /^(localhost|\d{1,3}(\.\d{1,3}){3}|\[[0-9a-f:]+\])(:\d{1,5})?([/?#].*)?$/i
@@ -10,7 +17,8 @@ const DOMAIN = /^([a-z0-9-]+\.)+[a-z]{2,}\.?(:\d{1,5})?([/?#].*)?$/i
  * Turns address-bar text into a URL to load.
  * - http(s) URLs are used as-is.
  * - Bare hostnames get https://, except localhost and IPs, which get http://.
- * - Everything else (including other schemes like javascript: or file:) is a DuckDuckGo search.
+ * - Everything else (including other schemes like javascript: or file:) is a Google search.
+ * - Empty input goes to the home page.
  */
 export function resolveInput(raw: string): string {
   const input = raw.trim()
