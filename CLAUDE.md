@@ -44,8 +44,9 @@ Run `bun run typecheck`, `bun test` and `bun run lint` before calling work done.
 - **Storage:** small JSON files in `userData` through `JsonStore` (`src/main/store.ts`): read once
   and checked (`parseBookmarkFile`, `parseSettings`; bad entries are dropped, a file that isn't JSON
   is kept as `*.broken`), written debounced and atomically (temp file + rename), flushed on quit.
-  Files: `bookmarks.json` (`{version: 1, bookmarks}`) and `settings.json` (bookmarks bar; the ad
-  blocker adds its settings there). Pure file formats live in their own tested modules.
+  Files: `bookmarks.json` (`{version: 1, bookmarks}`) and `settings.json` (bookmarks bar, and
+  `adblock: {enabled, pausedSites}`). Pure file formats live in their own tested modules.
+  The ad blocker's engine is cached separately as `adblock-engine.bin` (binary, not a JsonStore).
 - Address-bar input is resolved **in main** by `resolveInput` in `src/shared/url.ts`
   (http(s) as-is; bare domains get `https://`; localhost/IPs get `http://`; everything else,
   including other schemes, is a Google search; empty input goes home).
@@ -73,6 +74,11 @@ Run `bun run typecheck`, `bun test` and `bun run lint` before calling work done.
 | `downloads-menu.ts` | Native menu for the downloads button (placeholder until the design pass) |
 | `store.ts` | `JsonStore`: one JSON file in userData; checked on read, debounced atomic writes |
 | `settings.ts` | Pure: `settings.json` format and defaults |
+| `adblock.ts` | `Adblock`: filter engine lifecycle (cache, daily update), request blocking, element hiding, per-tab counts |
+| `adblock-filters.ts` | Ghostery engine wrapper: build/load, `shouldBlock`, `cosmeticStyles` (no Electron; tested) |
+| `adblock-policy.ts` | Pure: sites, paused list, shield status, update timing, page-scan checks |
+| `adblock-worker.ts` | Worker thread that parses the filter lists (keeps main responsive) |
+| `adblock-menu.ts` | Native menu for the shield (placeholder until the design pass) |
 | `bookmark-list.ts` | Pure: `bookmarks.json` format, add/remove/find, URL and favicon checks |
 | `bookmarks.ts` | `Bookmarks`: the list and the bar setting; star/Ctrl+D toggle, favicon refresh, open |
 | `bookmarks-menu.ts` | Native menus: right-click on a bookmark or the bar, and the "»" overflow |
@@ -124,12 +130,19 @@ space for the native controls.
   `bookmarks.json` is re-checked on every read (never trusted, it's a file anyone can edit).
   Favicons are stored only as checked `data:image/…;base64` URLs (max 64 KB, shrunk to 32 px
   where Electron can decode them); the UI's CSP stays `img-src 'self' data:`.
+- **Ad blocker** (`adblock.ts`): uses `@ghostery/adblocker` directly, **never**
+  `@ghostery/adblocker-electron` (its `enableBlockingInSession` adds a preload to every page and
+  unchecked IPC handlers). Our own `webRequest.onBeforeRequest` (the session's only one) cancels
+  matching requests from tabs; main frames, paused sites, the UI and main's own fetches are never
+  blocked. Element hiding is CSS main inserts (`cssOrigin: 'user'`); the page scan for class
+  names/ids runs in an isolated world and its result is checked (`parseDomTokens`). No scriptlets,
+  redirect resources or `$csp` rules: nothing from the lists runs as code in pages.
 
 ## Roadmap
 - **Milestone 1 (done):** frameless window, back/forward/reload-stop, address bar, title sync,
   Cmd/Ctrl+L and Cmd/Ctrl+R.
 - **Home page (done):** `nebula://home/` with ChatGPT/Claude prompt; Google search.
 - **Current plan: browser essentials** — [docs/plans/browser-essentials.md](docs/plans/browser-essentials.md).
-  **Phases 1–5 (tabs, page essentials, permissions, downloads, bookmarks) done**; build the next
-  phase only when the user says so. Remaining: ad blocking, docs.
+  **Phases 1–6 (tabs, page essentials, permissions, downloads, bookmarks, ad blocker) done**;
+  build the next phase only when the user says so. Remaining: docs.
 - **Later (don't start until asked):** history + address suggestions, session restore, design pass.

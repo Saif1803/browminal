@@ -1,17 +1,21 @@
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
+import type { ShieldState } from '@shared/types'
 import { isHttpUrl } from '@shared/url'
 import { LockIcon, SearchIcon, StarIcon } from './icons'
+import { ShieldButton } from './ShieldButton'
 
 export function AddressBar({
   url,
   isErrorPage,
   zoomFactor,
-  isBookmarked
+  isBookmarked,
+  shield
 }: {
   url: string
   isErrorPage: boolean
   zoomFactor: number
   isBookmarked: boolean
+  shield: ShieldState | null
 }): React.JSX.Element {
   const inputRef = useRef<HTMLInputElement>(null)
   const [draft, setDraft] = useState(url)
@@ -93,6 +97,7 @@ export function AddressBar({
             {zoomPercent}%
           </button>
         )}
+        {shield && <ShieldButton shield={shield} />}
         {isHttpUrl(url) && (
           <button
             type="button"

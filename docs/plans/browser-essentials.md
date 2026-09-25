@@ -1,6 +1,6 @@
 # Plan: browser essentials for Nebula
 
-**Status:** approved 2026-09-25. Phases 1–5 done 2026-09-25. Build phases in order and commit after each phase.
+**Status:** approved 2026-09-25. Phases 1–6 done 2026-09-25. Build phases in order and commit after each phase.
 
 **Changes made while building Phase 1:**
 - `favicons.ts` (plus the pure `image-type.ts` sniffer) was built in Phase 1, because the tab strip shows favicons. Phase 5 reuses it for bookmarks.
@@ -44,6 +44,15 @@
 - No `bookmarks-bar:toggle` or `bookmarks:remove` IPC: Ctrl+Shift+B is a shortcut in main, and Remove / "Show bookmarks bar" are items in main's own native menus. The UI has `bookmarks:toggle-current`, `bookmarks:open` (current / foreground / background tab), `bookmarks:show-menu` and `bookmarks:show-overflow`.
 - Clicking a bookmark opens it in the active tab; middle-click or Ctrl/Cmd+click opens it behind, Shift+click in front (also in the "»" menu).
 - The star removes a bookmark without asking; there's no rename or reorder until the design pass.
+
+**Changes made while building Phase 6:**
+- Confirmed in the package source: `@ghostery/adblocker-electron`'s `enableBlockingInSession` registers a frame preload for every page and `ipcMain` handlers that don't check the sender (and importing it sets `ELECTRON_DISABLE_SECURITY_WARNINGS`). So Nebula depends on the core `@ghostery/adblocker` only.
+- The "prebuilt" engines download the raw lists from GitHub and parse them, which takes about 0.8 s. Parsing runs in a worker thread (`adblock-worker.ts`), so main never freezes; the result is cached as `adblock-engine.bin` (~7 MB) and loads in ~10 ms. Updates are checked every 15 minutes: due once the lists are a day old, retried 15 minutes after a failure. Nothing is downloaded while blocking is off.
+- Only network blocking and element hiding. Scriptlets and redirect resources are left out (they run list code in pages; a tampered cache file could inject scripts), so some ads that need them (e.g. YouTube video ads) aren't blocked. Redirect rules simply block.
+- Element hiding: the site's rules and the generic base rules on `dom-ready`, then rules for the class names, ids and links found by a scan in an isolated world, again at the end of loading and on in-page navigation. There's no MutationObserver (that needs a preload), so ad boxes that appear later only match the site and base rules.
+- "Pause on this site" is per hostname without `www.`. Toggling it (or "everywhere") reloads the tab. The shield also shows "downloading" and "unavailable" (lists couldn't be downloaded, with "Try again").
+- Counts reset when a tab starts a new page and reach the UI at most every 250 ms. The webRequest handler is removed while blocking is off.
+- The lists exempt `localhost` from element hiding (network blocking still applies there).
 
 ## Context
 Nebula (Electron + electron-vite + React/TS + Tailwind v4, Bun) currently has **one tab**, a top bar (back/forward/reload-stop/home + address bar), a `nebula://home/` page (ChatGPT/Claude prompt), and Google search. You asked for "whatever is a must for a browser". You'll decide the visual design and anything else later, so this round builds **functionality and architecture** and keeps the UI plain, using the existing tokens in `src/renderer/src/assets/main.css`.

@@ -130,3 +130,16 @@ export const ChevronsRightIcon = (p: IconProps): React.JSX.Element => (
     <path d="M6 7l5 5-5 5M13 7l5 5-5 5" />
   </Icon>
 )
+
+export const ShieldIcon = (p: IconProps): React.JSX.Element => (
+  <Icon strokeWidth="1.9" {...p}>
+    <path d="M12 3l7.5 3v5.5c0 4.6-3.2 8.3-7.5 9.5-4.3-1.2-7.5-4.9-7.5-9.5V6z" />
+  </Icon>
+)
+
+export const ShieldOffIcon = (p: IconProps): React.JSX.Element => (
+  <Icon strokeWidth="1.9" {...p}>
+    <path d="M19.5 13.5c-.7 3.6-3.6 6.5-7.5 7.5-4.3-1.2-7.5-4.9-7.5-9.5V6l1.5-.6M9 3.9 12 3l7.5 3v4" />
+    <path d="M3 3l18 18" />
+  </Icon>
+)

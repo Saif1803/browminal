@@ -1,6 +1,7 @@
 import { app, BrowserWindow, Menu } from 'electron'
 import { join } from 'path'
 import { electronApp } from '@electron-toolkit/utils'
+import { Adblock } from './adblock'
 import { Bookmarks } from './bookmarks'
 import { registerContextMenus } from './context-menu'
 import { Downloads } from './downloads'
@@ -19,8 +20,8 @@ registerInternalScheme()
 // Look like plain Chrome, so sites (notably Google sign-in) don't block us as an embedded browser.
 app.userAgentFallback = cleanUserAgent(app.userAgentFallback, app.getName())
 
-function openWindow(downloads: Downloads, bookmarks: Bookmarks): void {
-  const opened = createMainWindow(downloads, bookmarks)
+function openWindow(downloads: Downloads, bookmarks: Bookmarks, adblock: Adblock): void {
+  const opened = createMainWindow(downloads, bookmarks, adblock)
   main = opened
   registerShortcuts(opened)
   registerContextMenus(opened)
@@ -60,11 +61,12 @@ app.whenReady().then(() => {
   const userData = app.getPath('userData')
   const settings = new JsonStore(join(userData, 'settings.json'), { parse: parseSettings })
   const bookmarks = new Bookmarks(userData, settings)
+  const adblock = new Adblock(userData, settings)
   registerIpc(() => main)
-  openWindow(downloads, bookmarks)
+  openWindow(downloads, bookmarks, adblock)
 
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) openWindow(downloads, bookmarks)
+    if (BrowserWindow.getAllWindows().length === 0) openWindow(downloads, bookmarks, adblock)
   })
   app.on('before-quit', (event) => {
     if (!downloads.confirmQuit(main?.window ?? null)) event.preventDefault()

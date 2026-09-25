@@ -20,7 +20,8 @@ const EMPTY_STATE: BrowserState = {
     isErrorPage: false,
     zoomFactor: 1,
     find: null,
-    isBookmarked: false
+    isBookmarked: false,
+    shield: null
   },
   downloads: [],
   bookmarks: [],
@@ -74,6 +75,7 @@ function App(): React.JSX.Element {
           isErrorPage={tab.isErrorPage}
           zoomFactor={tab.zoomFactor}
           isBookmarked={tab.isBookmarked}
+          shield={tab.shield}
         />
         <DownloadsButton downloads={state.downloads} />
         {tab.isLoading && (

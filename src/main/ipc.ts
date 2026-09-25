@@ -4,6 +4,7 @@ import { pathToFileURL } from 'url'
 import { is } from '@electron-toolkit/utils'
 import { MAX_CHROME_HEIGHT } from '../shared/layout'
 import { IpcChannel, type Bookmark, type OpenDisposition } from '../shared/types'
+import { showAdblockMenu } from './adblock-menu'
 import { openBookmark } from './bookmarks'
 import { showBookmarkMenu, showBookmarksOverflow } from './bookmarks-menu'
 import { showDownloadsMenu } from './downloads-menu'
@@ -163,6 +164,12 @@ export function registerIpc(getMain: () => MainWindow | null): void {
       showBookmarksOverflow(main, from, point.x, point.y)
     }
   )
+
+  ipcMain.handle(IpcChannel.ShowAdblockMenu, (event, x: unknown, y: unknown) => {
+    const main = assertTrustedSender(event)
+    const point = assertPoint(main, x, y)
+    showAdblockMenu(main, point.x, point.y)
+  })
 
   ipcMain.handle(IpcChannel.SetChromeHeight, (event, px: unknown) => {
     const { tabs } = assertTrustedSender(event)

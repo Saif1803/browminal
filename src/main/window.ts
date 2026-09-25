@@ -5,6 +5,7 @@ import icon from '../../resources/icon.png?asset'
 import { overallProgress } from '../shared/downloads'
 import { TAB_STRIP_HEIGHT } from '../shared/layout'
 import { IpcChannel, type BrowserState } from '../shared/types'
+import type { Adblock } from './adblock'
 import type { Bookmarks } from './bookmarks'
 import type { Downloads } from './downloads'
 import { TabManager } from './tab-manager'
@@ -19,10 +20,15 @@ export interface MainWindow {
   tabs: TabManager
   downloads: Downloads
   bookmarks: Bookmarks
+  adblock: Adblock
   getState(): BrowserState
 }
 
-export function createMainWindow(downloads: Downloads, bookmarks: Bookmarks): MainWindow {
+export function createMainWindow(
+  downloads: Downloads,
+  bookmarks: Bookmarks,
+  adblock: Adblock
+): MainWindow {
   const isMac = process.platform === 'darwin'
   const colors = themeColors()
 
@@ -89,7 +95,11 @@ export function createMainWindow(downloads: Downloads, bookmarks: Bookmarks): Ma
     const { tabs: tabSummaries, active } = tabs.getState()
     return {
       tabs: tabSummaries,
-      active: { ...active, isBookmarked: bookmarks.isBookmarked(active.url) },
+      active: {
+        ...active,
+        isBookmarked: bookmarks.isBookmarked(active.url),
+        shield: adblock.shieldFor(active.url, tabs.active.webContents)
+      },
       downloads: downloads.getState(),
       bookmarks: [...bookmarks.all],
       bookmarksBarVisible: bookmarks.barVisible
@@ -122,6 +132,8 @@ export function createMainWindow(downloads: Downloads, bookmarks: Bookmarks): Ma
   tabs.onChange(schedulePush)
   const stopWatchingDownloads = downloads.onChange(schedulePush)
   const stopWatchingBookmarks = bookmarks.onChange(schedulePush)
+  const stopWatchingAdblock = adblock.onChange(schedulePush)
+  tabs.onTabCreated((tab) => adblock.attach(tab.webContents))
   // Visiting a bookmarked page refreshes the bookmark's icon.
   tabs.onFaviconLoaded((url, favicon) => bookmarks.updateFavicon(url, favicon))
 
@@ -129,6 +141,7 @@ export function createMainWindow(downloads: Downloads, bookmarks: Bookmarks): Ma
   window.on('closed', () => {
     stopWatchingDownloads()
     stopWatchingBookmarks()
+    stopWatchingAdblock()
     stopWatchingTheme()
     tabs.dispose()
   })
@@ -139,5 +152,5 @@ export function createMainWindow(downloads: Downloads, bookmarks: Bookmarks): Ma
     window.loadFile(join(__dirname, '../renderer/index.html'))
   }
 
-  return { window, tabs, downloads, bookmarks, getState }
+  return { window, tabs, downloads, bookmarks, adblock, getState }
 }

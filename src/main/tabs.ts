@@ -56,8 +56,8 @@ export interface TabHooks {
   faviconLoaded(tab: Tab, favicon: string): void
 }
 
-/** What a tab knows about itself for the toolbar; the window adds whether it's bookmarked. */
-export type TabActiveState = Omit<ActiveTabState, 'isBookmarked'>
+/** What a tab knows about itself for the toolbar; the window adds the star and the shield. */
+export type TabActiveState = Omit<ActiveTabState, 'isBookmarked' | 'shield'>
 
 export interface OpenRequest {
   /**

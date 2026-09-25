@@ -25,6 +25,7 @@ const browser: BrowserApi = {
   showBookmarkMenu: (id, x, y) => ipcRenderer.invoke(IpcChannel.ShowBookmarkMenu, id, x, y),
   showBookmarksOverflow: (from, x, y) =>
     ipcRenderer.invoke(IpcChannel.ShowBookmarksOverflow, from, x, y),
+  showAdblockMenu: (x, y) => ipcRenderer.invoke(IpcChannel.ShowAdblockMenu, x, y),
   setChromeHeight: (px) => ipcRenderer.invoke(IpcChannel.SetChromeHeight, px),
   getState: () => ipcRenderer.invoke(IpcChannel.GetState),
 

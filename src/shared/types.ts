@@ -34,6 +34,24 @@ export interface ActiveTabState {
   find: FindState | null
   /** Whether the tab's URL is bookmarked (the star in the address bar). */
   isBookmarked: boolean
+  /** The ad blocker's shield in the address bar; null on pages that aren't on the web. */
+  shield: ShieldState | null
+}
+
+/**
+ * The ad blocker on the active tab's page:
+ * - on: blocking; paused: the user paused it on this site; off: turned off everywhere
+ * - loading: the filter lists are being downloaded for the first time
+ * - unavailable: they couldn't be downloaded (offline); it tries again later
+ */
+export type ShieldStatus = 'on' | 'paused' | 'off' | 'loading' | 'unavailable'
+
+export interface ShieldState {
+  status: ShieldStatus
+  /** The site blocking can be paused on: the page's hostname without "www.". */
+  site: string
+  /** Ads and trackers blocked on the current page (since it started loading). */
+  blocked: number
 }
 
 /** One bookmark, saved in bookmarks.json. Only http(s) URLs can be bookmarked. */
@@ -114,6 +132,8 @@ export interface BrowserApi {
   showBookmarkMenu(id: number | null, x: number, y: number): Promise<void>
   /** The "»" menu: every bookmark from index `from` on, the ones that don't fit on the bar. */
   showBookmarksOverflow(from: number, x: number, y: number): Promise<void>
+  /** The shield: the ad blocker's menu for the active tab, at (x, y). */
+  showAdblockMenu(x: number, y: number): Promise<void>
 
   /** The UI's height in px; main places tabs directly below it. */
   setChromeHeight(px: number): Promise<void>
@@ -149,6 +169,7 @@ export const IpcChannel = {
   OpenBookmark: 'bookmarks:open',
   ShowBookmarkMenu: 'bookmarks:show-menu',
   ShowBookmarksOverflow: 'bookmarks:show-overflow',
+  ShowAdblockMenu: 'adblock:show-menu',
   SetChromeHeight: 'ui:set-chrome-height',
   GetState: 'browser:get-state',
   State: 'browser:state',
