@@ -1,6 +1,6 @@
 # Plan: browser essentials for Nebula
 
-**Status:** approved 2026-09-25. Phases 1 and 2 done 2026-09-25. Build phases in order and commit after each phase.
+**Status:** approved 2026-09-25. Phases 1–3 done 2026-09-25. Build phases in order and commit after each phase.
 
 **Changes made while building Phase 1:**
 - `favicons.ts` (plus the pure `image-type.ts` sniffer) was built in Phase 1, because the tab strip shows favicons. Phase 5 reuses it for bookmarks.
@@ -16,6 +16,13 @@
 - The UI's text fields (address bar, find bar) got a cut/copy/paste context menu.
 - A crashed page shows the error page ("This page crashed") too.
 - History is kept clean: the failed load's own entry and the error page's entry are removed when the error page loads or a retry succeeds.
+
+**Changes made while building Phase 3:**
+- `openExternal` is denied by the permission handler, so only the Phase 2 confirm dialog can open other apps.
+- Only the active tab can prompt. A background tab's request is refused without being remembered, so the site can ask again once it's in front.
+- Screen sharing offers whole screens only (one button per screen), never audio, and requires a user gesture. Chromium first sends a `media` request with no camera/microphone type; that is let through to the screen picker, which asks.
+- Permission checks can't answer "ask", so until a site requests something, `navigator.permissions.query` reports `denied` (not `prompt`). Requesting still shows the dialog.
+- Also closed: Electron's default of handing the first Bluetooth device to `navigator.bluetooth.requestDevice`, and the USB, HID and serial pickers.
 
 ## Context
 Nebula (Electron + electron-vite + React/TS + Tailwind v4, Bun) currently has **one tab**, a top bar (back/forward/reload-stop/home + address bar), a `nebula://home/` page (ChatGPT/Claude prompt), and Google search. You asked for "whatever is a must for a browser". You'll decide the visual design and anything else later, so this round builds **functionality and architecture** and keeps the UI plain, using the existing tokens in `src/renderer/src/assets/main.css`.

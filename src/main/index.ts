@@ -2,6 +2,7 @@ import { app, BrowserWindow, Menu } from 'electron'
 import { electronApp } from '@electron-toolkit/utils'
 import { registerContextMenus } from './context-menu'
 import { registerIpc } from './ipc'
+import { registerPermissions } from './permissions'
 import { handleInternalProtocol, registerInternalScheme } from './protocol'
 import { registerShortcuts } from './shortcuts'
 import { cleanUserAgent } from './user-agent'
@@ -41,6 +42,7 @@ app.whenReady().then(() => {
   electronApp.setAppUserModelId('com.nebula.browser')
   setAppMenu()
   handleInternalProtocol()
+  registerPermissions(() => main)
   registerIpc(() => main)
   openWindow()
 

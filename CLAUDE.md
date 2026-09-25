@@ -59,6 +59,8 @@ Run `bun run typecheck`, `bun test` and `bun run lint` before calling work done.
 | `navigation-policy.ts` | Pure: where pages may navigate (web yes; `mailto:`/`tel:` ask; everything else blocked) |
 | `external-links.ts` | Confirm dialog, then `shell.openExternal`, for `mailto:`/`tel:` only |
 | `zoom-levels.ts` | Pure: Chrome's zoom steps |
+| `permission-policy.ts` | Pure: allow / ask / deny per permission, prompt text, session memory of answers |
+| `permissions.ts` | Session permission, check, screen-share and device handlers; Allow/Block dialogs |
 | `ipc.ts` | `ipcMain` handlers, sender and argument validation |
 | `shortcut-map.ts` | Pure: key input + platform → browser command |
 | `shortcuts.ts` | Runs commands from `before-input-event` on UI and every tab; mouse back/forward, swipe |
@@ -88,6 +90,11 @@ space for the native controls.
   (`will-frame-navigate` / `will-redirect` + `decideNavigation`). `mailto:`/`tel:` open only after
   the user confirms, and only from the active tab. Main's own `loadURL` is not affected.
 - The UI renderer must not navigate away from itself or open windows.
+- **Permissions** (`permissions.ts`): fullscreen and clipboard writes are allowed; camera, microphone,
+  location, notifications and clipboard reads ask (Allow/Block, remembered per origin until the
+  browser closes); everything else is denied, including `openExternal`. Only the active tab can
+  ask; the UI and `nebula://` pages always get "no". Screen sharing asks every time (screens only,
+  no audio) and needs a user gesture. USB, HID, serial and Bluetooth pickers are always cancelled.
 - Only http(s) URLs are loaded into tabs from the address bar.
 
 ## Roadmap
@@ -95,6 +102,6 @@ space for the native controls.
   Cmd/Ctrl+L and Cmd/Ctrl+R.
 - **Home page (done):** `nebula://home/` with ChatGPT/Claude prompt; Google search.
 - **Current plan: browser essentials** — [docs/plans/browser-essentials.md](docs/plans/browser-essentials.md).
-  **Phases 1 (tabs) and 2 (page essentials) done**; build the next phase only when the user says
-  so. Remaining: permissions, downloads, bookmarks, ad blocking, docs.
+  **Phases 1–3 (tabs, page essentials, permissions) done**; build the next phase only when the
+  user says so. Remaining: downloads, bookmarks, ad blocking, docs.
 - **Later (don't start until asked):** history + address suggestions, session restore, design pass.
