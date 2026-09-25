@@ -118,3 +118,15 @@ export const DownloadIcon = (p: IconProps): React.JSX.Element => (
     <path d="M5 19.5h14" />
   </Icon>
 )
+
+export const StarIcon = (p: IconProps): React.JSX.Element => (
+  <Icon strokeWidth="1.9" {...p}>
+    <path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8-4.3-4.1 5.9-.9z" />
+  </Icon>
+)
+
+export const ChevronsRightIcon = (p: IconProps): React.JSX.Element => (
+  <Icon {...p}>
+    <path d="M6 7l5 5-5 5M13 7l5 5-5 5" />
+  </Icon>
+)

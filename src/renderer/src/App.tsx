@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { BrowserState } from '@shared/types'
 import { isHomeUrl } from '@shared/url'
 import { AddressBar } from './components/AddressBar'
+import { BookmarksBar } from './components/BookmarksBar'
 import { DownloadsButton } from './components/DownloadsButton'
 import { FindBar } from './components/FindBar'
 import { NavButtons } from './components/NavButtons'
@@ -18,9 +19,12 @@ const EMPTY_STATE: BrowserState = {
     isLoading: false,
     isErrorPage: false,
     zoomFactor: 1,
-    find: null
+    find: null,
+    isBookmarked: false
   },
-  downloads: []
+  downloads: [],
+  bookmarks: [],
+  bookmarksBarVisible: false
 }
 
 /** Reports the header's height to main, which places tabs directly below it. */
@@ -69,6 +73,7 @@ function App(): React.JSX.Element {
           url={isHomeUrl(tab.url) ? '' : tab.url}
           isErrorPage={tab.isErrorPage}
           zoomFactor={tab.zoomFactor}
+          isBookmarked={tab.isBookmarked}
         />
         <DownloadsButton downloads={state.downloads} />
         {tab.isLoading && (
@@ -81,6 +86,9 @@ function App(): React.JSX.Element {
           </div>
         )}
       </div>
+      {state.bookmarksBarVisible && state.bookmarks.length > 0 && (
+        <BookmarksBar bookmarks={state.bookmarks} />
+      )}
       {/* Keyed by tab: each tab has its own find bar and query. */}
       {tab.find && <FindBar key={tab.id} find={tab.find} />}
     </header>

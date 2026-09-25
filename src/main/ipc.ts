@@ -3,12 +3,17 @@ import { join } from 'path'
 import { pathToFileURL } from 'url'
 import { is } from '@electron-toolkit/utils'
 import { MAX_CHROME_HEIGHT } from '../shared/layout'
-import { IpcChannel } from '../shared/types'
+import { IpcChannel, type Bookmark, type OpenDisposition } from '../shared/types'
+import { openBookmark } from './bookmarks'
+import { showBookmarkMenu, showBookmarksOverflow } from './bookmarks-menu'
 import { showDownloadsMenu } from './downloads-menu'
 import type { MainWindow } from './window'
 
 const MAX_INPUT_LENGTH = 8192
 const MAX_FIND_LENGTH = 1000
+
+const isDisposition = (value: unknown): value is OpenDisposition =>
+  value === 'current' || value === 'foreground' || value === 'background'
 
 /**
  * The URL the UI renderer is served from. Every IPC message must come from a
@@ -51,6 +56,24 @@ export function registerIpc(getMain: () => MainWindow | null): void {
       throw new Error('Expected the id of an open tab')
     }
     return id
+  }
+
+  /** Throws unless `id` is the id of a bookmark. */
+  const assertBookmark = (main: MainWindow, id: unknown): Bookmark => {
+    const bookmark = typeof id === 'number' ? main.bookmarks.get(id) : undefined
+    if (!bookmark) throw new Error('Expected the id of a bookmark')
+    return bookmark
+  }
+
+  /** Throws unless (x, y) is a point inside the window in whole px (where a menu pops up). */
+  const assertPoint = (main: MainWindow, x: unknown, y: unknown): { x: number; y: number } => {
+    const { width, height } = main.window.getContentBounds()
+    const isIn = (n: unknown, max: number): n is number =>
+      typeof n === 'number' && Number.isInteger(n) && n >= 0 && n <= max
+    if (!isIn(x, width) || !isIn(y, height)) {
+      throw new Error('Expected integer coordinates inside the window')
+    }
+    return { x, y }
   }
 
   ipcMain.handle(IpcChannel.Navigate, (event, input: unknown) => {
@@ -107,15 +130,39 @@ export function registerIpc(getMain: () => MainWindow | null): void {
   )
 
   ipcMain.handle(IpcChannel.ShowDownloadsMenu, (event, x: unknown, y: unknown) => {
-    const { window, downloads } = assertTrustedSender(event)
-    const { width, height } = window.getContentBounds()
-    const isIn = (n: unknown, max: number): n is number =>
-      typeof n === 'number' && Number.isInteger(n) && n >= 0 && n <= max
-    if (!isIn(x, width) || !isIn(y, height)) {
-      throw new Error('showDownloadsMenu: expected integer coordinates inside the window')
-    }
-    showDownloadsMenu(window, downloads, x, y)
+    const main = assertTrustedSender(event)
+    const point = assertPoint(main, x, y)
+    showDownloadsMenu(main.window, main.downloads, point.x, point.y)
   })
+
+  ipcMain.handle(IpcChannel.ToggleBookmark, (event) => {
+    const { tabs, bookmarks } = assertTrustedSender(event)
+    bookmarks.toggleTab(tabs.active)
+  })
+  ipcMain.handle(IpcChannel.OpenBookmark, (event, id: unknown, disposition: unknown) => {
+    const main = assertTrustedSender(event)
+    const bookmark = assertBookmark(main, id)
+    if (!isDisposition(disposition)) throw new Error('openBookmark: unknown disposition')
+    openBookmark(main.tabs, bookmark, disposition)
+  })
+  ipcMain.handle(IpcChannel.ShowBookmarkMenu, (event, id: unknown, x: unknown, y: unknown) => {
+    const main = assertTrustedSender(event)
+    const bookmark = id === null ? null : assertBookmark(main, id)
+    const point = assertPoint(main, x, y)
+    showBookmarkMenu(main, bookmark, point.x, point.y)
+  })
+  ipcMain.handle(
+    IpcChannel.ShowBookmarksOverflow,
+    (event, from: unknown, x: unknown, y: unknown) => {
+      const main = assertTrustedSender(event)
+      const count = main.bookmarks.all.length
+      if (typeof from !== 'number' || !Number.isInteger(from) || from < 0 || from > count) {
+        throw new Error('showBookmarksOverflow: expected an index into the bookmarks')
+      }
+      const point = assertPoint(main, x, y)
+      showBookmarksOverflow(main, from, point.x, point.y)
+    }
+  )
 
   ipcMain.handle(IpcChannel.SetChromeHeight, (event, px: unknown) => {
     const { tabs } = assertTrustedSender(event)

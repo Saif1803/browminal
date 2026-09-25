@@ -32,7 +32,21 @@ export interface ActiveTabState {
   zoomFactor: number
   /** Null while the find bar is closed. */
   find: FindState | null
+  /** Whether the tab's URL is bookmarked (the star in the address bar). */
+  isBookmarked: boolean
 }
+
+/** One bookmark, saved in bookmarks.json. Only http(s) URLs can be bookmarked. */
+export interface Bookmark {
+  id: number
+  url: string
+  title: string
+  /** A small data: URL, or null to show the default icon. */
+  favicon: string | null
+}
+
+/** Where a bookmark opens: in the active tab, or a new tab in front or behind. */
+export type OpenDisposition = 'current' | 'foreground' | 'background'
 
 /**
  * - progressing, paused: running (paused by the user)
@@ -59,6 +73,10 @@ export interface BrowserState {
   active: ActiveTabState
   /** Newest first. Empty until something is downloaded, and again after "Clear list". */
   downloads: DownloadSummary[]
+  /** In bookmarks-bar order. */
+  bookmarks: Bookmark[]
+  /** The bar is only shown while there are bookmarks to put on it. */
+  bookmarksBarVisible: boolean
 }
 
 /** The only surface the UI renderer has into the main process (window.browser). */
@@ -88,6 +106,15 @@ export interface BrowserApi {
   closeFind(): Promise<void>
   /** Opens the downloads menu with its top-left corner at (x, y) in the window. */
   showDownloadsMenu(x: number, y: number): Promise<void>
+
+  /** The star: bookmarks the active tab's page, or removes its bookmark. */
+  toggleBookmark(): Promise<void>
+  openBookmark(id: number, disposition: OpenDisposition): Promise<void>
+  /** Right-click on a bookmark (or on the bar, with null): a native menu at (x, y). */
+  showBookmarkMenu(id: number | null, x: number, y: number): Promise<void>
+  /** The "»" menu: every bookmark from index `from` on, the ones that don't fit on the bar. */
+  showBookmarksOverflow(from: number, x: number, y: number): Promise<void>
+
   /** The UI's height in px; main places tabs directly below it. */
   setChromeHeight(px: number): Promise<void>
 
@@ -118,6 +145,10 @@ export const IpcChannel = {
   FindNext: 'find:next',
   CloseFind: 'find:close',
   ShowDownloadsMenu: 'downloads:show-menu',
+  ToggleBookmark: 'bookmarks:toggle-current',
+  OpenBookmark: 'bookmarks:open',
+  ShowBookmarkMenu: 'bookmarks:show-menu',
+  ShowBookmarksOverflow: 'bookmarks:show-overflow',
   SetChromeHeight: 'ui:set-chrome-height',
   GetState: 'browser:get-state',
   State: 'browser:state',

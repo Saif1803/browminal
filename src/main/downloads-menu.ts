@@ -2,13 +2,10 @@ import { clipboard, Menu, type BrowserWindow, type MenuItemConstructorOptions } 
 import { existsSync } from 'fs'
 import { describeStatus, isActive, shortenMiddle } from '../shared/downloads'
 import type { DownloadEntry, Downloads } from './downloads'
+import { menuText } from './menu-text'
 
 const MAX_SHOWN = 15
 const NAME_LENGTH = 48
-
-/** Windows and Linux menus read "&" as a keyboard-shortcut marker; "&&" shows one "&". */
-const menuText = (text: string): string =>
-  process.platform === 'darwin' ? text : text.replace(/&/g, '&&')
 
 function entryActions(downloads: Downloads, entry: DownloadEntry): MenuItemConstructorOptions[] {
   const { id } = entry

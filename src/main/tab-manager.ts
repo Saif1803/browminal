@@ -1,10 +1,10 @@
 import type { BrowserWindow, WebContents } from 'electron'
 import { INITIAL_CHROME_HEIGHT } from '../shared/layout'
-import type { BrowserState } from '../shared/types'
+import type { TabSummary } from '../shared/types'
 import { HOME_URL, isHomeUrl, isHttpUrl } from '../shared/url'
 import { confirmOpenExternal } from './external-links'
 import { activeAfterClose, insertionIndex } from './tab-order'
-import { Tab, type OpenRequest, type TabHooks } from './tabs'
+import { Tab, type OpenRequest, type TabActiveState, type TabHooks } from './tabs'
 
 const MAX_CLOSED_TABS = 25
 
@@ -32,6 +32,7 @@ export class TabManager {
   private chromeHeight = INITIAL_CHROME_HEIGHT
   private changeListener: (() => void) | null = null
   private createdListeners: ((tab: Tab) => void)[] = []
+  private faviconListeners: ((url: string, favicon: string) => void)[] = []
   private disposed = false
   /** The tab showing a page in fullscreen (a video), covering the whole window. */
   private fullscreenTab: Tab | null = null
@@ -46,7 +47,10 @@ export class TabManager {
       if (tab === this.activeTab) confirmOpenExternal(this.window, tab.url, url)
     },
     fullscreenChanged: (tab, isFullscreen) => this.setPageFullscreen(tab, isFullscreen),
-    destroyed: (tab) => this.remove(tab, false)
+    destroyed: (tab) => this.remove(tab, false),
+    faviconLoaded: (tab, favicon) => {
+      for (const listener of this.faviconListeners) listener(tab.url, favicon)
+    }
   }
 
   constructor(private readonly window: BrowserWindow) {
@@ -76,7 +80,12 @@ export class TabManager {
     this.tabs.forEach(listener)
   }
 
-  getState(): Pick<BrowserState, 'tabs' | 'active'> {
+  /** Called with a page's URL whenever a tab has fetched its favicon. */
+  onFaviconLoaded(listener: (url: string, favicon: string) => void): void {
+    this.faviconListeners.push(listener)
+  }
+
+  getState(): { tabs: TabSummary[]; active: TabActiveState } {
     return {
       tabs: this.tabs.map((tab) => tab.getSummary()),
       active: this.activeTab.getActiveState()
@@ -188,6 +197,7 @@ export class TabManager {
   dispose(): void {
     this.disposed = true
     this.changeListener = null
+    this.faviconListeners = []
     for (const tab of this.tabs) tab.destroy()
     this.tabs = []
   }

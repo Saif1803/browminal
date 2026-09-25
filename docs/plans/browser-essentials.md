@@ -1,6 +1,6 @@
 # Plan: browser essentials for Nebula
 
-**Status:** approved 2026-09-25. Phases 1–4 done 2026-09-25. Build phases in order and commit after each phase.
+**Status:** approved 2026-09-25. Phases 1–5 done 2026-09-25. Build phases in order and commit after each phase.
 
 **Changes made while building Phase 1:**
 - `favicons.ts` (plus the pure `image-type.ts` sniffer) was built in Phase 1, because the tab strip shows favicons. Phase 5 reuses it for bookmarks.
@@ -33,6 +33,17 @@
 - Download progress shows on the taskbar/Dock icon; macOS bounces the Downloads stack when one finishes.
 - Closing Nebula while downloads run asks first ("Quit and cancel" / "Keep downloading"); quitting cancels them so no partial files are left. On macOS closing the window keeps downloading, and Quit asks.
 - Checked: Chromium adds the Windows mark-of-the-web (`Zone.Identifier`) to downloads, so SmartScreen still checks downloaded programs.
+
+**Changes made while building Phase 5:**
+- `store.ts` is a generic `JsonStore` (fs only, so it's tested against a temp folder). A file that isn't valid JSON is kept as `<name>.broken` before it's replaced; a failed write is retried on the next change and on quit.
+- `bookmarks.json` is versioned (`{version: 1, bookmarks}`); ids are numbers. Each entry is checked on its own, so one bad entry doesn't lose the rest.
+- Bookmark favicons are shrunk to a 32 px PNG in main where Electron can decode them (PNG, JPEG, ICO on Windows), which keeps the file and every state push small; other formats are kept only when under 64 KB.
+- Visiting a bookmarked page refreshes its icon.
+- Fixed a Phase 1 bug found here: Chromium only reports a page's favicon when it differs from the last one it reported, so the next page on the same site (or a site revisited after the home page) lost its tab icon. Tabs now reuse the last reported favicon until the page reports another.
+- The bar is hidden while there are no bookmarks, even when it's switched on, so a fresh install has no empty row. It isn't a window drag area (right-click would open the OS window menu).
+- No `bookmarks-bar:toggle` or `bookmarks:remove` IPC: Ctrl+Shift+B is a shortcut in main, and Remove / "Show bookmarks bar" are items in main's own native menus. The UI has `bookmarks:toggle-current`, `bookmarks:open` (current / foreground / background tab), `bookmarks:show-menu` and `bookmarks:show-overflow`.
+- Clicking a bookmark opens it in the active tab; middle-click or Ctrl/Cmd+click opens it behind, Shift+click in front (also in the "»" menu).
+- The star removes a bookmark without asking; there's no rename or reorder until the design pass.
 
 ## Context
 Nebula (Electron + electron-vite + React/TS + Tailwind v4, Bun) currently has **one tab**, a top bar (back/forward/reload-stop/home + address bar), a `nebula://home/` page (ChatGPT/Claude prompt), and Google search. You asked for "whatever is a must for a browser". You'll decide the visual design and anything else later, so this round builds **functionality and architecture** and keeps the UI plain, using the existing tokens in `src/renderer/src/assets/main.css`.

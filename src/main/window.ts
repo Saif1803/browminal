@@ -5,6 +5,7 @@ import icon from '../../resources/icon.png?asset'
 import { overallProgress } from '../shared/downloads'
 import { TAB_STRIP_HEIGHT } from '../shared/layout'
 import { IpcChannel, type BrowserState } from '../shared/types'
+import type { Bookmarks } from './bookmarks'
 import type { Downloads } from './downloads'
 import { TabManager } from './tab-manager'
 import { onThemeChange, themeColors } from './theme'
@@ -17,10 +18,11 @@ export interface MainWindow {
   window: BrowserWindow
   tabs: TabManager
   downloads: Downloads
+  bookmarks: Bookmarks
   getState(): BrowserState
 }
 
-export function createMainWindow(downloads: Downloads): MainWindow {
+export function createMainWindow(downloads: Downloads, bookmarks: Bookmarks): MainWindow {
   const isMac = process.platform === 'darwin'
   const colors = themeColors()
 
@@ -83,7 +85,16 @@ export function createMainWindow(downloads: Downloads): MainWindow {
     layout()
   })
 
-  const getState = (): BrowserState => ({ ...tabs.getState(), downloads: downloads.getState() })
+  const getState = (): BrowserState => {
+    const { tabs: tabSummaries, active } = tabs.getState()
+    return {
+      tabs: tabSummaries,
+      active: { ...active, isBookmarked: bookmarks.isBookmarked(active.url) },
+      downloads: downloads.getState(),
+      bookmarks: [...bookmarks.all],
+      bookmarksBarVisible: bookmarks.barVisible
+    }
+  }
 
   // Changes come in bursts (loading, download progress): push at most one state per tick.
   let pushScheduled = false
@@ -110,10 +121,14 @@ export function createMainWindow(downloads: Downloads): MainWindow {
   }
   tabs.onChange(schedulePush)
   const stopWatchingDownloads = downloads.onChange(schedulePush)
+  const stopWatchingBookmarks = bookmarks.onChange(schedulePush)
+  // Visiting a bookmarked page refreshes the bookmark's icon.
+  tabs.onFaviconLoaded((url, favicon) => bookmarks.updateFavicon(url, favicon))
 
   window.on('ready-to-show', () => window.show())
   window.on('closed', () => {
     stopWatchingDownloads()
+    stopWatchingBookmarks()
     stopWatchingTheme()
     tabs.dispose()
   })
@@ -124,5 +139,5 @@ export function createMainWindow(downloads: Downloads): MainWindow {
     window.loadFile(join(__dirname, '../renderer/index.html'))
   }
 
-  return { window, tabs, downloads, getState }
+  return { window, tabs, downloads, bookmarks, getState }
 }

@@ -1,14 +1,17 @@
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
-import { LockIcon, SearchIcon } from './icons'
+import { isHttpUrl } from '@shared/url'
+import { LockIcon, SearchIcon, StarIcon } from './icons'
 
 export function AddressBar({
   url,
   isErrorPage,
-  zoomFactor
+  zoomFactor,
+  isBookmarked
 }: {
   url: string
   isErrorPage: boolean
   zoomFactor: number
+  isBookmarked: boolean
 }): React.JSX.Element {
   const inputRef = useRef<HTMLInputElement>(null)
   const [draft, setDraft] = useState(url)
@@ -46,6 +49,8 @@ export function AddressBar({
   // An error page shows the URL that failed, but nothing secure was loaded.
   const isSecure = url.startsWith('https://') && !isErrorPage
   const zoomPercent = Math.round(zoomFactor * 100)
+  const bookmarkHint = window.browser.platform === 'darwin' ? '⌘D' : 'Ctrl+D'
+  const bookmarkLabel = isBookmarked ? 'Remove bookmark' : 'Bookmark this page'
 
   return (
     <form onSubmit={submit} className="app-no-drag min-w-0 flex-1">
@@ -86,6 +91,19 @@ export function AddressBar({
             className="shrink-0 rounded px-1.5 py-0.5 text-[11px] text-ink-muted tabular-nums ring-1 ring-line transition-colors hover:bg-field-hover hover:text-ink focus-visible:outline-2 focus-visible:outline-accent"
           >
             {zoomPercent}%
+          </button>
+        )}
+        {isHttpUrl(url) && (
+          <button
+            type="button"
+            title={`${bookmarkLabel} (${bookmarkHint})`}
+            aria-label={bookmarkLabel}
+            onClick={() => window.browser.toggleBookmark()}
+            className={`-mr-1.5 grid size-6 shrink-0 place-items-center rounded-md transition-colors hover:bg-field-hover focus-visible:outline-2 focus-visible:outline-accent ${
+              isBookmarked ? 'text-accent' : 'text-ink-faint hover:text-ink'
+            }`}
+          >
+            <StarIcon width={15} height={15} fill={isBookmarked ? 'currentColor' : 'none'} />
           </button>
         )}
       </label>

@@ -52,7 +52,12 @@ export interface TabHooks {
   fullscreenChanged(tab: Tab, isFullscreen: boolean): void
   /** The webContents is gone: the page called window.close(), or the tab was destroyed. */
   destroyed(tab: Tab): void
+  /** The page's favicon was fetched (a checked data: URL). */
+  faviconLoaded(tab: Tab, favicon: string): void
 }
+
+/** What a tab knows about itself for the toolbar; the window adds whether it's bookmarked. */
+export type TabActiveState = Omit<ActiveTabState, 'isBookmarked'>
 
 export interface OpenRequest {
   /**
@@ -79,7 +84,9 @@ export class Tab {
   openerId: number | null
   readonly view: WebContentsView
   private favicon: string | null = null
-  // Bumped on every navigation so a slow favicon fetch can't land on the next page.
+  // The favicon URLs the page last reported (see did-navigate).
+  private faviconCandidates: string[] = []
+  // Bumped whenever the icon to show changes, so a slow fetch can't land after a newer one.
   private faviconRequest = 0
   /** Null while the find bar is closed. */
   private find: FindState | null = null
@@ -135,10 +142,16 @@ export class Tab {
         this.view.setBackgroundColor(internal ? themeColors().internalPage : PAGE_BACKGROUND)
       }
     })
-    wc.on('did-navigate', () => {
-      // A new document: forget the old page's icon until the new one reports its own.
-      this.favicon = null
-      this.faviconRequest++
+    wc.on('did-navigate', (_event, url) => {
+      // Chromium reports a page's favicon URLs only when they differ from the last ones it
+      // reported, so a web page starts with those and switches if it reports others.
+      // Pages that aren't on the web (nebula://) show no favicon.
+      if (isHttpUrl(url)) {
+        this.showFavicon(this.faviconCandidates, false)
+      } else {
+        this.favicon = null
+        this.faviconRequest++
+      }
       if (this.find) this.find = { ...this.find, activeMatch: 0, matches: 0 }
       this.collapseErrorEntries()
       changed()
@@ -153,7 +166,10 @@ export class Tab {
       if (isHttpUrl(url)) this.showError('CRASHED', url)
       else wc.reload()
     })
-    wc.on('page-favicon-updated', (_event, favicons) => this.updateFavicon(favicons))
+    wc.on('page-favicon-updated', (_event, favicons) => {
+      this.faviconCandidates = favicons
+      this.showFavicon(favicons, true)
+    })
     wc.on('found-in-page', (_event, result) => {
       if (!this.find || result.requestId !== this.findRequest) return
       this.find = { ...this.find, activeMatch: result.activeMatchOrdinal, matches: result.matches }
@@ -198,7 +214,12 @@ export class Tab {
     }
   }
 
-  getActiveState(): ActiveTabState {
+  /** Whether the tab shows nebula://error/ for a page that failed to load. */
+  get isErrorPage(): boolean {
+    return parseErrorPageUrl(this.webContents.getURL()) !== null
+  }
+
+  getActiveState(): TabActiveState {
     const wc = this.webContents
     const url = this.url
     return {
@@ -208,7 +229,7 @@ export class Tab {
       canGoBack: wc.navigationHistory.canGoBack(),
       canGoForward: wc.navigationHistory.canGoForward(),
       isLoading: wc.isLoading(),
-      isErrorPage: parseErrorPageUrl(wc.getURL()) !== null,
+      isErrorPage: this.isErrorPage,
       zoomFactor: wc.getZoomFactor(),
       find: this.find
     }
@@ -383,7 +404,8 @@ export class Tab {
     }
   }
 
-  private updateFavicon(candidates: string[]): void {
+  /** `reported`: the page itself just reported these (not reused from an earlier page). */
+  private showFavicon(candidates: string[], reported: boolean): void {
     const url = pickFaviconUrl(candidates)
     const request = ++this.faviconRequest
     if (!url) {
@@ -395,6 +417,7 @@ export class Tab {
       if (this.isDestroyed || request !== this.faviconRequest) return
       this.favicon = favicon
       this.hooks.changed(this)
+      if (favicon && reported) this.hooks.faviconLoaded(this, favicon)
     })
   }
 }

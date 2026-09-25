@@ -89,6 +89,14 @@ describe('commandForInput', () => {
     expect(win(press('I', { ...ctrl, shift: true }))).toBe('toggleDevTools')
   })
 
+  test('bookmarks', () => {
+    expect(win(press('d', ctrl))).toBe('bookmark')
+    expect(mac(press('d', cmd))).toBe('bookmark')
+    expect(win(press('B', { ...ctrl, shift: true }))).toBe('toggleBookmarksBar')
+    expect(mac(press('b', { ...cmd, shift: true }))).toBe('toggleBookmarksBar')
+    expect(win(press('b', ctrl))).toBeUndefined()
+  })
+
   test('extra modifiers mean no match', () => {
     expect(win(press('t', { ...ctrl, alt: true }))).toBeUndefined() // AltGr+T
     expect(win(press('r', { ...ctrl, meta: true }))).toBeUndefined()

@@ -20,6 +20,11 @@ const browser: BrowserApi = {
   findNext: (forward) => ipcRenderer.invoke(IpcChannel.FindNext, forward),
   closeFind: () => ipcRenderer.invoke(IpcChannel.CloseFind),
   showDownloadsMenu: (x, y) => ipcRenderer.invoke(IpcChannel.ShowDownloadsMenu, x, y),
+  toggleBookmark: () => ipcRenderer.invoke(IpcChannel.ToggleBookmark),
+  openBookmark: (id, disposition) => ipcRenderer.invoke(IpcChannel.OpenBookmark, id, disposition),
+  showBookmarkMenu: (id, x, y) => ipcRenderer.invoke(IpcChannel.ShowBookmarkMenu, id, x, y),
+  showBookmarksOverflow: (from, x, y) =>
+    ipcRenderer.invoke(IpcChannel.ShowBookmarksOverflow, from, x, y),
   setChromeHeight: (px) => ipcRenderer.invoke(IpcChannel.SetChromeHeight, px),
   getState: () => ipcRenderer.invoke(IpcChannel.GetState),
 

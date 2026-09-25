@@ -11,7 +11,7 @@ const platform = process.platform === 'darwin' ? 'mac' : 'other'
  * and on every tab so they work wherever focus is, before the page or the UI sees the key.
  * Also handles the mouse's back/forward buttons (Windows, Linux) and swipes (macOS).
  */
-export function registerShortcuts({ window, tabs }: MainWindow): void {
+export function registerShortcuts({ window, tabs, bookmarks }: MainWindow): void {
   const ui = window.webContents
 
   const focusUi = (channel: string): void => {
@@ -70,6 +70,10 @@ export function registerShortcuts({ window, tabs }: MainWindow): void {
         return window.setFullScreen(!window.isFullScreen())
       case 'toggleDevTools':
         return tab.toggleDevTools()
+      case 'bookmark':
+        return bookmarks.toggleTab(tab)
+      case 'toggleBookmarksBar':
+        return bookmarks.toggleBar()
     }
   }
 

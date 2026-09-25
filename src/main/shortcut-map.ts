@@ -21,6 +21,8 @@ type SimpleCommand =
   | 'zoomReset'
   | 'toggleFullscreen'
   | 'toggleDevTools'
+  | 'bookmark'
+  | 'toggleBookmarksBar'
 
 export type Command = { type: SimpleCommand } | { type: 'selectTab'; index: number }
 
@@ -58,7 +60,9 @@ const COMMON: Record<string, SimpleCommand> = {
   'Mod+Shift+=': 'zoomIn',
   'Mod+Shift++': 'zoomIn',
   'Mod+-': 'zoomOut',
-  'Mod+0': 'zoomReset'
+  'Mod+0': 'zoomReset',
+  'Mod+d': 'bookmark',
+  'Mod+Shift+b': 'toggleBookmarksBar'
 }
 
 const BY_PLATFORM: Record<Platform, Record<string, SimpleCommand>> = {

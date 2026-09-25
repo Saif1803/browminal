@@ -1,11 +1,15 @@
 import { app, BrowserWindow, Menu } from 'electron'
+import { join } from 'path'
 import { electronApp } from '@electron-toolkit/utils'
+import { Bookmarks } from './bookmarks'
 import { registerContextMenus } from './context-menu'
 import { Downloads } from './downloads'
 import { registerIpc } from './ipc'
 import { registerPermissions } from './permissions'
 import { handleInternalProtocol, registerInternalScheme } from './protocol'
+import { parseSettings } from './settings'
 import { registerShortcuts } from './shortcuts'
+import { JsonStore } from './store'
 import { cleanUserAgent } from './user-agent'
 import { createMainWindow, type MainWindow } from './window'
 
@@ -15,8 +19,8 @@ registerInternalScheme()
 // Look like plain Chrome, so sites (notably Google sign-in) don't block us as an embedded browser.
 app.userAgentFallback = cleanUserAgent(app.userAgentFallback, app.getName())
 
-function openWindow(downloads: Downloads): void {
-  const opened = createMainWindow(downloads)
+function openWindow(downloads: Downloads, bookmarks: Bookmarks): void {
+  const opened = createMainWindow(downloads, bookmarks)
   main = opened
   registerShortcuts(opened)
   registerContextMenus(opened)
@@ -53,16 +57,23 @@ app.whenReady().then(() => {
   handleInternalProtocol()
   registerPermissions(() => main)
   const downloads = new Downloads(() => main)
+  const userData = app.getPath('userData')
+  const settings = new JsonStore(join(userData, 'settings.json'), { parse: parseSettings })
+  const bookmarks = new Bookmarks(userData, settings)
   registerIpc(() => main)
-  openWindow(downloads)
+  openWindow(downloads, bookmarks)
 
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) openWindow(downloads)
+    if (BrowserWindow.getAllWindows().length === 0) openWindow(downloads, bookmarks)
   })
   app.on('before-quit', (event) => {
     if (!downloads.confirmQuit(main?.window ?? null)) event.preventDefault()
   })
-  app.on('will-quit', () => downloads.cancelAll())
+  app.on('will-quit', () => {
+    downloads.cancelAll()
+    bookmarks.flush()
+    settings.flush()
+  })
 })
 
 app.on('window-all-closed', () => {
