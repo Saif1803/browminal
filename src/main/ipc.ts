@@ -2,6 +2,7 @@ import { ipcMain, type IpcMainInvokeEvent } from 'electron'
 import { join } from 'path'
 import { pathToFileURL } from 'url'
 import { is } from '@electron-toolkit/utils'
+import { MAX_CHROME_HEIGHT } from '../shared/layout'
 import { IpcChannel } from '../shared/types'
 import type { MainWindow } from './window'
 
@@ -42,18 +43,54 @@ export function registerIpc(getMain: () => MainWindow | null): void {
     return main
   }
 
+  /** Throws unless `id` is the id of an open tab. */
+  const assertTabId = (main: MainWindow, id: unknown): number => {
+    if (typeof id !== 'number' || !Number.isInteger(id) || !main.tabs.get(id)) {
+      throw new Error('Expected the id of an open tab')
+    }
+    return id
+  }
+
   ipcMain.handle(IpcChannel.Navigate, (event, input: unknown) => {
-    const { tab } = assertTrustedSender(event)
+    const { tabs } = assertTrustedSender(event)
     if (typeof input !== 'string' || input.length > MAX_INPUT_LENGTH) {
       throw new Error('navigate: input must be a string')
     }
-    tab.navigate(input)
+    tabs.active.navigate(input)
   })
 
-  ipcMain.handle(IpcChannel.Back, (event) => assertTrustedSender(event).tab.back())
-  ipcMain.handle(IpcChannel.Forward, (event) => assertTrustedSender(event).tab.forward())
-  ipcMain.handle(IpcChannel.Reload, (event) => assertTrustedSender(event).tab.reload())
-  ipcMain.handle(IpcChannel.Stop, (event) => assertTrustedSender(event).tab.stop())
-  ipcMain.handle(IpcChannel.Home, (event) => assertTrustedSender(event).tab.goHome())
-  ipcMain.handle(IpcChannel.GetState, (event) => assertTrustedSender(event).tab.getState())
+  ipcMain.handle(IpcChannel.Back, (event) => assertTrustedSender(event).tabs.active.back())
+  ipcMain.handle(IpcChannel.Forward, (event) => assertTrustedSender(event).tabs.active.forward())
+  ipcMain.handle(IpcChannel.Reload, (event) => assertTrustedSender(event).tabs.active.reload())
+  ipcMain.handle(IpcChannel.Stop, (event) => assertTrustedSender(event).tabs.active.stop())
+  ipcMain.handle(IpcChannel.Home, (event) => assertTrustedSender(event).tabs.active.goHome())
+
+  ipcMain.handle(IpcChannel.NewTab, (event) => {
+    assertTrustedSender(event).tabs.create()
+  })
+  ipcMain.handle(IpcChannel.CloseTab, (event, id: unknown) => {
+    const main = assertTrustedSender(event)
+    main.tabs.close(assertTabId(main, id))
+  })
+  ipcMain.handle(IpcChannel.ActivateTab, (event, id: unknown) => {
+    const main = assertTrustedSender(event)
+    main.tabs.activate(assertTabId(main, id))
+  })
+  ipcMain.handle(IpcChannel.ReopenClosedTab, (event) =>
+    assertTrustedSender(event).tabs.reopenClosed()
+  )
+  ipcMain.handle(IpcChannel.ToggleMute, (event, id: unknown) => {
+    const main = assertTrustedSender(event)
+    main.tabs.toggleMute(assertTabId(main, id))
+  })
+
+  ipcMain.handle(IpcChannel.SetChromeHeight, (event, px: unknown) => {
+    const { tabs } = assertTrustedSender(event)
+    if (typeof px !== 'number' || !Number.isInteger(px) || px < 0 || px > MAX_CHROME_HEIGHT) {
+      throw new Error(`setChromeHeight: expected an integer from 0 to ${MAX_CHROME_HEIGHT}`)
+    }
+    tabs.setChromeHeight(px)
+  })
+
+  ipcMain.handle(IpcChannel.GetState, (event) => assertTrustedSender(event).tabs.getState())
 }

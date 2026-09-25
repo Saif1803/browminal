@@ -3,11 +3,14 @@ import { electronApp } from '@electron-toolkit/utils'
 import { registerIpc } from './ipc'
 import { handleInternalProtocol, registerInternalScheme } from './protocol'
 import { registerShortcuts } from './shortcuts'
+import { cleanUserAgent } from './user-agent'
 import { createMainWindow, type MainWindow } from './window'
 
 let main: MainWindow | null = null
 
 registerInternalScheme()
+// Look like plain Chrome, so sites (notably Google sign-in) don't block us as an embedded browser.
+app.userAgentFallback = cleanUserAgent(app.userAgentFallback, app.getName())
 
 function openWindow(): void {
   main = createMainWindow()

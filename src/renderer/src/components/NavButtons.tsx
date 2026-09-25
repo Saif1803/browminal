@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import type { TabState } from '@shared/types'
+import type { ActiveTabState } from '@shared/types'
 import { BackIcon, ForwardIcon, HomeIcon, ReloadIcon, StopIcon } from './icons'
 
 function NavButton({
@@ -27,7 +27,7 @@ function NavButton({
   )
 }
 
-export function NavButtons({ state }: { state: TabState }): React.JSX.Element {
+export function NavButtons({ state }: { state: ActiveTabState }): React.JSX.Element {
   const { browser } = window
   const reloadHint = browser.platform === 'darwin' ? '⌘R' : 'Ctrl+R'
 

@@ -2,19 +2,20 @@ import { BrowserWindow } from 'electron'
 import { join } from 'path'
 import { is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
+import { TAB_STRIP_HEIGHT } from '../shared/layout'
 import { IpcChannel } from '../shared/types'
-import { Tab } from './tabs'
-
-/** Height of the React top bar; the tab view is placed directly below it. */
-export const TOOLBAR_HEIGHT = 44
+import { TabManager } from './tab-manager'
 
 const APP_NAME = 'Nebula'
-const TOOLBAR_COLOR = '#15131f'
+// Matches --color-strip in the UI, which the native window controls sit on.
+const STRIP_COLOR = '#0f0d17'
 const SYMBOL_COLOR = '#c9c5dc'
+// macOS traffic lights are about 14px tall; centre them in the tab strip.
+const TRAFFIC_LIGHT_Y = Math.round((TAB_STRIP_HEIGHT - 14) / 2)
 
 export interface MainWindow {
   window: BrowserWindow
-  tab: Tab
+  tabs: TabManager
 }
 
 export function createMainWindow(): MainWindow {
@@ -27,17 +28,17 @@ export function createMainWindow(): MainWindow {
     minHeight: 320,
     show: false,
     title: APP_NAME,
-    backgroundColor: TOOLBAR_COLOR,
+    backgroundColor: STRIP_COLOR,
     titleBarStyle: 'hidden',
-    // macOS: keep the traffic lights, vertically centred in the top bar.
-    ...(isMac ? { trafficLightPosition: { x: 14, y: 15 } } : {}),
-    // Windows/Linux: native min/max/close drawn over the right end of the top bar.
+    // macOS: keep the traffic lights, vertically centred in the tab strip.
+    ...(isMac ? { trafficLightPosition: { x: 14, y: TRAFFIC_LIGHT_Y } } : {}),
+    // Windows/Linux: native min/max/close drawn over the right end of the tab strip.
     ...(!isMac
       ? {
           titleBarOverlay: {
-            color: TOOLBAR_COLOR,
+            color: STRIP_COLOR,
             symbolColor: SYMBOL_COLOR,
-            height: TOOLBAR_HEIGHT
+            height: TAB_STRIP_HEIGHT
           }
         }
       : {}),
@@ -57,19 +58,9 @@ export function createMainWindow(): MainWindow {
   // The window title follows the page, not the UI's <title>.
   window.on('page-title-updated', (event) => event.preventDefault())
 
-  const tab = new Tab()
-  window.contentView.addChildView(tab.view)
+  const tabs = new TabManager(window)
 
-  const layout = (): void => {
-    const { width, height } = window.getContentBounds()
-    tab.setBounds({
-      x: 0,
-      y: TOOLBAR_HEIGHT,
-      width,
-      height: Math.max(0, height - TOOLBAR_HEIGHT)
-    })
-  }
-  layout()
+  const layout = (): void => tabs.layout()
   window.on('resize', layout)
   // Maximize/restore/fullscreen can change the content size without a matching resize on some platforms.
   window.on('maximize', layout)
@@ -77,13 +68,14 @@ export function createMainWindow(): MainWindow {
   window.on('enter-full-screen', layout)
   window.on('leave-full-screen', layout)
 
-  tab.onStateChange((state) => {
-    window.setTitle(state.title ? `${state.title} - ${APP_NAME}` : APP_NAME)
-    if (!ui.isDestroyed()) ui.send(IpcChannel.TabState, state)
+  tabs.onStateChange((state) => {
+    const { title } = state.active
+    window.setTitle(title ? `${title} - ${APP_NAME}` : APP_NAME)
+    if (!ui.isDestroyed()) ui.send(IpcChannel.State, state)
   })
 
   window.on('ready-to-show', () => window.show())
-  window.on('closed', () => tab.destroy())
+  window.on('closed', () => tabs.dispose())
 
   if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
     window.loadURL(process.env['ELECTRON_RENDERER_URL'])
@@ -91,7 +83,5 @@ export function createMainWindow(): MainWindow {
     window.loadFile(join(__dirname, '../renderer/index.html'))
   }
 
-  tab.goHome()
-
-  return { window, tab }
+  return { window, tabs }
 }

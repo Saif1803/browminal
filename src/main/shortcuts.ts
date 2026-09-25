@@ -12,10 +12,10 @@ function isModOnly(input: Input): boolean {
 }
 
 /**
- * Window-level shortcuts. They're caught with before-input-event on both the UI and
- * the tab so they work wherever focus is, and so Ctrl+R never reloads the UI itself.
+ * Window-level shortcuts. They're caught with before-input-event on the UI and on every
+ * tab so they work wherever focus is, and so Ctrl+R never reloads the UI itself.
  */
-export function registerShortcuts({ window, tab }: MainWindow): void {
+export function registerShortcuts({ window, tabs }: MainWindow): void {
   const handle = (event: Electron.Event, input: Input): void => {
     if (input.type !== 'keyDown') return
 
@@ -35,7 +35,7 @@ export function registerShortcuts({ window, tab }: MainWindow): void {
       window.webContents.send(IpcChannel.FocusAddressBar)
     } else if (key === 'r') {
       event.preventDefault()
-      tab.reload()
+      tabs.active.reload()
     }
   }
 
@@ -43,5 +43,5 @@ export function registerShortcuts({ window, tab }: MainWindow): void {
     wc.on('before-input-event', handle)
   }
   attach(window.webContents)
-  attach(tab.webContents)
+  tabs.onTabCreated((tab) => attach(tab.webContents))
 }

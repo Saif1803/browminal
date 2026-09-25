@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron'
-import { IpcChannel, type BrowserApi, type TabState } from '../shared/types'
+import { IpcChannel, type BrowserApi, type BrowserState } from '../shared/types'
 
 // Only named, typed calls cross the bridge. ipcRenderer itself is never exposed.
 const browser: BrowserApi = {
@@ -10,12 +10,18 @@ const browser: BrowserApi = {
   reload: () => ipcRenderer.invoke(IpcChannel.Reload),
   stop: () => ipcRenderer.invoke(IpcChannel.Stop),
   home: () => ipcRenderer.invoke(IpcChannel.Home),
+  newTab: () => ipcRenderer.invoke(IpcChannel.NewTab),
+  closeTab: (id) => ipcRenderer.invoke(IpcChannel.CloseTab, id),
+  activateTab: (id) => ipcRenderer.invoke(IpcChannel.ActivateTab, id),
+  reopenClosedTab: () => ipcRenderer.invoke(IpcChannel.ReopenClosedTab),
+  toggleMute: (id) => ipcRenderer.invoke(IpcChannel.ToggleMute, id),
+  setChromeHeight: (px) => ipcRenderer.invoke(IpcChannel.SetChromeHeight, px),
   getState: () => ipcRenderer.invoke(IpcChannel.GetState),
 
-  onTabState(callback) {
-    const listener = (_event: IpcRendererEvent, state: TabState): void => callback(state)
-    ipcRenderer.on(IpcChannel.TabState, listener)
-    return () => ipcRenderer.removeListener(IpcChannel.TabState, listener)
+  onState(callback) {
+    const listener = (_event: IpcRendererEvent, state: BrowserState): void => callback(state)
+    ipcRenderer.on(IpcChannel.State, listener)
+    return () => ipcRenderer.removeListener(IpcChannel.State, listener)
   },
 
   onFocusAddressBar(callback) {

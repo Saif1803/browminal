@@ -1,6 +1,12 @@
 # Plan: browser essentials for Nebula
 
-**Status:** approved 2026-09-25, not started. Build phases in order and commit after each phase.
+**Status:** approved 2026-09-25. Phase 1 done 2026-09-25. Build phases in order and commit after each phase.
+
+**Changes made while building Phase 1:**
+- `favicons.ts` (plus the pure `image-type.ts` sniffer) was built in Phase 1, because the tab strip shows favicons. Phase 5 reuses it for bookmarks.
+- `BrowserState` holds only what exists so far (`tabs`, `active`). Each later phase adds its own fields; `zoomFactor` arrives with zoom in Phase 2.
+- `move-to-index` was left out: nothing calls it until tabs can be dragged.
+- Links opened with middle-click or a modifier key have no Chromium-created page to adopt, so the new tab loads the URL itself (with referrer and form data).
 
 ## Context
 Nebula (Electron + electron-vite + React/TS + Tailwind v4, Bun) currently has **one tab**, a top bar (back/forward/reload-stop/home + address bar), a `nebula://home/` page (ChatGPT/Claude prompt), and Google search. You asked for "whatever is a must for a browser". You'll decide the visual design and anything else later, so this round builds **functionality and architecture** and keeps the UI plain, using the existing tokens in `src/renderer/src/assets/main.css`.

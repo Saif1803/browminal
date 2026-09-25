@@ -66,3 +66,36 @@ export const SearchIcon = (p: IconProps): React.JSX.Element => (
     <path d="M20 20l-3.5-3.5" />
   </Icon>
 )
+
+export const PlusIcon = (p: IconProps): React.JSX.Element => (
+  <Icon {...p}>
+    <path d="M12 5v14M5 12h14" />
+  </Icon>
+)
+
+export const CloseIcon = (p: IconProps): React.JSX.Element => (
+  <Icon strokeWidth="2.4" {...p}>
+    <path d="M17 7L7 17M7 7l10 10" />
+  </Icon>
+)
+
+export const GlobeIcon = (p: IconProps): React.JSX.Element => (
+  <Icon strokeWidth="1.8" {...p}>
+    <circle cx="12" cy="12" r="9" />
+    <path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18" />
+  </Icon>
+)
+
+export const SpeakerIcon = (p: IconProps): React.JSX.Element => (
+  <Icon {...p}>
+    <path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z" />
+    <path d="M16 9a4 4 0 0 1 0 6M18.5 6.5a7.5 7.5 0 0 1 0 11" />
+  </Icon>
+)
+
+export const MutedIcon = (p: IconProps): React.JSX.Element => (
+  <Icon {...p}>
+    <path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z" />
+    <path d="M16 9.5l5 5M21 9.5l-5 5" />
+  </Icon>
+)
