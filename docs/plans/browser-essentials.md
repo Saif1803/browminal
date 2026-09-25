@@ -1,6 +1,6 @@
 # Plan: browser essentials for Nebula
 
-**Status:** approved 2026-09-25. Phases 1–6 done 2026-09-25. Build phases in order and commit after each phase.
+**Status:** approved 2026-09-25. All phases (1–7) done 2026-09-25.
 
 **Changes made while building Phase 1:**
 - `favicons.ts` (plus the pure `image-type.ts` sniffer) was built in Phase 1, because the tab strip shows favicons. Phase 5 reuses it for bookmarks.
@@ -131,7 +131,7 @@ Electron **grants every permission by default** today. `src/main/permissions.ts`
 - **IPC:** `bookmarks:toggle-current/open/remove/show-menu` and `bookmarks-bar:toggle`. Ids and URLs are validated.
 
 ### Phase 6: Ad blocker
-- **`src/main/adblock.ts`** uses `@ghostery/adblocker-electron`'s engine (ads + tracking lists).
+- **`src/main/adblock.ts`** uses the `@ghostery/adblocker` engine (ads + tracking lists); see the Phase 6 notes above for why not `@ghostery/adblocker-electron`.
   - The engine is cached as `userData/adblock-engine.bin` and refreshed in the background.
   - It **does not** call `enableBlockingInSession`, because that registers a session-wide preload and would break the "tabs have no preload" rule. I'll confirm this against the package source when I build it.
 - **Network blocking:** our own `webRequest.onBeforeRequest` hands off to the engine and skips sites where you've paused blocking.
@@ -144,7 +144,7 @@ Electron **grants every permission by default** today. `src/main/permissions.ts`
 Update `CLAUDE.md`: new modules, the window.open → new tab rule, the permissions / download / ad-block rules and the storage files. Update the roadmap (done: essentials, bookmarks, ad blocker; later: history + suggestions, session restore, design pass).
 
 ## Critical files
-- **Modify:** `src/main/{index,window,tabs,ipc,shortcuts,internal-files}.ts`, `src/shared/{types,url}.ts`, `src/preload/index.ts`, `src/renderer/src/{App.tsx, components/*}`, `CLAUDE.md`, `package.json` (add `@ghostery/adblocker-electron`)
+- **Modify:** `src/main/{index,window,tabs,ipc,shortcuts,internal-files}.ts`, `src/shared/{types,url}.ts`, `src/preload/index.ts`, `src/renderer/src/{App.tsx, components/*}`, `CLAUDE.md`, `package.json` (add `@ghostery/adblocker`; see Phase 6 notes for why not `-electron`)
 - **New main modules:** `tab-manager`, `tab-order`, `shortcut-map`, `context-menu`, `permissions`, `permission-policy`, `downloads`, `download-names`, `store`, `bookmarks`, `favicons`, `adblock`, `user-agent`
 - **New shared:** `src/shared/layout.ts`
 - **New UI components:** `TabStrip`, `FindBar`, `BookmarksBar`, `DownloadsButton`

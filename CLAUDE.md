@@ -142,7 +142,8 @@ space for the native controls.
 - **Milestone 1 (done):** frameless window, back/forward/reload-stop, address bar, title sync,
   Cmd/Ctrl+L and Cmd/Ctrl+R.
 - **Home page (done):** `nebula://home/` with ChatGPT/Claude prompt; Google search.
-- **Current plan: browser essentials** — [docs/plans/browser-essentials.md](docs/plans/browser-essentials.md).
-  **Phases 1–6 (tabs, page essentials, permissions, downloads, bookmarks, ad blocker) done**;
-  build the next phase only when the user says so. Remaining: docs.
-- **Later (don't start until asked):** history + address suggestions, session restore, design pass.
+- **Browser essentials (done):** tabs, page essentials, permissions, downloads, bookmarks, ad
+  blocker — [docs/plans/browser-essentials.md](docs/plans/browser-essentials.md).
+- **Later (don't start until asked):** history + address suggestions, session restore, design pass
+  (replaces the placeholder native menus for downloads, bookmark overflow and the shield, and the
+  plain tab strip).
