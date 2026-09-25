@@ -77,7 +77,7 @@ function App(): React.JSX.Element {
             aria-label="Loading page"
             className="absolute inset-x-0 bottom-0 h-0.5 overflow-hidden"
           >
-            <div className="load-sweep h-full w-2/5 bg-gradient-to-r from-transparent via-plasma to-transparent" />
+            <div className="load-sweep h-full w-2/5 bg-gradient-to-r from-transparent via-accent to-transparent" />
           </div>
         )}
       </div>

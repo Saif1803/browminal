@@ -39,8 +39,8 @@ export function DownloadsButton({
       aria-label={label}
       title={label}
       onClick={openMenu}
-      className={`app-no-drag relative grid size-8 shrink-0 place-items-center rounded-lg transition-colors hover:bg-field-hover hover:text-ink focus-visible:outline-2 focus-visible:outline-plasma ${
-        running > 0 ? 'text-plasma' : 'text-ink-muted'
+      className={`app-no-drag relative grid size-8 shrink-0 place-items-center rounded-lg transition-colors hover:bg-field-hover hover:text-ink focus-visible:outline-2 focus-visible:outline-accent ${
+        running > 0 ? 'text-accent' : 'text-ink-muted'
       }`}
     >
       <DownloadIcon />
@@ -55,7 +55,7 @@ export function DownloadsButton({
             r={RING_RADIUS}
             fill="none"
             strokeWidth="2"
-            className="stroke-plasma/25"
+            className="stroke-accent/25"
           />
           <circle
             cx="16"
@@ -66,7 +66,7 @@ export function DownloadsButton({
             strokeLinecap="round"
             strokeDasharray={RING_LENGTH}
             strokeDashoffset={RING_LENGTH * (1 - progress)}
-            className="stroke-plasma transition-[stroke-dashoffset] duration-300"
+            className="stroke-accent transition-[stroke-dashoffset] duration-300"
           />
         </svg>
       )}

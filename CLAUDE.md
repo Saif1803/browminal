@@ -7,6 +7,10 @@
   `bun:test` is allowed in `*.test.ts` files only.
 - `package.json` has `"trustedDependencies": ["electron", "esbuild"]` so their install scripts run under Bun.
 - **Tailwind CSS v4** via `@tailwindcss/vite` (theme tokens in `src/renderer/src/assets/main.css`).
+- **Theme:** the Claude desktop app's colours, light or dark following the OS (`prefers-color-scheme`).
+  Use the tokens (`strip`, `bar`, `field`, `ink*`, `accent`, `line`), never raw colours. The internal
+  pages' CSS repeats the palette, and `src/main/theme.ts` holds the few colours main paints itself
+  (native window controls, window and loading backgrounds); keep all three in sync.
 
 ## Commands
 ```bash
@@ -62,6 +66,7 @@ Run `bun run typecheck`, `bun test` and `bun run lint` before calling work done.
 | `downloads.ts` | `Downloads`: every download of the app; saves into Downloads, pause/resume/cancel/open, quit prompt |
 | `download-names.ts` | Pure: safe file names and "name (1).ext" numbering |
 | `downloads-menu.ts` | Native menu for the downloads button (placeholder until the design pass) |
+| `theme.ts` | Light/dark colours main paints itself; follows `nativeTheme` |
 | `zoom-levels.ts` | Pure: Chrome's zoom steps |
 | `permission-policy.ts` | Pure: allow / ask / deny per permission, prompt text, session memory of answers |
 | `permissions.ts` | Session permission, check, screen-share and device handlers; Allow/Block dialogs |

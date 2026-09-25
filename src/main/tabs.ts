@@ -18,11 +18,10 @@ import {
 } from '../shared/url'
 import { loadFavicon, pickFaviconUrl } from './favicons'
 import { decideNavigation } from './navigation-policy'
+import { themeColors } from './theme'
 import { nextZoomFactor } from './zoom-levels'
 
 const PAGE_BACKGROUND = '#ffffff'
-// Matches the internal pages, so they don't flash white while loading.
-const INTERNAL_BACKGROUND = '#0f0d17'
 // net::ERR_ABORTED: the navigation was replaced or stopped; not an error to show.
 const ERR_ABORTED = -3
 
@@ -132,7 +131,8 @@ export class Tab {
     wc.on('did-start-navigation', (details) => {
       if (details.isMainFrame && !details.isSameDocument) {
         const internal = details.url.startsWith(`${INTERNAL_SCHEME}:`)
-        this.view.setBackgroundColor(internal ? INTERNAL_BACKGROUND : PAGE_BACKGROUND)
+        // Internal pages don't flash white while loading in the dark theme.
+        this.view.setBackgroundColor(internal ? themeColors().internalPage : PAGE_BACKGROUND)
       }
     })
     wc.on('did-navigate', () => {

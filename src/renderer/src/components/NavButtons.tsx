@@ -20,7 +20,7 @@ function NavButton({
       title={label}
       disabled={disabled}
       onClick={onClick}
-      className="app-no-drag grid size-8 place-items-center rounded-lg text-ink-muted transition-colors hover:bg-field-hover hover:text-ink focus-visible:outline-2 focus-visible:outline-plasma disabled:pointer-events-none disabled:text-ink-faint"
+      className="app-no-drag grid size-8 place-items-center rounded-lg text-ink-muted transition-colors hover:bg-field-hover hover:text-ink focus-visible:outline-2 focus-visible:outline-accent disabled:pointer-events-none disabled:text-ink-faint"
     >
       {children}
     </button>

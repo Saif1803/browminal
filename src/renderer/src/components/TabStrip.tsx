@@ -11,7 +11,7 @@ function TabIcon({ tab }: { tab: TabSummary }): React.JSX.Element {
   if (tab.isLoading) return <span aria-hidden="true" className="tab-spinner size-3.5 shrink-0" />
   if (tab.favicon) return <img src={tab.favicon} alt="" className="size-4 shrink-0" />
   if (isHomeUrl(tab.url))
-    return <HomeIcon width={14} height={14} className="shrink-0 text-plasma" />
+    return <HomeIcon width={14} height={14} className="shrink-0 text-accent" />
   return <GlobeIcon width={14} height={14} className="shrink-0 text-ink-faint" />
 }
 
@@ -56,7 +56,7 @@ function Tab({ tab, isActive }: { tab: TabSummary; isActive: boolean }): React.J
           title={tab.isMuted ? 'Unmute tab' : 'Mute tab'}
           onMouseDown={stop}
           onClick={() => browser.toggleMute(tab.id)}
-          className="grid size-5 shrink-0 place-items-center rounded text-ink-muted hover:bg-field-hover hover:text-ink focus-visible:outline-2 focus-visible:outline-plasma"
+          className="grid size-5 shrink-0 place-items-center rounded text-ink-muted hover:bg-field-hover hover:text-ink focus-visible:outline-2 focus-visible:outline-accent"
         >
           {tab.isMuted ? (
             <MutedIcon width={13} height={13} />
@@ -72,7 +72,7 @@ function Tab({ tab, isActive }: { tab: TabSummary; isActive: boolean }): React.J
         onMouseDown={stop}
         onAuxClick={stop}
         onClick={() => browser.closeTab(tab.id)}
-        className={`grid size-5 shrink-0 place-items-center rounded text-ink-muted hover:bg-field-hover hover:text-ink focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-plasma ${
+        className={`grid size-5 shrink-0 place-items-center rounded text-ink-muted hover:bg-field-hover hover:text-ink focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-accent ${
           isActive ? '' : 'opacity-0 group-hover:opacity-100'
         }`}
       >
@@ -111,7 +111,7 @@ export function TabStrip({
         aria-label="New tab"
         title="New tab"
         onClick={() => window.browser.newTab()}
-        className="app-no-drag mb-1 grid size-7 shrink-0 place-items-center rounded-lg text-ink-muted transition-colors hover:bg-field-hover hover:text-ink focus-visible:outline-2 focus-visible:outline-plasma"
+        className="app-no-drag mb-1 grid size-7 shrink-0 place-items-center rounded-lg text-ink-muted transition-colors hover:bg-field-hover hover:text-ink focus-visible:outline-2 focus-visible:outline-accent"
       >
         <PlusIcon width={15} height={15} />
       </button>

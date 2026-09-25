@@ -7,11 +7,9 @@ import { TAB_STRIP_HEIGHT } from '../shared/layout'
 import { IpcChannel, type BrowserState } from '../shared/types'
 import type { Downloads } from './downloads'
 import { TabManager } from './tab-manager'
+import { onThemeChange, themeColors } from './theme'
 
 const APP_NAME = 'Nebula'
-// Matches --color-strip in the UI, which the native window controls sit on.
-const STRIP_COLOR = '#0f0d17'
-const SYMBOL_COLOR = '#c9c5dc'
 // macOS traffic lights are about 14px tall; centre them in the tab strip.
 const TRAFFIC_LIGHT_Y = Math.round((TAB_STRIP_HEIGHT - 14) / 2)
 
@@ -24,6 +22,7 @@ export interface MainWindow {
 
 export function createMainWindow(downloads: Downloads): MainWindow {
   const isMac = process.platform === 'darwin'
+  const colors = themeColors()
 
   const window = new BrowserWindow({
     width: 1280,
@@ -32,7 +31,7 @@ export function createMainWindow(downloads: Downloads): MainWindow {
     minHeight: 320,
     show: false,
     title: APP_NAME,
-    backgroundColor: STRIP_COLOR,
+    backgroundColor: colors.strip,
     titleBarStyle: 'hidden',
     // macOS: keep the traffic lights, vertically centred in the tab strip.
     ...(isMac ? { trafficLightPosition: { x: 14, y: TRAFFIC_LIGHT_Y } } : {}),
@@ -40,8 +39,8 @@ export function createMainWindow(downloads: Downloads): MainWindow {
     ...(!isMac
       ? {
           titleBarOverlay: {
-            color: STRIP_COLOR,
-            symbolColor: SYMBOL_COLOR,
+            color: colors.strip,
+            symbolColor: colors.symbol,
             height: TAB_STRIP_HEIGHT
           }
         }
@@ -63,6 +62,15 @@ export function createMainWindow(downloads: Downloads): MainWindow {
   window.on('page-title-updated', (event) => event.preventDefault())
 
   const tabs = new TabManager(window)
+
+  // The OS switched between light and dark: the UI and pages follow through CSS; the native
+  // window controls and the window background are ours to repaint.
+  const stopWatchingTheme = onThemeChange(() => {
+    if (window.isDestroyed()) return
+    const { strip, symbol } = themeColors()
+    window.setBackgroundColor(strip)
+    if (!isMac) window.setTitleBarOverlay({ color: strip, symbolColor: symbol })
+  })
 
   const layout = (): void => tabs.layout()
   window.on('resize', layout)
@@ -106,6 +114,7 @@ export function createMainWindow(downloads: Downloads): MainWindow {
   window.on('ready-to-show', () => window.show())
   window.on('closed', () => {
     stopWatchingDownloads()
+    stopWatchingTheme()
     tabs.dispose()
   })
 

@@ -49,8 +49,8 @@ export function AddressBar({
 
   return (
     <form onSubmit={submit} className="app-no-drag min-w-0 flex-1">
-      <label className="group flex h-8 items-center gap-2 rounded-lg bg-field px-3 ring-1 ring-transparent transition-[background-color,box-shadow] hover:bg-field-hover focus-within:bg-field focus-within:ring-plasma/70">
-        <span className="shrink-0 text-ink-faint group-focus-within:text-plasma">
+      <label className="group flex h-8 items-center gap-2 rounded-lg bg-field px-3 ring-1 ring-transparent transition-[background-color,box-shadow] hover:bg-field-hover focus-within:bg-field focus-within:ring-accent/70">
+        <span className="shrink-0 text-ink-faint group-focus-within:text-accent">
           {isSecure && !editing ? (
             <LockIcon width={13} height={13} />
           ) : (
@@ -75,7 +75,7 @@ export function AddressBar({
           placeholder="Search Google or type a URL"
           spellCheck={false}
           autoComplete="off"
-          className="min-w-0 flex-1 bg-transparent text-[13px] text-ink outline-none placeholder:text-ink-faint selection:bg-plasma/40"
+          className="min-w-0 flex-1 bg-transparent text-[13px] text-ink outline-none placeholder:text-ink-faint selection:bg-accent/40"
         />
         {zoomPercent !== 100 && (
           <button
@@ -83,7 +83,7 @@ export function AddressBar({
             title="Reset zoom to 100%"
             aria-label={`Zoom ${zoomPercent}%. Reset to 100%`}
             onClick={() => window.browser.resetZoom()}
-            className="shrink-0 rounded px-1.5 py-0.5 text-[11px] text-ink-muted tabular-nums ring-1 ring-white/10 transition-colors hover:bg-field-hover hover:text-ink focus-visible:outline-2 focus-visible:outline-plasma"
+            className="shrink-0 rounded px-1.5 py-0.5 text-[11px] text-ink-muted tabular-nums ring-1 ring-line transition-colors hover:bg-field-hover hover:text-ink focus-visible:outline-2 focus-visible:outline-accent"
           >
             {zoomPercent}%
           </button>

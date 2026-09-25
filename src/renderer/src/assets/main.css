@@ -1,16 +1,37 @@
 @import 'tailwindcss';
 
 @theme {
-  --color-strip: #0f0d17;
-  --color-bar: #15131f;
-  --color-field: #211e2f;
-  --color-field-hover: #2a2640;
-  --color-ink: #ece9f7;
-  --color-ink-muted: #8d88a6;
-  --color-ink-faint: #56516c;
-  --color-plasma: #9d7bff;
+  /* The Claude desktop app's colours. Dark: warm charcoal, off-white text, clay accent. */
+  --color-strip: #1f1e1d;
+  --color-bar: #262624;
+  --color-field: #30302e;
+  --color-field-hover: #3a3936;
+  --color-ink: #faf9f5;
+  --color-ink-muted: #a6a39a;
+  --color-ink-faint: #75736c;
+  --color-accent: #d97757;
+  --color-line: rgb(255 255 255 / 0.08);
 
   --font-sans: 'Segoe UI Variable Text', 'Segoe UI', system-ui, -apple-system, sans-serif;
+}
+
+/* Light: warm paper, near-black text, a deeper clay. Follows the OS setting, like Claude. */
+@media (prefers-color-scheme: light) {
+  :root {
+    --color-strip: #f0eee6;
+    --color-bar: #faf9f5;
+    --color-field: #eae8e0;
+    --color-field-hover: #e2e0d7;
+    --color-ink: #141413;
+    --color-ink-muted: #5e5d59;
+    --color-ink-faint: #8f8d85;
+    --color-accent: #b85a3a;
+    --color-line: rgb(20 20 19 / 0.1);
+  }
+}
+
+:root {
+  color-scheme: light dark;
 }
 
 html,
@@ -63,8 +84,8 @@ body,
 
 /* Tab loading indicator: a ring with one bright quarter. */
 .tab-spinner {
-  border: 2px solid color-mix(in srgb, var(--color-plasma) 25%, transparent);
-  border-top-color: var(--color-plasma);
+  border: 2px solid color-mix(in srgb, var(--color-accent) 25%, transparent);
+  border-top-color: var(--color-accent);
   border-radius: 9999px;
   animation: spin 0.8s linear infinite;
 }
