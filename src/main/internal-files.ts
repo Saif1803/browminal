@@ -1,7 +1,7 @@
 import { extname, join, normalize, sep } from 'path'
 
 /** Internal pages that may be served, keyed by URL host: nebula://<host>/ */
-const PAGES = new Set(['home'])
+const PAGES = new Set(['home', 'error'])
 
 const MIME_TYPES: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',

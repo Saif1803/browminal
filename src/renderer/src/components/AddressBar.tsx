@@ -1,7 +1,15 @@
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
 import { LockIcon, SearchIcon } from './icons'
 
-export function AddressBar({ url }: { url: string }): React.JSX.Element {
+export function AddressBar({
+  url,
+  isErrorPage,
+  zoomFactor
+}: {
+  url: string
+  isErrorPage: boolean
+  zoomFactor: number
+}): React.JSX.Element {
   const inputRef = useRef<HTMLInputElement>(null)
   const [draft, setDraft] = useState(url)
   const [editing, setEditing] = useState(false)
@@ -35,7 +43,9 @@ export function AddressBar({ url }: { url: string }): React.JSX.Element {
     if (event.key === 'Escape') inputRef.current?.blur()
   }
 
-  const isSecure = url.startsWith('https://')
+  // An error page shows the URL that failed, but nothing secure was loaded.
+  const isSecure = url.startsWith('https://') && !isErrorPage
+  const zoomPercent = Math.round(zoomFactor * 100)
 
   return (
     <form onSubmit={submit} className="app-no-drag min-w-0 flex-1">
@@ -67,6 +77,17 @@ export function AddressBar({ url }: { url: string }): React.JSX.Element {
           autoComplete="off"
           className="min-w-0 flex-1 bg-transparent text-[13px] text-ink outline-none placeholder:text-ink-faint selection:bg-plasma/40"
         />
+        {zoomPercent !== 100 && (
+          <button
+            type="button"
+            title="Reset zoom to 100%"
+            aria-label={`Zoom ${zoomPercent}%. Reset to 100%`}
+            onClick={() => window.browser.resetZoom()}
+            className="shrink-0 rounded px-1.5 py-0.5 text-[11px] text-ink-muted tabular-nums ring-1 ring-white/10 transition-colors hover:bg-field-hover hover:text-ink focus-visible:outline-2 focus-visible:outline-plasma"
+          >
+            {zoomPercent}%
+          </button>
+        )}
       </label>
     </form>
   )

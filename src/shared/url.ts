@@ -4,8 +4,34 @@ export const SEARCH_URL = 'https://www.google.com/search?q='
 export const INTERNAL_SCHEME = 'nebula'
 export const HOME_URL = `${INTERNAL_SCHEME}://home/`
 
+export const ERROR_URL = `${INTERNAL_SCHEME}://error/`
+
 export function isHomeUrl(url: string): boolean {
   return url === HOME_URL || url.startsWith(`${HOME_URL}#`) || url.startsWith(`${HOME_URL}?`)
+}
+
+export function isHttpUrl(url: string): boolean {
+  return /^https?:\/\//i.test(url)
+}
+
+/** The page shown when a page fails to load; `code` is the net error name, e.g. ERR_NAME_NOT_RESOLVED. */
+export function errorPageUrl(code: string, failedUrl: string): string {
+  const query = new URLSearchParams({ code, url: failedUrl })
+  return `${ERROR_URL}?${query}`
+}
+
+/** The error code and the http(s) URL that failed, if `url` is an error page. */
+export function parseErrorPageUrl(url: string): { code: string; url: string } | null {
+  if (!url.startsWith(`${ERROR_URL}?`)) return null
+  const query = new URLSearchParams(url.slice(ERROR_URL.length + 1).split('#')[0])
+  const failedUrl = query.get('url') ?? ''
+  if (!isHttpUrl(failedUrl)) return null
+  return { code: query.get('code') ?? '', url: failedUrl }
+}
+
+/** What the address bar shows for a tab: an error page shows the URL that failed. */
+export function displayUrl(url: string): string {
+  return parseErrorPageUrl(url)?.url ?? url
 }
 
 const SCHEME = /^([a-z][a-z0-9+.-]*):\/\//i

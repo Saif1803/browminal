@@ -99,3 +99,15 @@ export const MutedIcon = (p: IconProps): React.JSX.Element => (
     <path d="M16 9.5l5 5M21 9.5l-5 5" />
   </Icon>
 )
+
+export const ChevronUpIcon = (p: IconProps): React.JSX.Element => (
+  <Icon {...p}>
+    <path d="M6 15l6-6 6 6" />
+  </Icon>
+)
+
+export const ChevronDownIcon = (p: IconProps): React.JSX.Element => (
+  <Icon {...p}>
+    <path d="M6 9l6 6 6-6" />
+  </Icon>
+)

@@ -1,7 +1,8 @@
 import type { BrowserWindow, WebContents } from 'electron'
 import { INITIAL_CHROME_HEIGHT } from '../shared/layout'
 import type { BrowserState } from '../shared/types'
-import { HOME_URL, isHomeUrl } from '../shared/url'
+import { HOME_URL, isHomeUrl, isHttpUrl } from '../shared/url'
+import { confirmOpenExternal } from './external-links'
 import { activeAfterClose, insertionIndex } from './tab-order'
 import { Tab, type OpenRequest, type TabHooks } from './tabs'
 
@@ -33,10 +34,19 @@ export class TabManager {
   private createdListeners: ((tab: Tab) => void)[] = []
   private updateScheduled = false
   private disposed = false
+  /** The tab showing a page in fullscreen (a video), covering the whole window. */
+  private fullscreenTab: Tab | null = null
+  // Whether the window was already fullscreen (F11) when the page went fullscreen.
+  private windowWasFullscreen = false
 
   private readonly hooks: TabHooks = {
     changed: () => this.scheduleUpdate(),
     opened: (opener, request) => this.openFromPage(opener, request),
+    openExternal: (tab, url) => {
+      // Only the tab in front may ask; background tabs could otherwise pop dialogs at any time.
+      if (tab === this.activeTab) confirmOpenExternal(this.window, tab.url, url)
+    },
+    fullscreenChanged: (tab, isFullscreen) => this.setPageFullscreen(tab, isFullscreen),
     destroyed: (tab) => this.remove(tab, false)
   }
 
@@ -92,6 +102,7 @@ export class TabManager {
     if (!tab || this.window.isDestroyed()) return
     const previous = this.activeTab
     this.activeTab = tab
+    if (this.fullscreenTab && this.fullscreenTab !== tab) this.fullscreenTab.exitHtmlFullscreen()
     if (previous !== tab) {
       if (previous) this.window.contentView.removeChildView(previous.view)
       this.window.contentView.addChildView(tab.view)
@@ -99,6 +110,31 @@ export class TabManager {
     this.layout()
     tab.webContents.focus()
     this.scheduleUpdate()
+  }
+
+  /** Ctrl+Tab / Ctrl+Shift+Tab, wrapping around. */
+  activateRelative(offset: number): void {
+    const index = this.tabs.indexOf(this.activeTab)
+    const count = this.tabs.length
+    this.activate(this.tabs[(((index + offset) % count) + count) % count].id)
+  }
+
+  /** Ctrl+1–8 (and Ctrl+9 with the last index). */
+  activateIndex(index: number): void {
+    const tab = this.tabs[index]
+    if (tab) this.activate(tab.id)
+  }
+
+  /** The window left fullscreen (F11, the green button): a fullscreen page leaves with it. */
+  windowLeftFullscreen(): void {
+    this.fullscreenTab?.exitHtmlFullscreen()
+  }
+
+  /** Esc: a fullscreen page leaves fullscreen. Returns false if there was nothing to do. */
+  exitPageFullscreen(): boolean {
+    if (!this.fullscreenTab) return false
+    this.fullscreenTab.exitHtmlFullscreen()
+    return true
   }
 
   /** Ctrl+Shift+T: reopens the most recently closed tab where it was. */
@@ -121,14 +157,17 @@ export class TabManager {
   layout(): void {
     if (this.window.isDestroyed()) return
     const { width, height } = this.window.getContentBounds()
-    const bounds = {
+    const page = {
       x: 0,
       y: this.chromeHeight,
       width,
       height: Math.max(0, height - this.chromeHeight)
     }
     // Background tabs get sized too, so pages loading there lay out at the right width.
-    for (const tab of this.tabs) tab.setBounds(bounds)
+    // A fullscreen page covers the UI.
+    for (const tab of this.tabs) {
+      tab.setBounds(tab === this.fullscreenTab ? { x: 0, y: 0, width, height } : page)
+    }
   }
 
   /** Destroys every tab. Call when the window closes. */
@@ -137,6 +176,26 @@ export class TabManager {
     this.stateListener = null
     for (const tab of this.tabs) tab.destroy()
     this.tabs = []
+  }
+
+  /** A page entered or left HTML fullscreen: the window follows, and the page covers the UI. */
+  private setPageFullscreen(tab: Tab, isFullscreen: boolean): void {
+    if (this.window.isDestroyed()) return
+    if (isFullscreen) {
+      // Only the tab in front may take over the window.
+      if (tab !== this.activeTab) {
+        tab.exitHtmlFullscreen()
+        return
+      }
+      if (!this.fullscreenTab) this.windowWasFullscreen = this.window.isFullScreen()
+      this.fullscreenTab = tab
+      this.window.setFullScreen(true)
+    } else {
+      if (tab !== this.fullscreenTab) return
+      this.fullscreenTab = null
+      if (!this.windowWasFullscreen) this.window.setFullScreen(false)
+    }
+    this.layout()
   }
 
   /** A tab for something a page opened (window.open, target=_blank, middle-click), next to it. */
@@ -174,6 +233,7 @@ export class TabManager {
     const nextActiveId = activeAfterClose(this.tabs, tab.id, this.activeTab.id)
     this.tabs.splice(index, 1)
     for (const other of this.tabs) if (other.openerId === tab.id) other.openerId = null
+    if (tab === this.fullscreenTab) this.setPageFullscreen(tab, false)
     if (!this.window.isDestroyed()) this.window.contentView.removeChildView(tab.view)
     tab.destroy()
 
@@ -196,8 +256,8 @@ export class TabManager {
   }
 }
 
-/** Only pages main would load itself are remembered; never error pages, data: or blank ones. */
-const isReopenable = (url: string): boolean => /^https?:\/\//i.test(url) || isHomeUrl(url)
+/** Only pages main would load itself are remembered (an error page as the URL that failed). */
+const isReopenable = (url: string): boolean => isHttpUrl(url) || isHomeUrl(url)
 
 let lastId = 0
 const nextId = (): number => ++lastId

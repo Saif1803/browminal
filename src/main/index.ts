@@ -1,5 +1,6 @@
 import { app, BrowserWindow, Menu } from 'electron'
 import { electronApp } from '@electron-toolkit/utils'
+import { registerContextMenus } from './context-menu'
 import { registerIpc } from './ipc'
 import { handleInternalProtocol, registerInternalScheme } from './protocol'
 import { registerShortcuts } from './shortcuts'
@@ -15,6 +16,7 @@ app.userAgentFallback = cleanUserAgent(app.userAgentFallback, app.getName())
 function openWindow(): void {
   main = createMainWindow()
   registerShortcuts(main)
+  registerContextMenus(main)
   main.window.on('closed', () => {
     main = null
   })

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { BrowserState } from '@shared/types'
 import { isHomeUrl } from '@shared/url'
 import { AddressBar } from './components/AddressBar'
+import { FindBar } from './components/FindBar'
 import { NavButtons } from './components/NavButtons'
 import { TabStrip } from './components/TabStrip'
 
@@ -13,7 +14,10 @@ const EMPTY_STATE: BrowserState = {
     title: '',
     canGoBack: false,
     canGoForward: false,
-    isLoading: false
+    isLoading: false,
+    isErrorPage: false,
+    zoomFactor: 1,
+    find: null
   }
 }
 
@@ -58,7 +62,12 @@ function App(): React.JSX.Element {
       <div className="relative flex h-[44px] items-center gap-2 bg-bar px-2">
         <NavButtons state={tab} />
         {/* Keyed by tab so switching tabs drops anything half-typed in the previous one. */}
-        <AddressBar key={tab.id} url={isHomeUrl(tab.url) ? '' : tab.url} />
+        <AddressBar
+          key={tab.id}
+          url={isHomeUrl(tab.url) ? '' : tab.url}
+          isErrorPage={tab.isErrorPage}
+          zoomFactor={tab.zoomFactor}
+        />
         {tab.isLoading && (
           <div
             role="progressbar"
@@ -69,6 +78,8 @@ function App(): React.JSX.Element {
           </div>
         )}
       </div>
+      {/* Keyed by tab: each tab has its own find bar and query. */}
+      {tab.find && <FindBar key={tab.id} find={tab.find} />}
     </header>
   )
 }

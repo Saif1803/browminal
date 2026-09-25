@@ -15,6 +15,10 @@ const browser: BrowserApi = {
   activateTab: (id) => ipcRenderer.invoke(IpcChannel.ActivateTab, id),
   reopenClosedTab: () => ipcRenderer.invoke(IpcChannel.ReopenClosedTab),
   toggleMute: (id) => ipcRenderer.invoke(IpcChannel.ToggleMute, id),
+  resetZoom: () => ipcRenderer.invoke(IpcChannel.ResetZoom),
+  find: (query) => ipcRenderer.invoke(IpcChannel.Find, query),
+  findNext: (forward) => ipcRenderer.invoke(IpcChannel.FindNext, forward),
+  closeFind: () => ipcRenderer.invoke(IpcChannel.CloseFind),
   setChromeHeight: (px) => ipcRenderer.invoke(IpcChannel.SetChromeHeight, px),
   getState: () => ipcRenderer.invoke(IpcChannel.GetState),
 
@@ -28,6 +32,12 @@ const browser: BrowserApi = {
     const listener = (): void => callback()
     ipcRenderer.on(IpcChannel.FocusAddressBar, listener)
     return () => ipcRenderer.removeListener(IpcChannel.FocusAddressBar, listener)
+  },
+
+  onFocusFind(callback) {
+    const listener = (): void => callback()
+    ipcRenderer.on(IpcChannel.FocusFind, listener)
+    return () => ipcRenderer.removeListener(IpcChannel.FocusFind, listener)
   }
 }
 

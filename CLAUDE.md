@@ -33,6 +33,9 @@ Run `bun run typecheck`, `bun test` and `bun run lint` before calling work done.
   plus push events main sends (`onState` → one `BrowserState`, batched to at most one per tick;
   `onFocusAddressBar`). The contract lives in `src/shared/types.ts` (`BrowserApi`, `BrowserState`,
   `IpcChannel`); change it there first.
+- **Error pages:** a failed main-frame load (not `ERR_ABORTED`) loads `nebula://error/?code=…&url=…`
+  (`errorPageUrl` in `src/shared/url.ts`). The address bar shows the failed URL (`displayUrl`),
+  Reload retries it, and the failed entry and the error entry are removed from history.
 - Address-bar input is resolved **in main** by `resolveInput` in `src/shared/url.ts`
   (http(s) as-is; bare domains get `https://`; localhost/IPs get `http://`; everything else,
   including other schemes, is a Google search; empty input goes home).
@@ -50,11 +53,16 @@ Run `bun run typecheck`, `bun test` and `bun run lint` before calling work done.
 | `window.ts` | Frameless `BrowserWindow`, relays resize and state, window title |
 | `tab-manager.ts` | Tab list, active tab, closed-tab stack, layout, batched state push |
 | `tab-order.ts` | Pure: where new tabs go, which tab is active after a close |
-| `tabs.ts` | `Tab` class: one `WebContentsView`, its events, window.open → new tab |
+| `tabs.ts` | `Tab` class: one `WebContentsView`, its events, window.open → new tab, find, zoom, error pages |
 | `favicons.ts` | Fetches favicons in main and returns checked `data:` URLs (`image-type.ts` sniffs) |
 | `user-agent.ts` | Pure: strips `Electron/x` and the app token from the user agent |
+| `navigation-policy.ts` | Pure: where pages may navigate (web yes; `mailto:`/`tel:` ask; everything else blocked) |
+| `external-links.ts` | Confirm dialog, then `shell.openExternal`, for `mailto:`/`tel:` only |
+| `zoom-levels.ts` | Pure: Chrome's zoom steps |
 | `ipc.ts` | `ipcMain` handlers, sender and argument validation |
-| `shortcuts.ts` | Cmd/Ctrl+L, Cmd/Ctrl+R via `before-input-event` on UI and every tab |
+| `shortcut-map.ts` | Pure: key input + platform → browser command |
+| `shortcuts.ts` | Runs commands from `before-input-event` on UI and every tab; mouse back/forward, swipe |
+| `context-menu.ts` | Native right-click menus for pages, and cut/copy/paste in the UI's text fields |
 | `protocol.ts` | Registers and serves the `nebula://` scheme |
 | `internal-files.ts` | Pure URL → file mapping for `nebula://` (allowlist, traversal guard) |
 
@@ -76,6 +84,9 @@ space for the native controls.
   (http(s) or blank only; everything else is denied). A `window.open` page is adopted so
   `window.opener` works, with the same forced `webPreferences` (`overrideBrowserWindowOptions`).
   `<webview>` attachment is blocked.
+- Pages can't navigate any frame (or be redirected) to `nebula://`, `file:` or other apps' schemes
+  (`will-frame-navigate` / `will-redirect` + `decideNavigation`). `mailto:`/`tel:` open only after
+  the user confirms, and only from the active tab. Main's own `loadURL` is not affected.
 - The UI renderer must not navigate away from itself or open windows.
 - Only http(s) URLs are loaded into tabs from the address bar.
 
@@ -84,7 +95,6 @@ space for the native controls.
   Cmd/Ctrl+L and Cmd/Ctrl+R.
 - **Home page (done):** `nebula://home/` with ChatGPT/Claude prompt; Google search.
 - **Current plan: browser essentials** — [docs/plans/browser-essentials.md](docs/plans/browser-essentials.md).
-  **Phase 1 (tabs) done**; build the next phase only when the user says so. Remaining: page
-  essentials (shortcuts, context menu, find, zoom, error pages, fullscreen), permissions,
-  downloads, bookmarks, ad blocking, docs.
+  **Phases 1 (tabs) and 2 (page essentials) done**; build the next phase only when the user says
+  so. Remaining: permissions, downloads, bookmarks, ad blocking, docs.
 - **Later (don't start until asked):** history + address suggestions, session restore, design pass.

@@ -15,6 +15,15 @@ describe('resolveInternalFile', () => {
     )
   })
 
+  test('serves the error page', () => {
+    expect(
+      resolveInternalFile(root, 'nebula://error/?code=X&url=https%3A%2F%2Fa.example%2F')
+    ).toEqual({
+      path: join(root, 'error', 'index.html'),
+      mimeType: 'text/html; charset=utf-8'
+    })
+  })
+
   test('rejects unknown pages', () => {
     expect(resolveInternalFile(root, 'nebula://settings/')).toBeNull()
     expect(resolveInternalFile(root, 'not a url')).toBeNull()

@@ -66,7 +66,10 @@ export function createMainWindow(): MainWindow {
   window.on('maximize', layout)
   window.on('unmaximize', layout)
   window.on('enter-full-screen', layout)
-  window.on('leave-full-screen', layout)
+  window.on('leave-full-screen', () => {
+    tabs.windowLeftFullscreen()
+    layout()
+  })
 
   tabs.onStateChange((state) => {
     const { title } = state.active

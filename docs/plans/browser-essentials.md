@@ -1,12 +1,21 @@
 # Plan: browser essentials for Nebula
 
-**Status:** approved 2026-09-25. Phase 1 done 2026-09-25. Build phases in order and commit after each phase.
+**Status:** approved 2026-09-25. Phases 1 and 2 done 2026-09-25. Build phases in order and commit after each phase.
 
 **Changes made while building Phase 1:**
 - `favicons.ts` (plus the pure `image-type.ts` sniffer) was built in Phase 1, because the tab strip shows favicons. Phase 5 reuses it for bookmarks.
 - `BrowserState` holds only what exists so far (`tabs`, `active`). Each later phase adds its own fields; `zoomFactor` arrives with zoom in Phase 2.
 - `move-to-index` was left out: nothing calls it until tabs can be dragged.
 - Links opened with middle-click or a modifier key have no Chromium-created page to adopt, so the new tab loads the URL itself (with referrer and form data).
+
+**Changes made while building Phase 2:**
+- Ctrl+D and Ctrl+Shift+B are not mapped yet; they arrive with bookmarks in Phase 5.
+- A few standard extras were mapped: Ctrl+PageUp/PageDown and Ctrl+F4 (Windows/Linux), Cmd+[ / Cmd+] and Cmd+Shift+[ / ] (macOS), Shift+F5 / Ctrl+F5 (hard reload), F3 and Ctrl+G (find next), and Shift+F12 in dev for the UI's own DevTools.
+- Pages can no longer navigate to `nebula://` (an error page there would let a site fake the address bar), `file:` or other apps' schemes (`navigation-policy.ts`).
+- `mailto:`/`tel:` are caught with `will-frame-navigate` and the window-open handler. Phase 3's permission handler should also deny Electron's `openExternal` permission, so nothing else can open other apps.
+- The UI's text fields (address bar, find bar) got a cut/copy/paste context menu.
+- A crashed page shows the error page ("This page crashed") too.
+- History is kept clean: the failed load's own entry and the error page's entry are removed when the error page loads or a retry succeeds.
 
 ## Context
 Nebula (Electron + electron-vite + React/TS + Tailwind v4, Bun) currently has **one tab**, a top bar (back/forward/reload-stop/home + address bar), a `nebula://home/` page (ChatGPT/Claude prompt), and Google search. You asked for "whatever is a must for a browser". You'll decide the visual design and anything else later, so this round builds **functionality and architecture** and keeps the UI plain, using the existing tokens in `src/renderer/src/assets/main.css`.

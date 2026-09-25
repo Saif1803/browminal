@@ -7,6 +7,7 @@ import { IpcChannel } from '../shared/types'
 import type { MainWindow } from './window'
 
 const MAX_INPUT_LENGTH = 8192
+const MAX_FIND_LENGTH = 1000
 
 /**
  * The URL the UI renderer is served from. Every IPC message must come from a
@@ -83,6 +84,26 @@ export function registerIpc(getMain: () => MainWindow | null): void {
     const main = assertTrustedSender(event)
     main.tabs.toggleMute(assertTabId(main, id))
   })
+
+  ipcMain.handle(IpcChannel.ResetZoom, (event) =>
+    assertTrustedSender(event).tabs.active.resetZoom()
+  )
+
+  ipcMain.handle(IpcChannel.Find, (event, query: unknown) => {
+    const { tabs } = assertTrustedSender(event)
+    if (typeof query !== 'string' || query.length > MAX_FIND_LENGTH) {
+      throw new Error('find: query must be a string')
+    }
+    tabs.active.findText(query)
+  })
+  ipcMain.handle(IpcChannel.FindNext, (event, forward: unknown) => {
+    const { tabs } = assertTrustedSender(event)
+    if (typeof forward !== 'boolean') throw new Error('findNext: forward must be a boolean')
+    tabs.active.findAgain(forward)
+  })
+  ipcMain.handle(IpcChannel.CloseFind, (event) =>
+    assertTrustedSender(event).tabs.active.closeFind()
+  )
 
   ipcMain.handle(IpcChannel.SetChromeHeight, (event, px: unknown) => {
     const { tabs } = assertTrustedSender(event)
