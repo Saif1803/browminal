@@ -30,8 +30,9 @@ Run `bun run typecheck`, `bun test` and `bun run lint` before calling work done.
   `setBounds`. The UI never sends bounds, only its height.
 - **UI ↔ main** only through the typed API in `src/preload/index.ts`, exposed via `contextBridge`
   as `window.browser` (navigation calls act on the active tab; tab calls take a numeric tab id)
-  plus push events main sends (`onState` → one `BrowserState`, batched to at most one per tick;
-  `onFocusAddressBar`). The contract lives in `src/shared/types.ts` (`BrowserApi`, `BrowserState`,
+  plus push events main sends (`onState` → one `BrowserState` of tabs and downloads, batched in
+  `window.ts` to at most one per tick; `onFocusAddressBar`).
+  Pure helpers both sides use live in `src/shared/` (`url.ts`, `downloads.ts`, `layout.ts`). The contract lives in `src/shared/types.ts` (`BrowserApi`, `BrowserState`,
   `IpcChannel`); change it there first.
 - **Error pages:** a failed main-frame load (not `ERR_ABORTED`) loads `nebula://error/?code=…&url=…`
   (`errorPageUrl` in `src/shared/url.ts`). The address bar shows the failed URL (`displayUrl`),
@@ -58,6 +59,9 @@ Run `bun run typecheck`, `bun test` and `bun run lint` before calling work done.
 | `user-agent.ts` | Pure: strips `Electron/x` and the app token from the user agent |
 | `navigation-policy.ts` | Pure: where pages may navigate (web yes; `mailto:`/`tel:` ask; everything else blocked) |
 | `external-links.ts` | Confirm dialog, then `shell.openExternal`, for `mailto:`/`tel:` only |
+| `downloads.ts` | `Downloads`: every download of the app; saves into Downloads, pause/resume/cancel/open, quit prompt |
+| `download-names.ts` | Pure: safe file names and "name (1).ext" numbering |
+| `downloads-menu.ts` | Native menu for the downloads button (placeholder until the design pass) |
 | `zoom-levels.ts` | Pure: Chrome's zoom steps |
 | `permission-policy.ts` | Pure: allow / ask / deny per permission, prompt text, session memory of answers |
 | `permissions.ts` | Session permission, check, screen-share and device handlers; Allow/Block dialogs |
@@ -96,12 +100,16 @@ space for the native controls.
   ask; the UI and `nebula://` pages always get "no". Screen sharing asks every time (screens only,
   no audio) and needs a user gesture. USB, HID, serial and Bluetooth pickers are always cancelled.
 - Only http(s) URLs are loaded into tabs from the address bar.
+- **Downloads** (`downloads.ts`): only pages in tabs can download. Files go straight into the OS
+  Downloads folder under a cleaned, unique name (`download-names.ts`) and are **never opened
+  automatically**, only from the user's Open. Chromium adds the mark-of-the-web on Windows.
+  Closing/quitting with downloads running asks first, and quitting cancels them.
 
 ## Roadmap
 - **Milestone 1 (done):** frameless window, back/forward/reload-stop, address bar, title sync,
   Cmd/Ctrl+L and Cmd/Ctrl+R.
 - **Home page (done):** `nebula://home/` with ChatGPT/Claude prompt; Google search.
 - **Current plan: browser essentials** — [docs/plans/browser-essentials.md](docs/plans/browser-essentials.md).
-  **Phases 1–3 (tabs, page essentials, permissions) done**; build the next phase only when the
-  user says so. Remaining: downloads, bookmarks, ad blocking, docs.
+  **Phases 1–4 (tabs, page essentials, permissions, downloads) done**; build the next phase only
+  when the user says so. Remaining: bookmarks, ad blocking, docs.
 - **Later (don't start until asked):** history + address suggestions, session restore, design pass.

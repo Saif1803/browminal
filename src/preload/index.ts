@@ -19,6 +19,7 @@ const browser: BrowserApi = {
   find: (query) => ipcRenderer.invoke(IpcChannel.Find, query),
   findNext: (forward) => ipcRenderer.invoke(IpcChannel.FindNext, forward),
   closeFind: () => ipcRenderer.invoke(IpcChannel.CloseFind),
+  showDownloadsMenu: (x, y) => ipcRenderer.invoke(IpcChannel.ShowDownloadsMenu, x, y),
   setChromeHeight: (px) => ipcRenderer.invoke(IpcChannel.SetChromeHeight, px),
   getState: () => ipcRenderer.invoke(IpcChannel.GetState),
 

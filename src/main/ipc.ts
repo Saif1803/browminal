@@ -4,6 +4,7 @@ import { pathToFileURL } from 'url'
 import { is } from '@electron-toolkit/utils'
 import { MAX_CHROME_HEIGHT } from '../shared/layout'
 import { IpcChannel } from '../shared/types'
+import { showDownloadsMenu } from './downloads-menu'
 import type { MainWindow } from './window'
 
 const MAX_INPUT_LENGTH = 8192
@@ -105,6 +106,17 @@ export function registerIpc(getMain: () => MainWindow | null): void {
     assertTrustedSender(event).tabs.active.closeFind()
   )
 
+  ipcMain.handle(IpcChannel.ShowDownloadsMenu, (event, x: unknown, y: unknown) => {
+    const { window, downloads } = assertTrustedSender(event)
+    const { width, height } = window.getContentBounds()
+    const isIn = (n: unknown, max: number): n is number =>
+      typeof n === 'number' && Number.isInteger(n) && n >= 0 && n <= max
+    if (!isIn(x, width) || !isIn(y, height)) {
+      throw new Error('showDownloadsMenu: expected integer coordinates inside the window')
+    }
+    showDownloadsMenu(window, downloads, x, y)
+  })
+
   ipcMain.handle(IpcChannel.SetChromeHeight, (event, px: unknown) => {
     const { tabs } = assertTrustedSender(event)
     if (typeof px !== 'number' || !Number.isInteger(px) || px < 0 || px > MAX_CHROME_HEIGHT) {
@@ -113,5 +125,5 @@ export function registerIpc(getMain: () => MainWindow | null): void {
     tabs.setChromeHeight(px)
   })
 
-  ipcMain.handle(IpcChannel.GetState, (event) => assertTrustedSender(event).tabs.getState())
+  ipcMain.handle(IpcChannel.GetState, (event) => assertTrustedSender(event).getState())
 }

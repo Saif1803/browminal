@@ -111,3 +111,10 @@ export const ChevronDownIcon = (p: IconProps): React.JSX.Element => (
     <path d="M6 9l6 6 6-6" />
   </Icon>
 )
+
+export const DownloadIcon = (p: IconProps): React.JSX.Element => (
+  <Icon {...p}>
+    <path d="M12 4v11M7 10.5l5 5 5-5" />
+    <path d="M5 19.5h14" />
+  </Icon>
+)

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { BrowserState } from '@shared/types'
 import { isHomeUrl } from '@shared/url'
 import { AddressBar } from './components/AddressBar'
+import { DownloadsButton } from './components/DownloadsButton'
 import { FindBar } from './components/FindBar'
 import { NavButtons } from './components/NavButtons'
 import { TabStrip } from './components/TabStrip'
@@ -18,7 +19,8 @@ const EMPTY_STATE: BrowserState = {
     isErrorPage: false,
     zoomFactor: 1,
     find: null
-  }
+  },
+  downloads: []
 }
 
 /** Reports the header's height to main, which places tabs directly below it. */
@@ -68,6 +70,7 @@ function App(): React.JSX.Element {
           isErrorPage={tab.isErrorPage}
           zoomFactor={tab.zoomFactor}
         />
+        <DownloadsButton downloads={state.downloads} />
         {tab.isLoading && (
           <div
             role="progressbar"

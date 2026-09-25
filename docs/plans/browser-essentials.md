@@ -1,6 +1,6 @@
 # Plan: browser essentials for Nebula
 
-**Status:** approved 2026-09-25. Phases 1–3 done 2026-09-25. Build phases in order and commit after each phase.
+**Status:** approved 2026-09-25. Phases 1–4 done 2026-09-25. Build phases in order and commit after each phase.
 
 **Changes made while building Phase 1:**
 - `favicons.ts` (plus the pure `image-type.ts` sniffer) was built in Phase 1, because the tab strip shows favicons. Phase 5 reuses it for bookmarks.
@@ -23,6 +23,16 @@
 - Screen sharing offers whole screens only (one button per screen), never audio, and requires a user gesture. Chromium first sends a `media` request with no camera/microphone type; that is let through to the screen picker, which asks.
 - Permission checks can't answer "ask", so until a site requests something, `navigator.permissions.query` reports `denied` (not `prompt`). Requesting still shows the dialog.
 - Also closed: Electron's default of handing the first Bluetooth device to `navigator.bluetooth.requestDevice`, and the USB, HID and serial pickers.
+
+**Changes made while building Phase 4:**
+- `BrowserState.downloads` is the full list (newest first, without file paths), so a designed panel can use it later. Status text, sizes and overall progress are pure helpers in `src/shared/downloads.ts`, shared by the UI and main.
+- State batching moved from `TabManager` to `window.ts`, which pushes tabs and downloads together (at most once per tick). `Downloads` lives for the whole app (the session's `will-download`), not per window.
+- File names are cleaned before use (no folders, no characters Windows rejects, no device names like `CON`, max 200 characters), then numbered like Chrome (`file (1).zip`, `src (1).tar.gz`).
+- Only pages in tabs can download. A tab that a link opened just to download (`target=_blank`, middle-click) is closed again and its opener comes back to the front.
+- Extras in the menu: Pause/Resume, Resume after a network interruption, Copy download link, Remove from list, Open Downloads folder. Files that were moved or deleted show "Deleted".
+- Download progress shows on the taskbar/Dock icon; macOS bounces the Downloads stack when one finishes.
+- Closing Nebula while downloads run asks first ("Quit and cancel" / "Keep downloading"); quitting cancels them so no partial files are left. On macOS closing the window keeps downloading, and Quit asks.
+- Checked: Chromium adds the Windows mark-of-the-web (`Zone.Identifier`) to downloads, so SmartScreen still checks downloaded programs.
 
 ## Context
 Nebula (Electron + electron-vite + React/TS + Tailwind v4, Bun) currently has **one tab**, a top bar (back/forward/reload-stop/home + address bar), a `nebula://home/` page (ChatGPT/Claude prompt), and Google search. You asked for "whatever is a must for a browser". You'll decide the visual design and anything else later, so this round builds **functionality and architecture** and keeps the UI plain, using the existing tokens in `src/renderer/src/assets/main.css`.

@@ -34,10 +34,31 @@ export interface ActiveTabState {
   find: FindState | null
 }
 
+/**
+ * - progressing, paused: running (paused by the user)
+ * - interrupted: stopped by a network error; it can be resumed
+ * - completed, cancelled, failed: finished
+ */
+export type DownloadStatus =
+  'progressing' | 'paused' | 'interrupted' | 'completed' | 'cancelled' | 'failed'
+
+/** One entry in the downloads list. */
+export interface DownloadSummary {
+  id: number
+  /** The name it's saved under in the Downloads folder. */
+  filename: string
+  status: DownloadStatus
+  receivedBytes: number
+  /** 0 when the server didn't say. */
+  totalBytes: number
+}
+
 /** Everything the UI shows, pushed from main at most once per tick whenever it changes. */
 export interface BrowserState {
   tabs: TabSummary[]
   active: ActiveTabState
+  /** Newest first. Empty until something is downloaded, and again after "Clear list". */
+  downloads: DownloadSummary[]
 }
 
 /** The only surface the UI renderer has into the main process (window.browser). */
@@ -65,6 +86,8 @@ export interface BrowserApi {
   find(query: string): Promise<void>
   findNext(forward: boolean): Promise<void>
   closeFind(): Promise<void>
+  /** Opens the downloads menu with its top-left corner at (x, y) in the window. */
+  showDownloadsMenu(x: number, y: number): Promise<void>
   /** The UI's height in px; main places tabs directly below it. */
   setChromeHeight(px: number): Promise<void>
 
@@ -94,6 +117,7 @@ export const IpcChannel = {
   Find: 'find:query',
   FindNext: 'find:next',
   CloseFind: 'find:close',
+  ShowDownloadsMenu: 'downloads:show-menu',
   SetChromeHeight: 'ui:set-chrome-height',
   GetState: 'browser:get-state',
   State: 'browser:state',

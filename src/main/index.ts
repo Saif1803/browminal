@@ -1,6 +1,7 @@
 import { app, BrowserWindow, Menu } from 'electron'
 import { electronApp } from '@electron-toolkit/utils'
 import { registerContextMenus } from './context-menu'
+import { Downloads } from './downloads'
 import { registerIpc } from './ipc'
 import { registerPermissions } from './permissions'
 import { handleInternalProtocol, registerInternalScheme } from './protocol'
@@ -14,11 +15,19 @@ registerInternalScheme()
 // Look like plain Chrome, so sites (notably Google sign-in) don't block us as an embedded browser.
 app.userAgentFallback = cleanUserAgent(app.userAgentFallback, app.getName())
 
-function openWindow(): void {
-  main = createMainWindow()
-  registerShortcuts(main)
-  registerContextMenus(main)
-  main.window.on('closed', () => {
+function openWindow(downloads: Downloads): void {
+  const opened = createMainWindow(downloads)
+  main = opened
+  registerShortcuts(opened)
+  registerContextMenus(opened)
+  // On Windows and Linux closing the window quits, so ask first if downloads are running.
+  // (On macOS the app keeps running and downloading; quitting asks instead.)
+  if (process.platform !== 'darwin') {
+    opened.window.on('close', (event) => {
+      if (!downloads.confirmQuit(opened.window)) event.preventDefault()
+    })
+  }
+  opened.window.on('closed', () => {
     main = null
   })
 }
@@ -43,12 +52,17 @@ app.whenReady().then(() => {
   setAppMenu()
   handleInternalProtocol()
   registerPermissions(() => main)
+  const downloads = new Downloads(() => main)
   registerIpc(() => main)
-  openWindow()
+  openWindow(downloads)
 
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) openWindow()
+    if (BrowserWindow.getAllWindows().length === 0) openWindow(downloads)
   })
+  app.on('before-quit', (event) => {
+    if (!downloads.confirmQuit(main?.window ?? null)) event.preventDefault()
+  })
+  app.on('will-quit', () => downloads.cancelAll())
 })
 
 app.on('window-all-closed', () => {

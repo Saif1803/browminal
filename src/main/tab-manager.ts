@@ -30,9 +30,8 @@ export class TabManager {
   private activeTab!: Tab
   private closed: ClosedTab[] = []
   private chromeHeight = INITIAL_CHROME_HEIGHT
-  private stateListener: ((state: BrowserState) => void) | null = null
+  private changeListener: (() => void) | null = null
   private createdListeners: ((tab: Tab) => void)[] = []
-  private updateScheduled = false
   private disposed = false
   /** The tab showing a page in fullscreen (a video), covering the whole window. */
   private fullscreenTab: Tab | null = null
@@ -40,7 +39,7 @@ export class TabManager {
   private windowWasFullscreen = false
 
   private readonly hooks: TabHooks = {
-    changed: () => this.scheduleUpdate(),
+    changed: () => this.notifyChange(),
     opened: (opener, request) => this.openFromPage(opener, request),
     openExternal: (tab, url) => {
       // Only the tab in front may ask; background tabs could otherwise pop dialogs at any time.
@@ -66,9 +65,9 @@ export class TabManager {
     return this.tabs.find((tab) => tab.id === id)
   }
 
-  /** Receives the full state, at most once per tick. */
-  onStateChange(listener: (state: BrowserState) => void): void {
-    this.stateListener = listener
+  /** Called on every change to what getState() returns. Often: the listener should batch. */
+  onChange(listener: () => void): void {
+    this.changeListener = listener
   }
 
   /** Called for every tab, including ones that already exist. */
@@ -77,7 +76,7 @@ export class TabManager {
     this.tabs.forEach(listener)
   }
 
-  getState(): BrowserState {
+  getState(): Pick<BrowserState, 'tabs' | 'active'> {
     return {
       tabs: this.tabs.map((tab) => tab.getSummary()),
       active: this.activeTab.getActiveState()
@@ -109,7 +108,7 @@ export class TabManager {
     }
     this.layout()
     tab.webContents.focus()
-    this.scheduleUpdate()
+    this.notifyChange()
   }
 
   /** Ctrl+Tab / Ctrl+Shift+Tab, wrapping around. */
@@ -143,6 +142,21 @@ export class TabManager {
     if (entry) this.create({ url: entry.url, index: Math.min(entry.index, this.tabs.length) })
   }
 
+  /**
+   * Closes the tab of `webContents` if it never showed a page: one a link opened (target=_blank)
+   * only to start a download. Its opener comes back to the front, like in Chrome.
+   */
+  closeIfBlank(webContents: WebContents): void {
+    const tab = this.tabs.find((other) => other.webContents === webContents)
+    if (!tab || webContents.isDestroyed()) return
+    const url = webContents.getURL()
+    if (url !== '' && url !== 'about:blank') return
+    const opener = tab.openerId === null ? undefined : this.get(tab.openerId)
+    const wasActive = tab === this.activeTab
+    this.close(tab.id)
+    if (wasActive && opener) this.activate(opener.id)
+  }
+
   toggleMute(id: number): void {
     this.get(id)?.toggleMute()
   }
@@ -173,7 +187,7 @@ export class TabManager {
   /** Destroys every tab. Call when the window closes. */
   dispose(): void {
     this.disposed = true
-    this.stateListener = null
+    this.changeListener = null
     for (const tab of this.tabs) tab.destroy()
     this.tabs = []
   }
@@ -214,7 +228,7 @@ export class TabManager {
     this.tabs.splice(index, 0, tab)
     for (const listener of this.createdListeners) listener(tab)
     this.layout()
-    this.scheduleUpdate()
+    this.notifyChange()
   }
 
   /**
@@ -243,16 +257,11 @@ export class TabManager {
     } else if (nextActiveId !== this.activeTab.id) {
       this.activate(nextActiveId)
     }
-    this.scheduleUpdate()
+    this.notifyChange()
   }
 
-  private scheduleUpdate(): void {
-    if (this.updateScheduled || this.disposed) return
-    this.updateScheduled = true
-    setImmediate(() => {
-      this.updateScheduled = false
-      if (!this.disposed) this.stateListener?.(this.getState())
-    })
+  private notifyChange(): void {
+    if (!this.disposed) this.changeListener?.()
   }
 }
 

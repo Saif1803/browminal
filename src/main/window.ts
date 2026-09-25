@@ -2,8 +2,10 @@ import { BrowserWindow } from 'electron'
 import { join } from 'path'
 import { is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
+import { overallProgress } from '../shared/downloads'
 import { TAB_STRIP_HEIGHT } from '../shared/layout'
-import { IpcChannel } from '../shared/types'
+import { IpcChannel, type BrowserState } from '../shared/types'
+import type { Downloads } from './downloads'
 import { TabManager } from './tab-manager'
 
 const APP_NAME = 'Nebula'
@@ -16,9 +18,11 @@ const TRAFFIC_LIGHT_Y = Math.round((TAB_STRIP_HEIGHT - 14) / 2)
 export interface MainWindow {
   window: BrowserWindow
   tabs: TabManager
+  downloads: Downloads
+  getState(): BrowserState
 }
 
-export function createMainWindow(): MainWindow {
+export function createMainWindow(downloads: Downloads): MainWindow {
   const isMac = process.platform === 'darwin'
 
   const window = new BrowserWindow({
@@ -71,14 +75,39 @@ export function createMainWindow(): MainWindow {
     layout()
   })
 
-  tabs.onStateChange((state) => {
+  const getState = (): BrowserState => ({ ...tabs.getState(), downloads: downloads.getState() })
+
+  // Changes come in bursts (loading, download progress): push at most one state per tick.
+  let pushScheduled = false
+  let taskbarProgress = -1
+  const push = (): void => {
+    pushScheduled = false
+    if (window.isDestroyed()) return
+    const state = getState()
     const { title } = state.active
     window.setTitle(title ? `${title} - ${APP_NAME}` : APP_NAME)
+    // Download progress on the taskbar / Dock icon: over 1 means indeterminate, -1 hides it.
+    const progress = overallProgress(state.downloads)
+    const bar = progress === null ? -1 : progress === 'indeterminate' ? 2 : progress
+    if (bar !== taskbarProgress) {
+      taskbarProgress = bar
+      window.setProgressBar(bar)
+    }
     if (!ui.isDestroyed()) ui.send(IpcChannel.State, state)
-  })
+  }
+  const schedulePush = (): void => {
+    if (pushScheduled) return
+    pushScheduled = true
+    setImmediate(push)
+  }
+  tabs.onChange(schedulePush)
+  const stopWatchingDownloads = downloads.onChange(schedulePush)
 
   window.on('ready-to-show', () => window.show())
-  window.on('closed', () => tabs.dispose())
+  window.on('closed', () => {
+    stopWatchingDownloads()
+    tabs.dispose()
+  })
 
   if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
     window.loadURL(process.env['ELECTRON_RENDERER_URL'])
@@ -86,5 +115,5 @@ export function createMainWindow(): MainWindow {
     window.loadFile(join(__dirname, '../renderer/index.html'))
   }
 
-  return { window, tabs }
+  return { window, tabs, downloads, getState }
 }
