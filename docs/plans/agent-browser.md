@@ -34,6 +34,9 @@ UI draws its header row and main lays the page out with `windowLayout` (no `setC
 the terminal's agent finds its tab through an `x-nebula-terminal` header in its MCP config
 instead of environment variables; picks (Phase 4) don't exist yet, so nothing is typed into the
 agent's prompt.
+**Phase 6 done** 2026-11-02: `docs/agents.md` (connecting from the panel or your own terminal,
+sharing, picks, every tool, what agents can't do, the bridge's checks) and `CLAUDE.md` brought up
+to date. The plan is complete; what's not built is listed in the phases above and the roadmap.
 
 **Positioning:** a **developer's browser for localhost work**, the one you open next to your
 terminal while building a web app, not an everyday browser. Chrome plus chrome-devtools-mcp

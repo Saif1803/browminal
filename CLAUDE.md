@@ -1,7 +1,9 @@
 # Nebula — desktop web browser (Electron)
 
 A developer's browser for localhost work: terminal coding agents (Claude Code or any MCP client)
-see, drive and debug the tabs the user shares with them (see **Agent bridge** below).
+see, drive and debug the tabs the user shares with them (see **Agent bridge** below). The
+user-facing guide (connecting, sharing, picks, the tool list) is [docs/agents.md](docs/agents.md):
+keep it in step when tools or their rules change.
 
 ## Stack
 - **electron-vite** (React + TypeScript template, `@quick-start/electron`).
@@ -91,6 +93,8 @@ Run `bun run typecheck`, `bun test` and `bun run lint` before calling work done.
 | `tab-order.ts` | Pure: where new tabs go, which tab is active after a close |
 | `tabs.ts` | `Tab` class: one `WebContentsView`, its events, window.open → new tab, find, zoom, error pages |
 | `scrollbars.ts` | Thin, faint page scrollbars tinted with the page's theme-color (user-origin CSS; the page's own styles win) |
+| `page-veil.ts` | `PageVeil`: a script-free view over the page while a new document loads, fading in the old page's colour |
+| `page-color.ts` | Pure: a page's background colour from `getComputedStyle` (checked), the veil's page and fade CSS |
 | `favicons.ts` | Fetches favicons in main and returns checked `data:` URLs (`image-type.ts` sniffs) |
 | `user-agent.ts` | Pure: strips `Electron/x` and the app token from the user agent |
 | `navigation-policy.ts` | Pure: where pages may navigate (web yes; `mailto:`/`tel:` ask; everything else blocked) |
@@ -234,10 +238,12 @@ space for the native controls.
 - **Home page (done):** `nebula://home/` with ChatGPT/Claude prompt; Google search.
 - **Browser essentials (done):** tabs, page essentials, permissions, downloads, bookmarks, ad
   blocker — [docs/plans/browser-essentials.md](docs/plans/browser-essentials.md).
-- **Agent browser (approved; the main purpose from now on):** Phases 1 (agent bridge), 2 (read and
+- **Agent browser (done; the main purpose from now on):** Phases 1 (agent bridge), 2 (read and
   act: refs, click, type, forms, keys, dialogs), 3 (debug: console, network, inspect, emulate),
-  4 (page ↔ source: source maps, picks, errors badge) and 5 (terminal panel) done; next Phase 6
-  (docs) — [docs/plans/agent-browser.md](docs/plans/agent-browser.md).
+  4 (page ↔ source: source maps, picks, errors badge), 5 (terminal panel) and 6 (docs:
+  [docs/agents.md](docs/agents.md)) — [docs/plans/agent-browser.md](docs/plans/agent-browser.md).
+  Not built yet: drag and drop, iframes, CPU throttling, original names in minified stacks, a real
+  "Connect an agent" dialog (the agent menu stands in).
 - **Creator browser (parked):** capture, studio mode, device preview, profiles, clips panel,
   Claude/ChatGPT handoff — [docs/plans/creator-browser.md](docs/plans/creator-browser.md).
 - **Later (don't start until asked):** history + address suggestions, session restore, design pass
