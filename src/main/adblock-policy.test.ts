@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import {
+  FILTER_LISTS,
   RETRY_INTERVAL_MS,
   UPDATE_INTERVAL_MS,
   emptySeenTokens,
@@ -11,6 +12,13 @@ import {
   takeUnseen,
   togglePausedSite
 } from './adblock-policy'
+
+describe('FILTER_LISTS', () => {
+  test('are distinct https URLs', () => {
+    for (const url of FILTER_LISTS) expect(new URL(url).protocol).toBe('https:')
+    expect(new Set(FILTER_LISTS).size).toBe(FILTER_LISTS.length)
+  })
+})
 
 describe('siteOf', () => {
   test('is the hostname without www.', () => {
@@ -90,15 +98,14 @@ describe('isUpdateDue', () => {
 
 describe('parseDomTokens', () => {
   test('keeps lists of non-empty strings', () => {
-    expect(parseDomTokens({ classes: ['ad', '', 3, null], ids: ['top'], hrefs: 'x' })).toEqual({
+    expect(parseDomTokens({ classes: ['ad', '', 3, null], ids: 'top' })).toEqual({
       classes: ['ad'],
-      ids: ['top'],
-      hrefs: []
+      ids: []
     })
   })
 
   test('gives empty lists for anything else', () => {
-    const empty = { classes: [], ids: [], hrefs: [] }
+    const empty = { classes: [], ids: [] }
     expect(parseDomTokens(null)).toEqual(empty)
     expect(parseDomTokens('classes')).toEqual(empty)
     expect(parseDomTokens(undefined)).toEqual(empty)
@@ -106,25 +113,23 @@ describe('parseDomTokens', () => {
 
   test('caps the count and length', () => {
     const many = Array.from({ length: 6000 }, (_, i) => `c${i}`)
-    const { classes, hrefs } = parseDomTokens({ classes: many, hrefs: ['x'.repeat(3000), 'y'] })
+    const { classes, ids } = parseDomTokens({ classes: many, ids: ['x'.repeat(3000), 'y'] })
     expect(classes).toHaveLength(5000)
-    expect(hrefs).toEqual(['y'])
+    expect(ids).toEqual(['y'])
   })
 })
 
 describe('takeUnseen', () => {
   test('returns only new tokens, and remembers them', () => {
     const seen = emptySeenTokens()
-    expect(takeUnseen(seen, { classes: ['a', 'b'], ids: ['x'], hrefs: [] })).toEqual({
+    expect(takeUnseen(seen, { classes: ['a', 'b'], ids: [] })).toEqual({
       classes: ['a', 'b'],
-      ids: ['x'],
-      hrefs: []
+      ids: []
     })
-    expect(takeUnseen(seen, { classes: ['b', 'c'], ids: ['x'], hrefs: ['/ad'] })).toEqual({
+    expect(takeUnseen(seen, { classes: ['b', 'c'], ids: ['x'] })).toEqual({
       classes: ['c'],
-      ids: [],
-      hrefs: ['/ad']
+      ids: ['x']
     })
-    expect(takeUnseen(seen, { classes: ['a'], ids: ['x'], hrefs: ['/ad'] })).toBeNull()
+    expect(takeUnseen(seen, { classes: ['a'], ids: ['x'] })).toBeNull()
   })
 })

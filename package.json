@@ -13,17 +13,17 @@
     "typecheck": "bun run typecheck:node && bun run typecheck:web && bun run typecheck:test",
     "test": "bun test",
     "start": "electron-vite preview",
-    "dev": "electron-vite dev",
-    "build": "bun run typecheck && electron-vite build",
-    "postinstall": "electron-builder install-app-deps",
+    "dev": "bun run build:native && electron-vite dev",
+    "build": "bun run build:native && bun run typecheck && electron-vite build",
+    "build:native": "bun scripts/build-native.ts",
+    "postinstall": "bun run build:native && electron-builder install-app-deps",
     "build:unpack": "bun run build && electron-builder --dir",
     "build:win": "bun run build && electron-builder --win",
-    "build:mac": "electron-vite build && electron-builder --mac",
-    "build:linux": "electron-vite build && electron-builder --linux"
+    "build:mac": "bun run build:native && electron-vite build && electron-builder --mac",
+    "build:linux": "bun run build:native && electron-vite build && electron-builder --linux"
   },
   "dependencies": {
     "@electron-toolkit/utils": "^4.0.0",
-    "@ghostery/adblocker": "^2.18.2",
     "@jridgewell/trace-mapping": "^0.3.31",
     "@lydell/node-pty": "^1.2.0-beta.18",
     "@modelcontextprotocol/sdk": "^1.32.2",

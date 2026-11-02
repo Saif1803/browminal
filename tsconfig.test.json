@@ -3,6 +3,7 @@
   "include": ["src/**/*.test.ts"],
   "compilerOptions": {
     "noEmit": true,
-    "types": ["bun"]
+    "allowArbitraryExtensions": true,
+    "types": ["bun", "electron-vite/node"]
   }
 }

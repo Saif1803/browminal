@@ -6,15 +6,16 @@ import {
   type WebContents,
   type WebFrameMain
 } from 'electron'
-import { readFile, rename, stat, writeFile } from 'fs/promises'
+import { rename, stat } from 'fs/promises'
 import { join } from 'path'
 import { Worker } from 'worker_threads'
-import { adsAndTrackingLists, fetchLists, type FiltersEngine } from '@ghostery/adblocker'
 import type { ShieldState } from '../shared/types'
 import workerPath from './adblock-worker?modulePath'
-import { cosmeticStyles, loadEngine, shouldBlock } from './adblock-filters'
+import { cosmeticStyles, loadEngine, shouldBlock, type AdblockEngine } from './adblock-filters'
+import { nativePath } from './native'
 import {
   emptySeenTokens,
+  FILTER_LISTS,
   isUpdateDue,
   parseDomTokens,
   shieldStatus,
@@ -37,23 +38,21 @@ const COUNT_DELAY_MS = 250
 const SCAN_WORLD_ID = 2001
 
 /**
- * Collects the class names, ids and link targets on the page, like Ghostery's content script
- * does, so the engine can pick the generic element-hiding rules that apply.
+ * Collects the class names and ids on the page, so the engine can pick the generic
+ * element-hiding rules that apply.
  */
 const SCAN_PAGE = `(() => {
   const max = 5000
-  const classes = new Set(), ids = new Set(), hrefs = new Set()
+  const classes = new Set(), ids = new Set()
   const skip = new Set(['BR', 'HEAD', 'LINK', 'META', 'SCRIPT', 'STYLE', 'S'])
-  const selector = '[id]:not(html):not(body),[class]:not(html):not(body),[href]:not(html):not(body)'
+  const selector = '[id]:not(html):not(body),[class]:not(html):not(body)'
   for (const element of document.querySelectorAll(selector)) {
     if (skip.has(element.nodeName.toUpperCase())) continue
     const id = element.getAttribute('id')
     if (id && ids.size < max) ids.add(id)
     for (const name of element.classList) if (classes.size < max) classes.add(name)
-    const href = element.getAttribute('href')
-    if (href && hrefs.size < max) hrefs.add(href)
   }
-  return { classes: [...classes], ids: [...ids], hrefs: [...hrefs] }
+  return { classes: [...classes], ids: [...ids] }
 })()`
 
 /** What the ad blocker keeps per tab page; reset when the tab goes to another page. */
@@ -66,26 +65,26 @@ interface Page {
 }
 
 /** Fetches with main's network stack (system proxy settings), failing on HTTP errors. */
-async function fetchList(url: string): Promise<Response> {
+async function fetchList(url: string): Promise<string> {
   const response = await net.fetch(url, {
     credentials: 'omit',
     signal: AbortSignal.timeout(FETCH_TIMEOUT_MS)
   })
   if (!response.ok) throw new Error(`${url}: HTTP ${response.status}`)
-  return response
+  return response.text()
 }
 
 /** Parses the lists in a worker thread; resolves with the engine's bytes. */
-function buildInWorker(lists: string): Promise<Uint8Array> {
+function buildInWorker(lists: string, file: string): Promise<void> {
   return new Promise((resolve, reject) => {
-    const worker = new Worker(workerPath)
-    worker.once('message', (bytes: Uint8Array) => {
-      resolve(bytes)
+    const worker = new Worker(workerPath, { workerData: nativePath })
+    worker.once('message', () => {
+      resolve()
       worker.terminate()
     })
     worker.once('error', reject)
     worker.once('exit', (code) => reject(new Error(`Filter worker exited (${code})`)))
-    worker.postMessage(lists)
+    worker.postMessage({ lists, file })
   })
 }
 
@@ -102,17 +101,16 @@ function sourceFrameUrl(details: OnBeforeRequestListenerDetails): string | null 
 }
 
 /**
- * The ad blocker: Ghostery's filter engine with the EasyList, EasyPrivacy and uBlock Origin
- * lists. Lives for the whole app, like Downloads.
+ * The ad blocker: Brave's filter engine (adblock-rust, in our native module) with the EasyList,
+ * EasyPrivacy, Peter Lowe's and uBlock Origin lists. Lives for the whole app, like Downloads.
  * - Network: our own webRequest handler cancels matching requests from tabs. Pages themselves
  *   are never blocked, and neither is anything on a paused site.
- * - Element hiding: main inserts the engine's CSS into each tab page (no preload involved,
- *   unlike the engine's own Electron wrapper, which adds one to every page).
+ * - Element hiding: main inserts the engine's CSS into each tab page (no preload involved).
  * - The engine is cached in userData/adblock-engine.bin and downloaded again once a day.
  *   Until there is one (first run, offline), nothing is blocked.
  */
 export class Adblock {
-  private engine: FiltersEngine | null = null
+  private engine: AdblockEngine | null = null
   private engineStatus: EngineStatus = 'loading'
   private lastUpdated: number | null = null
   private lastAttempt: number | null = null
@@ -243,9 +241,8 @@ export class Adblock {
     const pageUrl = page.webContents.getURL()
     if (!this.isBlockingOn(pageUrl)) return false
     const sourceUrl = sourceFrameUrl(details) ?? pageUrl
-    if (!shouldBlock(engine, { url: details.url, type: details.resourceType, sourceUrl })) {
-      return false
-    }
+    const { url, resourceType: type, method } = details
+    if (!shouldBlock(engine, { url, type, sourceUrl, method })) return false
     page.blocked++
     this.countChanged()
     return true
@@ -278,8 +275,7 @@ export class Adblock {
 
   private async loadCache(): Promise<void> {
     try {
-      const [bytes, info] = await Promise.all([readFile(this.cachePath), stat(this.cachePath)])
-      const engine = loadEngine(bytes)
+      const [engine, info] = await Promise.all([loadEngine(this.cachePath), stat(this.cachePath)])
       if (!engine || this.engine) return
       this.engine = engine
       this.engineStatus = 'ready'
@@ -305,14 +301,16 @@ export class Adblock {
       this.changed()
     }
     try {
-      const lists = await fetchLists(fetchList, adsAndTrackingLists)
-      const bytes = await buildInWorker(lists.join('\n'))
-      const engine = loadEngine(bytes)
+      const lists = await Promise.all(FILTER_LISTS.map(fetchList))
+      // The worker saves the new engine beside the cache, which it replaces once it has loaded.
+      const temp = `${this.cachePath}.tmp`
+      await buildInWorker(lists.join('\n'), temp)
+      const engine = await loadEngine(temp)
       if (!engine) throw new Error('The new filter engine could not be loaded')
       this.engine = engine
       this.engineStatus = 'ready'
       this.lastUpdated = Date.now()
-      await this.saveCache(bytes)
+      await this.replaceCache(temp)
     } catch (error) {
       console.error('Could not update the ad blocker filter lists:', error)
       if (!this.engine) this.engineStatus = 'failed'
@@ -322,11 +320,9 @@ export class Adblock {
     }
   }
 
-  /** Written atomically, like JsonStore; a failed write only means downloading again next start. */
-  private async saveCache(bytes: Uint8Array): Promise<void> {
-    const temp = `${this.cachePath}.tmp`
+  /** Atomic, like JsonStore's writes; a failure only means downloading again next start. */
+  private async replaceCache(temp: string): Promise<void> {
     try {
-      await writeFile(temp, bytes)
       await rename(temp, this.cachePath)
     } catch (error) {
       console.error(`Could not save ${this.cachePath}:`, error)

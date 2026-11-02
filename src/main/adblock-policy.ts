@@ -10,6 +10,30 @@ export const MAX_PAUSED_SITES = 1000
 
 const MAX_HOSTNAME_LENGTH = 253
 
+const UBLOCK = 'https://ublockorigin.github.io/uAssets/filters'
+
+/** The filter lists, from where their authors publish them: ads, trackers, malware. */
+export const FILTER_LISTS = [
+  'https://easylist.to/easylist/easylist.txt',
+  'https://easylist.to/easylist/easyprivacy.txt',
+  'https://pgl.yoyo.org/adservers/serverlist.php?hostformat=adblockplus&showintro=0&mimetype=plaintext',
+  ...[
+    'filters',
+    'filters-2020',
+    'filters-2021',
+    'filters-2022',
+    'filters-2023',
+    'filters-2024',
+    'filters-2025',
+    'filters-2026',
+    'badware',
+    'privacy',
+    'quick-fixes',
+    'resource-abuse',
+    'unbreak'
+  ].map((name) => `${UBLOCK}/${name}.txt`)
+]
+
 /**
  * The site a page belongs to, as the ad blocker's "pause on this site" sees it: the hostname
  * without a leading "www.". Null for pages that aren't on the web.
@@ -78,11 +102,10 @@ export function isUpdateDue({
   return lastUpdated === null || now - lastUpdated >= UPDATE_INTERVAL_MS || now < lastUpdated
 }
 
-/** Class names, ids and link targets found in a page, for the engine's element-hiding rules. */
+/** Class names and ids found in a page, for the engine's generic element-hiding rules. */
 export interface DomTokens {
   classes: string[]
   ids: string[]
-  hrefs: string[]
 }
 
 const MAX_TOKENS = 5000
@@ -103,18 +126,17 @@ export function parseDomTokens(raw: unknown): DomTokens {
           )
           .slice(0, MAX_TOKENS)
       : []
-  return { classes: list(input.classes), ids: list(input.ids), hrefs: list(input.hrefs) }
+  return { classes: list(input.classes), ids: list(input.ids) }
 }
 
 /** What a page has already been scanned for; see takeUnseen. */
 export interface SeenTokens {
   classes: Set<string>
   ids: Set<string>
-  hrefs: Set<string>
 }
 
 export function emptySeenTokens(): SeenTokens {
-  return { classes: new Set(), ids: new Set(), hrefs: new Set() }
+  return { classes: new Set(), ids: new Set() }
 }
 
 /** The tokens not in `seen` yet, which are added to it. Null when there's nothing new. */
@@ -126,9 +148,7 @@ export function takeUnseen(seen: SeenTokens, found: DomTokens): DomTokens | null
   }
   const tokens = {
     classes: unseen(seen.classes, found.classes),
-    ids: unseen(seen.ids, found.ids),
-    hrefs: unseen(seen.hrefs, found.hrefs)
+    ids: unseen(seen.ids, found.ids)
   }
-  const count = tokens.classes.length + tokens.ids.length + tokens.hrefs.length
-  return count === 0 ? null : tokens
+  return tokens.classes.length + tokens.ids.length === 0 ? null : tokens
 }

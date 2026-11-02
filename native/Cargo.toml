@@ -1,0 +1,24 @@
+[package]
+name = "nebula-native"
+version = "0.1.0"
+edition = "2024"
+publish = false
+description = "Nebula's native module: the main-process code that runs as Rust"
+
+[lib]
+name = "nebula_native"
+crate-type = ["cdylib"]
+
+[dependencies]
+# Brave's filter engine. css-validation drops hiding rules whose selectors aren't valid CSS.
+adblock = { version = "0.13.5", features = ["css-validation"] }
+napi = "3.16"
+napi-derive = "3.7"
+
+[build-dependencies]
+napi-build = "2.6"
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = "symbols"

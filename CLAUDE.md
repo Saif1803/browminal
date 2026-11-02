@@ -11,6 +11,15 @@ keep it in step when tools or their rules change.
   never use Bun-only APIs (`Bun.*`, `bun:*` imports) in `src/main`, `src/preload` or `src/renderer`.
   `bun:test` is allowed in `*.test.ts` files only.
 - `package.json` has `"trustedDependencies": ["electron", "esbuild"]` so their install scripts run under Bun.
+- **Rust** for main-process code where it pays (memory, hot paths): the `native/` crate
+  (napi-rs → `native/nebula_native.node`, Node-API so one build serves Electron and `bun test`).
+  `bun run build:native` (`scripts/build-native.ts`: `cargo build --release` + copy) runs on install,
+  `dev` and `build`; it needs a Rust toolchain. Main loads it through `src/main/native.ts`
+  (electron-vite copies the file into `out/main/chunks`, unpacked from the asar); a worker gets its
+  path in `workerData` instead of importing `native.ts` (one copy of the file). Its JS types are
+  `native/nebula_native.d.node.ts`, kept in step by hand. `bun test` can't load that import, so
+  `scripts/test-preload.ts` (bunfig.toml) swaps `native.ts` for a plain `require` of the built file.
+  Check Rust with `cargo clippy --release -- -D warnings` and `cargo fmt --check` in `native/`.
 - **Tailwind CSS v4** via `@tailwindcss/vite` (theme tokens in `src/renderer/src/assets/main.css`).
 - **Theme:** the Claude desktop app's colours, light or dark following the OS (`prefers-color-scheme`).
   Use the tokens (`strip`, `bar`, `tab`, `field`, `ink*`, `accent`, `line`), never raw colours. The internal
@@ -25,7 +34,8 @@ keep it in step when tools or their rules change.
 
 ## Commands
 ```bash
-bun install          # install deps (runs Electron's binary download)
+bun install          # install deps (runs Electron's binary download, builds native/)
+bun run build:native # rebuild the Rust module after changing native/
 bun run dev          # start the app with HMR
 bun run typecheck    # tsc for main/preload, renderer, and tests
 bun test             # unit tests (src/**/*.test.ts)
@@ -33,7 +43,8 @@ bun run lint         # eslint
 bun run build        # typecheck + production bundle into out/
 bun run build:win    # package Windows installer (build:mac / build:linux likewise)
 ```
-Run `bun run typecheck`, `bun test` and `bun run lint` before calling work done.
+Run `bun run typecheck`, `bun test` and `bun run lint` before calling work done (and clippy and
+rustfmt when `native/` changed).
 
 ## Architecture
 - **UI** (tab strip + toolbar) is a React app in the renderer: `src/renderer/src`. It is the
@@ -73,7 +84,9 @@ Run `bun run typecheck`, `bun test` and `bun run lint` before calling work done.
   `terminal: {dock, height, width, folders, agentCommand}`) and `agent.json` (`{version: 1, token}`, written
   `0o600`). Per-terminal MCP configs live in `agent-mcp/` (`0o600`, deleted with the terminal and
   cleared on start). Pure file formats live in their own tested modules.
-  The ad blocker's engine is cached separately as `adblock-engine.bin` (binary, not a JsonStore).
+  The ad blocker's engine is cached separately as `adblock-engine.bin` (adblock-rust's own checksummed
+  format, not a JsonStore): the worker writes `adblock-engine.bin.tmp`, main loads it and renames
+  it over the cache. Its bytes never pass through JavaScript.
 - Address-bar input is resolved **in main** by `resolveInput` in `src/shared/url.ts`
   (http(s) as-is; bare domains get `https://`; localhost/IPs get `http://`; everything else,
   including other schemes, is a Google search; empty input goes home).
@@ -88,6 +101,7 @@ Run `bun run typecheck`, `bun test` and `bun run lint` before calling work done.
 | File | Responsibility |
 | --- | --- |
 | `index.ts` | App lifecycle only; wires the modules together |
+| `native.ts` | Loads the Rust module (`native/`); its path for workers |
 | `window.ts` | Frameless `BrowserWindow`, relays resize and state, window title |
 | `tab-manager.ts` | Tab list, active tab, closed-tab stack, layout, batched state push |
 | `tab-order.ts` | Pure: where new tabs go, which tab is active after a close |
@@ -104,10 +118,10 @@ Run `bun run typecheck`, `bun test` and `bun run lint` before calling work done.
 | `downloads-menu.ts` | Native menu for the downloads button (placeholder until the design pass) |
 | `store.ts` | `JsonStore`: one JSON file in userData; checked on read, debounced atomic writes |
 | `settings.ts` | Pure: `settings.json` format and defaults |
-| `adblock.ts` | `Adblock`: filter engine lifecycle (cache, daily update), request blocking, element hiding, per-tab counts |
-| `adblock-filters.ts` | Ghostery engine wrapper: build/load, `shouldBlock`, `cosmeticStyles` (no Electron; tested) |
-| `adblock-policy.ts` | Pure: sites, paused list, shield status, update timing, page-scan checks |
-| `adblock-worker.ts` | Worker thread that parses the filter lists (keeps main responsive) |
+| `adblock.ts` | `Adblock`: filter engine lifecycle (list download, cache, daily update), request blocking, element hiding, per-tab counts |
+| `adblock-filters.ts` | adblock-rust engine wrapper (native module): load, `shouldBlock`, `cosmeticStyles` (no Electron; tested) |
+| `adblock-policy.ts` | Pure: filter list URLs, sites, paused list, shield status, update timing, page-scan checks |
+| `adblock-worker.ts` | Worker thread that parses the filter lists and saves the engine (keeps main responsive) |
 | `adblock-menu.ts` | Native menu for the shield (placeholder until the design pass) |
 | `agent.ts` | `Agent`: the bridge on/off, which tabs are shared, debugger sessions, "agent working" state |
 | `agent-server.ts` | Loopback HTTP server for MCP (Streamable HTTP, stateless); checks every request first |
@@ -188,11 +202,12 @@ space for the native controls.
   `bookmarks.json` is re-checked on every read (never trusted, it's a file anyone can edit).
   Favicons are stored only as checked `data:image/…;base64` URLs (max 64 KB, shrunk to 32 px
   where Electron can decode them); the UI's CSP stays `img-src 'self' data:`.
-- **Ad blocker** (`adblock.ts`): uses `@ghostery/adblocker` directly, **never**
-  `@ghostery/adblocker-electron` (its `enableBlockingInSession` adds a preload to every page and
-  unchecked IPC handlers). Our own `webRequest.onBeforeRequest` (the session's only one) cancels
-  matching requests from tabs; main frames, paused sites, the UI and main's own fetches are never
-  blocked. Element hiding is CSS main inserts (`cssOrigin: 'user'`); the page scan for class
+- **Ad blocker** (`adblock.ts`): Brave's adblock-rust in our native module
+  (`native/src/adblock.rs`), with the lists fetched by main from their publishers (`FILTER_LISTS`).
+  The engine never loads resources, and its injected scripts, procedural filters and `$csp`
+  directives are never used; nothing adds a preload or IPC to pages. Our own
+  `webRequest.onBeforeRequest` (the session's only one) cancels matching requests from tabs; main
+  frames, paused sites, the UI and main's own fetches are never blocked. Element hiding is CSS main inserts (`cssOrigin: 'user'`); the page scan for class
   names/ids runs in an isolated world and its result is checked (`parseDomTokens`). No scriptlets,
   redirect resources or `$csp` rules: nothing from the lists runs as code in pages.
 - **Agent bridge** (`agent*.ts`): off until the user switches it on (agent button, or sharing a
