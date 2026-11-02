@@ -9,6 +9,8 @@
     />
     <title>Home</title>
     <link rel="stylesheet" href="home.css" />
+    <!-- Empty unless the window is glass (see src/main/protocol.ts). -->
+    <link rel="stylesheet" href="glass.css" />
     <script src="home.js" defer></script>
   </head>
   <body>
@@ -29,13 +31,28 @@
         <div class="prompt-footer">
           <fieldset class="picker">
             <legend class="visually-hidden">Send to</legend>
+            <!-- Slides under the chosen option (home.css). -->
+            <span class="picker-thumb" aria-hidden="true"></span>
             <label class="picker-option">
               <input type="radio" name="assistant" value="chatgpt" checked />
-              <span>ChatGPT</span>
+              <span>
+                <img class="icon" src="icons/chatgpt.svg" alt="" />
+                ChatGPT
+              </span>
             </label>
             <label class="picker-option">
               <input type="radio" name="assistant" value="claude" />
-              <span>Claude</span>
+              <span>
+                <img class="icon" src="icons/claude.svg" alt="" />
+                Claude
+              </span>
+            </label>
+            <label class="picker-option">
+              <input type="radio" name="assistant" value="google" />
+              <span>
+                <img class="icon" src="icons/google.png" alt="" />
+                Google
+              </span>
             </label>
           </fieldset>
 
@@ -43,16 +60,29 @@
         </div>
       </form>
 
-      <p class="hint">Press Enter to ask, Shift+Enter for a new line</p>
+      <p class="hint" id="hint">Press Enter to ask, Shift+Enter for a new line</p>
 
-      <nav class="shortcuts" aria-label="Open an assistant">
+      <nav class="shortcuts" aria-label="Quick links">
         <a class="shortcut" href="https://chatgpt.com/">
-          <span class="shortcut-name">Open ChatGPT</span>
-          <span class="shortcut-host">chatgpt.com</span>
+          <img class="shortcut-icon" src="icons/chatgpt.svg" alt="" />
+          <span class="shortcut-text">
+            <span class="shortcut-name">ChatGPT</span>
+            <span class="shortcut-host">chatgpt.com</span>
+          </span>
         </a>
         <a class="shortcut" href="https://claude.ai/new">
-          <span class="shortcut-name">Open Claude</span>
-          <span class="shortcut-host">claude.ai</span>
+          <img class="shortcut-icon" src="icons/claude.svg" alt="" />
+          <span class="shortcut-text">
+            <span class="shortcut-name">Claude</span>
+            <span class="shortcut-host">claude.ai</span>
+          </span>
+        </a>
+        <a class="shortcut" href="https://www.google.com/">
+          <img class="shortcut-icon" src="icons/google.png" alt="" />
+          <span class="shortcut-text">
+            <span class="shortcut-name">Google</span>
+            <span class="shortcut-host">google.com</span>
+          </span>
         </a>
       </nav>
     </main>

@@ -2,7 +2,15 @@ import { useEffect, useRef, type MouseEvent, type WheelEvent } from 'react'
 import { TAB_STRIP_HEIGHT } from '@shared/layout'
 import type { TabSummary } from '@shared/types'
 import { isHomeUrl } from '@shared/url'
-import { CloseIcon, GlobeIcon, HomeIcon, MutedIcon, PlusIcon, SpeakerIcon } from './icons'
+import {
+  AgentIcon,
+  CloseIcon,
+  GlobeIcon,
+  HomeIcon,
+  MutedIcon,
+  PlusIcon,
+  SpeakerIcon
+} from './icons'
 
 // Clicks on a tab's own buttons must not also activate or close the tab.
 const stop = (event: MouseEvent): void => event.stopPropagation()
@@ -43,12 +51,17 @@ function Tab({ tab, isActive }: { tab: TabSummary; isActive: boolean }): React.J
       title={tab.title}
       onMouseDown={onMouseDown}
       onAuxClick={onAuxClick}
-      className={`app-no-drag group relative flex h-8 w-56 min-w-12 shrink items-center gap-2 rounded-t-lg pr-1.5 pl-3 text-[12px] transition-colors ${
-        isActive ? 'bg-bar text-ink' : 'text-ink-muted hover:bg-field/60 hover:text-ink'
+      className={`app-no-drag group relative flex h-8 w-56 min-w-12 shrink items-center gap-2 rounded-lg pr-1.5 pl-3 text-[12px] transition-colors ${
+        isActive ? 'glass-edge bg-tab text-ink' : 'text-ink-muted hover:bg-field/60 hover:text-ink'
       }`}
     >
       <TabIcon tab={tab} />
       <span className="min-w-0 flex-1 truncate">{tab.title || 'Untitled'}</span>
+      {tab.agentShared && (
+        <span role="img" aria-label="Shared with agents" title="Shared with agents">
+          <AgentIcon width={13} height={13} className="shrink-0 text-accent" />
+        </span>
+      )}
       {showAudio && (
         <button
           type="button"
@@ -95,12 +108,15 @@ export function TabStrip({
   }
 
   return (
-    <div className="titlebar-safe flex items-end gap-1 pl-2" style={{ height: TAB_STRIP_HEIGHT }}>
+    <div
+      className="titlebar-safe flex items-center gap-1 pt-1 pl-2"
+      style={{ height: TAB_STRIP_HEIGHT }}
+    >
       <div
         role="tablist"
         aria-label="Tabs"
         onWheel={onWheel}
-        className="no-scrollbar flex min-w-0 items-end gap-px overflow-x-auto"
+        className="no-scrollbar flex min-w-0 items-center gap-px overflow-x-auto"
       >
         {tabs.map((tab) => (
           <Tab key={tab.id} tab={tab} isActive={tab.id === activeId} />
@@ -111,7 +127,7 @@ export function TabStrip({
         aria-label="New tab"
         title="New tab"
         onClick={() => window.browser.newTab()}
-        className="app-no-drag mb-1 grid size-7 shrink-0 place-items-center rounded-lg text-ink-muted transition-colors hover:bg-field-hover hover:text-ink focus-visible:outline-2 focus-visible:outline-accent"
+        className="app-no-drag grid size-7 shrink-0 place-items-center rounded-lg text-ink-muted transition-colors hover:bg-field-hover hover:text-ink focus-visible:outline-2 focus-visible:outline-accent"
       >
         <PlusIcon width={15} height={15} />
       </button>

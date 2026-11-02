@@ -1,0 +1,17 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>Terminal</title>
+    <!-- xterm draws its rows with inline styles, so style-src needs 'unsafe-inline'. -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:"
+    />
+  </head>
+
+  <body class="terminal-page">
+    <div id="terminals"></div>
+    <script type="module" src="/src/terminal/main.ts"></script>
+  </body>
+</html>

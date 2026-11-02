@@ -8,6 +8,8 @@ export interface TabSummary {
   isLoading: boolean
   isAudible: boolean
   isMuted: boolean
+  /** Agents may see and act on this tab (see AgentState). */
+  agentShared: boolean
 }
 
 /** The find bar of a tab. */
@@ -85,6 +87,42 @@ export interface DownloadSummary {
   totalBytes: number
 }
 
+/** The agent bridge: the local MCP server terminal agents (Claude Code…) connect to. */
+export interface AgentState {
+  /** Switched on by the user; off by default. */
+  enabled: boolean
+  /** Where it listens on 127.0.0.1; null while it is off, starting, or couldn't start. */
+  port: number | null
+  /** Why it couldn't start. */
+  error: string | null
+  /** Every tab is shared, not only the ones the user shared. */
+  shareAll: boolean
+  /** The tab an agent is acting on right now (and for a moment after), or null. */
+  working: number | null
+}
+
+/** One shell in the terminal panel. */
+export interface TerminalSession {
+  id: number
+  /** The shell's name ("PowerShell", "zsh"), numbered when there are several. */
+  title: string
+  /** The browser tab this terminal works on (its agent's tab); null once that tab closed. */
+  tabId: number | null
+  /** The folder the shell started in. */
+  cwd: string
+  /** The shell has exited; the session stays until it's closed. */
+  exited: boolean
+}
+
+/** The terminal panel under the page, like an IDE's. */
+export interface TerminalPanelState {
+  open: boolean
+  /** Height in px, the header included (see terminalLayout). */
+  height: number
+  sessions: TerminalSession[]
+  activeId: number | null
+}
+
 /** Everything the UI shows, pushed from main at most once per tick whenever it changes. */
 export interface BrowserState {
   tabs: TabSummary[]
@@ -95,12 +133,19 @@ export interface BrowserState {
   bookmarks: Bookmark[]
   /** The bar is only shown while there are bookmarks to put on it. */
   bookmarksBarVisible: boolean
+  agent: AgentState
+  terminal: TerminalPanelState
 }
+
+/** Command-line switch main gives the UI renderer when the window has a glass background. */
+export const GLASS_SWITCH = '--nebula-glass'
 
 /** The only surface the UI renderer has into the main process (window.browser). */
 export interface BrowserApi {
   /** process.platform of the main process, e.g. "darwin" or "win32". */
   platform: string
+  /** The window has a see-through (acrylic / vibrancy) background: the UI paints translucent. */
+  glass: boolean
   // These act on the active tab.
   navigate(input: string): Promise<void>
   back(): Promise<void>
@@ -134,6 +179,26 @@ export interface BrowserApi {
   showBookmarksOverflow(from: number, x: number, y: number): Promise<void>
   /** The shield: the ad blocker's menu for the active tab, at (x, y). */
   showAdblockMenu(x: number, y: number): Promise<void>
+  /** The agent button: sharing the active tab, the bridge on/off, how to connect, at (x, y). */
+  showAgentMenu(x: number, y: number): Promise<void>
+  /** "Stop" while an agent works on tab `id`: it stops being shared. */
+  stopAgent(id: number): Promise<void>
+
+  // The terminal panel.
+  /** Ctrl+`: opens the panel (with a terminal for the active tab if there is none), or closes it. */
+  toggleTerminal(): Promise<void>
+  /** A new terminal working on the active tab. */
+  newTerminal(): Promise<void>
+  closeTerminal(id: number): Promise<void>
+  selectTerminal(id: number): Promise<void>
+  /** Dragging the panel's top edge; main clamps it to the window. */
+  setTerminalHeight(px: number): Promise<void>
+  /** Points terminal `id` (and its agent) at the active tab. */
+  attachTerminal(id: number): Promise<void>
+  /** Shares the terminal's tab and starts the agent command (claude) in it, connected to Nebula. */
+  startAgentInTerminal(id: number): Promise<void>
+  /** Asks for a folder, remembers it for the active tab's site and opens a terminal there. */
+  chooseTerminalFolder(): Promise<void>
 
   /** The UI's height in px; main places tabs directly below it. */
   setChromeHeight(px: number): Promise<void>
@@ -141,8 +206,11 @@ export interface BrowserApi {
   getState(): Promise<BrowserState>
   /** Returns an unsubscribe function. */
   onState(callback: (state: BrowserState) => void): () => void
-  /** Fired when Cmd/Ctrl+L is pressed anywhere in the window. */
-  onFocusAddressBar(callback: () => void): () => void
+  /**
+   * Cmd/Ctrl+L, or a new tab was opened: focus the address bar of tab `tabId`. The state that
+   * makes it the active tab may arrive after this.
+   */
+  onFocusAddressBar(callback: (tabId: number) => void): () => void
   /** Fired when Cmd/Ctrl+F is pressed anywhere in the window. */
   onFocusFind(callback: () => void): () => void
 }
@@ -170,7 +238,17 @@ export const IpcChannel = {
   ShowBookmarkMenu: 'bookmarks:show-menu',
   ShowBookmarksOverflow: 'bookmarks:show-overflow',
   ShowAdblockMenu: 'adblock:show-menu',
+  ShowAgentMenu: 'agent:show-menu',
+  StopAgent: 'agent:stop',
   SetChromeHeight: 'ui:set-chrome-height',
+  ToggleTerminal: 'terminal:toggle',
+  NewTerminal: 'terminal:new',
+  CloseTerminal: 'terminal:close',
+  SelectTerminal: 'terminal:select',
+  SetTerminalHeight: 'terminal:set-height',
+  AttachTerminal: 'terminal:attach',
+  StartAgentInTerminal: 'terminal:start-agent',
+  ChooseTerminalFolder: 'terminal:choose-folder',
   GetState: 'browser:get-state',
   State: 'browser:state',
   FocusAddressBar: 'ui:focus-address-bar',

@@ -18,12 +18,29 @@ import {
 } from '../shared/url'
 import { loadFavicon, pickFaviconUrl } from './favicons'
 import { decideNavigation } from './navigation-policy'
-import { themeColors } from './theme'
+import { parsePageColor } from './page-color'
+import { styleScrollbars } from './scrollbars'
+import { GLASS_MATERIAL, themeColors } from './theme'
 import { nextZoomFactor } from './zoom-levels'
 
 const PAGE_BACKGROUND = '#ffffff'
 // net::ERR_ABORTED: the navigation was replaced or stopped; not an error to show.
 const ERR_ABORTED = -3
+// The isolated world main reads the page from (the ad blocker's page scan uses 2001).
+const PAGE_WORLD_ID = 2002
+// A page that hasn't drawn anything this long after it started counts as drawn anyway.
+const MAX_UNPAINTED_MS = 3000
+// The page's own background colour: the root element's, else the body's.
+const READ_PAGE_COLOR = `(() => {
+  for (const element of [document.documentElement, document.body]) {
+    const color = element && getComputedStyle(element).backgroundColor
+    if (color && color !== 'rgba(0, 0, 0, 0)') return color
+  }
+  return ''
+})()`
+// Resolves once the page has drawn a new frame.
+const NEXT_FRAME =
+  'new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve(true))))'
 
 /** Every tab, including ones pages open with window.open, gets exactly these. */
 const TAB_WEB_PREFERENCES: WebPreferences = {
@@ -33,6 +50,11 @@ const TAB_WEB_PREFERENCES: WebPreferences = {
   // Deliberately no preload: web pages must never see our API.
   webSecurity: true,
   webviewTag: false
+}
+
+/** The view's background behind a nebula:// page: the theme's page colour, or clear on glass. */
+function internalPageBackground(): string {
+  return GLASS_MATERIAL ? '#00000000' : themeColors().internalPage
 }
 
 /** Pages may only open new tabs on http(s), blob: URLs they made, or blank ones they fill in themselves (OAuth popups). */
@@ -54,6 +76,8 @@ export interface TabHooks {
   destroyed(tab: Tab): void
   /** The page's favicon was fetched (a checked data: URL). */
   faviconLoaded(tab: Tab, favicon: string): void
+  /** The tab started a new document that hasn't drawn yet, or it has now drawn (isPainted). */
+  paintChanged(tab: Tab): void
 }
 
 /** What a tab knows about itself for the toolbar; the window adds the star and the shield. */
@@ -93,6 +117,18 @@ export class Tab {
   // found-in-page results for older searches are ignored.
   private findRequest = 0
   private isDestroyed = false
+  // Whether the current document has drawn something (see setPainted).
+  private painted = false
+  private paintTimer: NodeJS.Timeout | null = null
+  private paintWaiters: (() => void)[] = []
+  // The last page's background colour, for the veil that covers it while the next one loads.
+  private pageColor: string | null = null
+  // Whether the view's background is the theme's page colour (nebula:// pages), not white.
+  private themedBackground = false
+  private placement: { bounds: Rectangle; radius: number } = {
+    bounds: { x: 0, y: 0, width: 0, height: 0 },
+    radius: 0
+  }
 
   constructor(
     options: TabOptions,
@@ -131,6 +167,7 @@ export class Tab {
     // Links, forms, scripts and redirects: see decideNavigation. Main's own loads don't pass here.
     wc.on('will-frame-navigate', (event) => this.guardNavigation(event, event.url))
     wc.on('will-redirect', (event) => this.guardNavigation(event, event.url))
+    styleScrollbars(wc)
 
     const changed = (): void => {
       if (!this.isDestroyed) this.hooks.changed(this)
@@ -138,9 +175,23 @@ export class Tab {
     wc.on('did-start-navigation', (details) => {
       if (details.isMainFrame && !details.isSameDocument) {
         const internal = details.url.startsWith(`${INTERNAL_SCHEME}:`)
-        // Internal pages don't flash white while loading in the dark theme.
-        this.view.setBackgroundColor(internal ? themeColors().internalPage : PAGE_BACKGROUND)
+        // Internal pages don't flash white while loading in the dark theme; on a glass window
+        // they're see-through, like the UI around them.
+        this.view.setBackgroundColor(internal ? internalPageBackground() : PAGE_BACKGROUND)
+        this.themedBackground = internal
       }
+    })
+    // A new document replaced the page: it's blank until it draws. Chromium's undocumented
+    // ready-to-show comes with each document's first visually non-empty paint.
+    wc.on('did-navigate', () => this.setPainted(false))
+    const events: NodeJS.EventEmitter = wc
+    events.on('ready-to-show', () => {
+      this.setPainted(true)
+      this.readPageColor()
+    })
+    wc.on('did-stop-loading', () => {
+      this.setPainted(true)
+      this.readPageColor()
     })
     wc.on('did-navigate', (_event, url) => {
       // Chromium reports a page's favicon URLs only when they differ from the last ones it
@@ -158,6 +209,7 @@ export class Tab {
     })
     wc.on('did-fail-load', (_event, code, name, url, isMainFrame) => {
       if (isMainFrame && code !== ERR_ABORTED && isHttpUrl(url)) this.showError(name, url)
+      if (isMainFrame) this.setPainted(true)
       changed()
     })
     wc.on('render-process-gone', (_event, { reason }) => {
@@ -184,6 +236,8 @@ export class Tab {
     wc.on('did-start-loading', changed)
     wc.on('did-stop-loading', changed)
     wc.on('audio-state-changed', changed)
+    // A new tab counts as drawn after a while even if its first page never commits.
+    this.setPainted(false)
     wc.once('destroyed', () => {
       if (this.isDestroyed) return
       this.isDestroyed = true
@@ -200,7 +254,7 @@ export class Tab {
     return displayUrl(this.webContents.getURL())
   }
 
-  getSummary(): TabSummary {
+  getSummary(): Omit<TabSummary, 'agentShared'> {
     const wc = this.webContents
     const url = this.url
     return {
@@ -212,6 +266,53 @@ export class Tab {
       isAudible: wc.isCurrentlyAudible(),
       isMuted: wc.isAudioMuted()
     }
+  }
+
+  /** Whether the current document has drawn something yet. */
+  get isPainted(): boolean {
+    return this.painted
+  }
+
+  /** While nothing has drawn, the view shows the theme's page colour rather than white. */
+  get hasThemedBackground(): boolean {
+    return this.themedBackground
+  }
+
+  /**
+   * The colour to cover this tab with while its next page loads: its current page's. Null for a
+   * see-through page (a glass nebula:// page): a solid veil would flash over it.
+   */
+  get coverColor(): string | null {
+    if (this.pageColor) return this.pageColor
+    return GLASS_MATERIAL ? null : themeColors().internalPage
+  }
+
+  get bounds(): Rectangle {
+    return this.placement.bounds
+  }
+
+  get cornerRadius(): number {
+    return this.placement.radius
+  }
+
+  /** Resolves once the current document has drawn (at most MAX_UNPAINTED_MS after it started). */
+  whenPainted(): Promise<void> {
+    if (this.painted || this.isDestroyed) return Promise.resolve()
+    return new Promise((resolve) => this.paintWaiters.push(resolve))
+  }
+
+  /** Resolves once the page has drawn a new frame, or after `timeoutMs` if it's busy or navigating. */
+  nextFrame(timeoutMs: number): Promise<void> {
+    if (this.isDestroyed || this.webContents.isDestroyed()) return Promise.resolve()
+    let timer: NodeJS.Timeout | undefined
+    const timeout = new Promise<void>((resolve) => (timer = setTimeout(resolve, timeoutMs)))
+    const frame = this.webContents
+      .executeJavaScriptInIsolatedWorld(PAGE_WORLD_ID, [{ code: NEXT_FRAME }])
+      .then(
+        () => {},
+        () => {}
+      )
+    return Promise.race([frame, timeout]).finally(() => clearTimeout(timer))
   }
 
   /** Whether the tab shows nebula://error/ for a page that failed to load. */
@@ -358,13 +459,17 @@ export class Tab {
       .catch(() => {})
   }
 
-  setBounds(bounds: Rectangle): void {
+  setBounds(bounds: Rectangle, cornerRadius: number): void {
+    this.placement = { bounds, radius: cornerRadius }
     this.view.setBounds(bounds)
+    this.view.setBorderRadius(cornerRadius)
   }
 
   /** Closes the page. Hooks are not called after this. */
   destroy(): void {
     this.isDestroyed = true
+    if (this.paintTimer) clearTimeout(this.paintTimer)
+    for (const resolve of this.paintWaiters.splice(0)) resolve()
     if (!this.webContents.isDestroyed()) this.webContents.close()
   }
 
@@ -373,6 +478,38 @@ export class Tab {
     if (decision === 'allow') return
     event.preventDefault()
     if (decision === 'external') this.hooks.openExternal(this, url)
+  }
+
+  /**
+   * Tracks whether the current document has drawn. Not drawn yet: the manager keeps showing
+   * what was there before (another tab) or veils this one; a page that stays blank counts as
+   * drawn after MAX_UNPAINTED_MS so it can't hold that up.
+   */
+  private setPainted(painted: boolean): void {
+    if (this.isDestroyed) return
+    if (this.paintTimer) clearTimeout(this.paintTimer)
+    this.paintTimer = painted ? null : setTimeout(() => this.setPainted(true), MAX_UNPAINTED_MS)
+    if (painted) for (const resolve of this.paintWaiters.splice(0)) resolve()
+    if (painted === this.painted) return
+    this.painted = painted
+    this.hooks.paintChanged(this)
+  }
+
+  /** Remembers the page's background colour (see coverColor). */
+  private readPageColor(): void {
+    const internal = this.webContents.getURL().startsWith(`${INTERNAL_SCHEME}:`)
+    if (internal && GLASS_MATERIAL) {
+      this.pageColor = null
+      return
+    }
+    this.webContents
+      .executeJavaScriptInIsolatedWorld(PAGE_WORLD_ID, [{ code: READ_PAGE_COLOR }])
+      .then((value) => {
+        // Pages that set no background show Chromium's white one.
+        const fallback = internal ? themeColors().internalPage : PAGE_BACKGROUND
+        if (!this.isDestroyed) this.pageColor = parsePageColor(value) ?? fallback
+      })
+      .catch(() => {})
   }
 
   /** Replaces a failed load with nebula://error/, which shows the failed URL in the address bar. */

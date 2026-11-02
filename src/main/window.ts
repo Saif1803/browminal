@@ -4,12 +4,16 @@ import { is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
 import { overallProgress } from '../shared/downloads'
 import { TAB_STRIP_HEIGHT } from '../shared/layout'
-import { IpcChannel, type BrowserState } from '../shared/types'
+import { GLASS_SWITCH, IpcChannel, type BrowserState } from '../shared/types'
 import type { Adblock } from './adblock'
+import type { Agent } from './agent'
 import type { Bookmarks } from './bookmarks'
 import type { Downloads } from './downloads'
+import type { Settings } from './settings'
+import type { JsonStore } from './store'
 import { TabManager } from './tab-manager'
-import { onThemeChange, themeColors } from './theme'
+import { Terminals } from './terminals'
+import { GLASS_MATERIAL, onThemeChange, themeColors } from './theme'
 
 const APP_NAME = 'Nebula'
 // macOS traffic lights are about 14px tall; centre them in the tab strip.
@@ -21,16 +25,29 @@ export interface MainWindow {
   downloads: Downloads
   bookmarks: Bookmarks
   adblock: Adblock
+  agent: Agent
+  terminals: Terminals
   getState(): BrowserState
+  /** Puts the keyboard in the active tab's address bar. */
+  focusAddressBar(): void
+  /** Ctrl+T, the + button: a new tab, ready to type an address into. */
+  newTab(): void
 }
 
 export function createMainWindow(
   downloads: Downloads,
   bookmarks: Bookmarks,
-  adblock: Adblock
+  adblock: Adblock,
+  agent: Agent,
+  settings: JsonStore<Settings>,
+  userData: string
 ): MainWindow {
   const isMac = process.platform === 'darwin'
   const colors = themeColors()
+  const material = GLASS_MATERIAL
+  // With a glass material the window is see-through: the OS draws the frosted backdrop and the
+  // UI paints translucent colours over it. Without one, the tab strip colour fills the window.
+  const background = (): string => (material ? '#00000000' : themeColors().strip)
 
   const window = new BrowserWindow({
     width: 1280,
@@ -39,7 +56,11 @@ export function createMainWindow(
     minHeight: 320,
     show: false,
     title: APP_NAME,
-    backgroundColor: colors.strip,
+    backgroundColor: background(),
+    ...(material === 'acrylic' ? { backgroundMaterial: 'acrylic' as const } : {}),
+    ...(material === 'vibrancy'
+      ? { vibrancy: 'under-window' as const, visualEffectState: 'followWindow' as const }
+      : {}),
     titleBarStyle: 'hidden',
     // macOS: keep the traffic lights, vertically centred in the tab strip.
     ...(isMac ? { trafficLightPosition: { x: 14, y: TRAFFIC_LIGHT_Y } } : {}),
@@ -47,7 +68,7 @@ export function createMainWindow(
     ...(!isMac
       ? {
           titleBarOverlay: {
-            color: colors.strip,
+            color: background(),
             symbolColor: colors.symbol,
             height: TAB_STRIP_HEIGHT
           }
@@ -58,7 +79,8 @@ export function createMainWindow(
       preload: join(__dirname, '../preload/index.js'),
       sandbox: true,
       contextIsolation: true,
-      nodeIntegration: false
+      nodeIntegration: false,
+      additionalArguments: material ? [GLASS_SWITCH] : []
     }
   })
 
@@ -70,14 +92,15 @@ export function createMainWindow(
   window.on('page-title-updated', (event) => event.preventDefault())
 
   const tabs = new TabManager(window)
+  const terminals = new Terminals(window, tabs, settings, agent, userData)
 
   // The OS switched between light and dark: the UI and pages follow through CSS; the native
   // window controls and the window background are ours to repaint.
   const stopWatchingTheme = onThemeChange(() => {
     if (window.isDestroyed()) return
-    const { strip, symbol } = themeColors()
-    window.setBackgroundColor(strip)
-    if (!isMac) window.setTitleBarOverlay({ color: strip, symbolColor: symbol })
+    window.setBackgroundColor(background())
+    if (!isMac)
+      window.setTitleBarOverlay({ color: background(), symbolColor: themeColors().symbol })
   })
 
   const layout = (): void => tabs.layout()
@@ -94,7 +117,7 @@ export function createMainWindow(
   const getState = (): BrowserState => {
     const { tabs: tabSummaries, active } = tabs.getState()
     return {
-      tabs: tabSummaries,
+      tabs: tabSummaries.map((tab) => ({ ...tab, agentShared: agent.isShared(tab.id) })),
       active: {
         ...active,
         isBookmarked: bookmarks.isBookmarked(active.url),
@@ -102,7 +125,9 @@ export function createMainWindow(
       },
       downloads: downloads.getState(),
       bookmarks: [...bookmarks.all],
-      bookmarksBarVisible: bookmarks.barVisible
+      bookmarksBarVisible: bookmarks.barVisible,
+      agent: agent.getState(),
+      terminal: terminals.getState()
     }
   }
 
@@ -133,7 +158,12 @@ export function createMainWindow(
   const stopWatchingDownloads = downloads.onChange(schedulePush)
   const stopWatchingBookmarks = bookmarks.onChange(schedulePush)
   const stopWatchingAdblock = adblock.onChange(schedulePush)
-  tabs.onTabCreated((tab) => adblock.attach(tab.webContents))
+  const stopWatchingAgent = agent.onChange(schedulePush)
+  terminals.onChange(schedulePush)
+  tabs.onTabCreated((tab) => {
+    adblock.attach(tab.webContents)
+    agent.watchTab(tab)
+  })
   // Visiting a bookmarked page refreshes the bookmark's icon.
   tabs.onFaviconLoaded((url, favicon) => bookmarks.updateFavicon(url, favicon))
 
@@ -142,7 +172,9 @@ export function createMainWindow(
     stopWatchingDownloads()
     stopWatchingBookmarks()
     stopWatchingAdblock()
+    stopWatchingAgent()
     stopWatchingTheme()
+    terminals.dispose()
     tabs.dispose()
   })
 
@@ -152,5 +184,27 @@ export function createMainWindow(
     window.loadFile(join(__dirname, '../renderer/index.html'))
   }
 
-  return { window, tabs, downloads, bookmarks, adblock, getState }
+  const focusAddressBar = (): void => {
+    if (ui.isDestroyed()) return
+    // After the tab's own focus (activate, the home page's prompt box), so the UI keeps it.
+    ui.focus()
+    ui.send(IpcChannel.FocusAddressBar, tabs.active.id)
+  }
+  const newTab = (): void => {
+    tabs.create()
+    focusAddressBar()
+  }
+
+  return {
+    window,
+    tabs,
+    downloads,
+    bookmarks,
+    adblock,
+    agent,
+    terminals,
+    getState,
+    focusAddressBar,
+    newTab
+  }
 }

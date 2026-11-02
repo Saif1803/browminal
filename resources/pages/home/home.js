@@ -2,14 +2,34 @@
 
 const STORAGE_KEY = 'nebula.assistant'
 
+const ASK_HINT = 'Press Enter to ask, Shift+Enter for a new line'
+
+// Where the prompt goes, and how the box reads for each choice.
 const ASSISTANTS = {
-  chatgpt: { name: 'ChatGPT', ask: (q) => `https://chatgpt.com/?q=${encodeURIComponent(q)}` },
-  claude: { name: 'Claude', ask: (q) => `https://claude.ai/new?q=${encodeURIComponent(q)}` }
+  chatgpt: {
+    button: 'Ask ChatGPT',
+    placeholder: 'Ask anything',
+    hint: ASK_HINT,
+    ask: (q) => `https://chatgpt.com/?q=${encodeURIComponent(q)}`
+  },
+  claude: {
+    button: 'Ask Claude',
+    placeholder: 'Ask anything',
+    hint: ASK_HINT,
+    ask: (q) => `https://claude.ai/new?q=${encodeURIComponent(q)}`
+  },
+  google: {
+    button: 'Search Google',
+    placeholder: 'Search the web',
+    hint: 'Press Enter to search',
+    ask: (q) => `https://www.google.com/search?q=${encodeURIComponent(q)}`
+  }
 }
 
 const form = document.getElementById('prompt-form')
 const input = document.getElementById('prompt')
 const askButton = document.getElementById('ask')
+const hint = document.getElementById('hint')
 const radios = document.querySelectorAll('input[name="assistant"]')
 
 function greeting() {
@@ -42,8 +62,11 @@ function selected() {
   return ASSISTANTS[checked?.value] ? checked.value : 'chatgpt'
 }
 
-function syncButton() {
-  askButton.textContent = `Ask ${ASSISTANTS[selected()].name}`
+function syncChoice() {
+  const choice = ASSISTANTS[selected()]
+  askButton.textContent = choice.button
+  input.placeholder = choice.placeholder
+  hint.textContent = choice.hint
 }
 
 function autoGrow() {
@@ -67,11 +90,11 @@ for (const radio of radios) {
   radio.checked = radio.value === initial
   radio.addEventListener('change', () => {
     saveChoice(radio.value)
-    syncButton()
+    syncChoice()
     input.focus()
   })
 }
-syncButton()
+syncChoice()
 
 input.addEventListener('input', autoGrow)
 input.addEventListener('keydown', (event) => {

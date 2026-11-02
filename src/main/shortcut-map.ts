@@ -23,6 +23,9 @@ type SimpleCommand =
   | 'toggleDevTools'
   | 'bookmark'
   | 'toggleBookmarksBar'
+  | 'toggleAgentShare'
+  | 'toggleTerminal'
+  | 'newTerminal'
 
 export type Command = { type: SimpleCommand } | { type: 'selectTab'; index: number }
 
@@ -62,7 +65,8 @@ const COMMON: Record<string, SimpleCommand> = {
   'Mod+-': 'zoomOut',
   'Mod+0': 'zoomReset',
   'Mod+d': 'bookmark',
-  'Mod+Shift+b': 'toggleBookmarksBar'
+  'Mod+Shift+b': 'toggleBookmarksBar',
+  'Mod+Shift+a': 'toggleAgentShare'
 }
 
 const BY_PLATFORM: Record<Platform, Record<string, SimpleCommand>> = {
@@ -79,7 +83,10 @@ const BY_PLATFORM: Record<Platform, Record<string, SimpleCommand>> = {
     'Mod+ArrowRight': 'forward',
     'Mod+Shift+h': 'home',
     'Mod+Ctrl+f': 'toggleFullscreen',
-    'Mod+Alt+i': 'toggleDevTools'
+    'Mod+Alt+i': 'toggleDevTools',
+    // Like VS Code: Ctrl, not Cmd, on macOS too.
+    'Ctrl+`': 'toggleTerminal',
+    'Ctrl+Shift+`': 'newTerminal'
   },
   other: {
     'Mod+Tab': 'nextTab',
@@ -97,7 +104,9 @@ const BY_PLATFORM: Record<Platform, Record<string, SimpleCommand>> = {
     'Alt+Home': 'home',
     F11: 'toggleFullscreen',
     F12: 'toggleDevTools',
-    'Mod+Shift+i': 'toggleDevTools'
+    'Mod+Shift+i': 'toggleDevTools',
+    'Mod+`': 'toggleTerminal',
+    'Mod+Shift+`': 'newTerminal'
   }
 }
 
@@ -129,6 +138,8 @@ function normalizeKey({ key, code }: KeyInput): string {
   if (digit) return digit[1]
   if (code === 'BracketLeft') return '['
   if (code === 'BracketRight') return ']'
+  // Shift+` types ~ on US keyboards; other layouts put other characters on this key.
+  if (code === 'Backquote') return '`'
   return key
 }
 

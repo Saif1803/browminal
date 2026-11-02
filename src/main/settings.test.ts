@@ -12,7 +12,13 @@ describe('parseSettings', () => {
   test('reads saved settings', () => {
     const saved = {
       bookmarksBarVisible: false,
-      adblock: { enabled: false, pausedSites: ['example.com', 'news.bbc.co.uk'] }
+      adblock: { enabled: false, pausedSites: ['example.com', 'news.bbc.co.uk'] },
+      agent: { enabled: true, port: 9400, shareAll: true },
+      terminal: {
+        height: 420,
+        folders: { 'http://localhost:5173': process.platform === 'win32' ? 'C:\\shop' : '/shop' },
+        agentCommand: 'claude --model opus'
+      }
     }
     expect(parseSettings(saved)).toEqual(saved)
   })
@@ -50,5 +56,34 @@ describe('parseSettings', () => {
   test('caps the paused sites', () => {
     const pausedSites = Array.from({ length: 1500 }, (_, i) => `site${i}.com`)
     expect(parseSettings({ adblock: { pausedSites } }).adblock.pausedSites).toHaveLength(1000)
+  })
+
+  test('checks the terminal settings one by one', () => {
+    const folder = process.platform === 'win32' ? 'C:\\shop' : '/shop'
+    const { terminal } = parseSettings({
+      terminal: {
+        height: 50,
+        folders: {
+          'http://localhost:5173': folder,
+          'http://localhost:5173/path': folder,
+          'nebula://home': folder,
+          'https://example.com': 'relative/dir'
+        },
+        agentCommand: 'claude\nrm -rf /'
+      }
+    })
+    expect(terminal).toEqual({
+      ...DEFAULT_SETTINGS.terminal,
+      folders: { 'http://localhost:5173': folder }
+    })
+  })
+
+  test('checks the agent settings one by one', () => {
+    expect(parseSettings({ agent: { enabled: true, port: 80, shareAll: 'yes' } }).agent).toEqual({
+      ...DEFAULT_SETTINGS.agent,
+      enabled: true
+    })
+    expect(parseSettings({ agent: { port: 9500 } }).agent.port).toBe(9500)
+    expect(parseSettings({ agent: [] }).agent).toEqual(DEFAULT_SETTINGS.agent)
   })
 })

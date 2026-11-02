@@ -2,13 +2,14 @@ import { app, BrowserWindow, Menu } from 'electron'
 import { join } from 'path'
 import { electronApp } from '@electron-toolkit/utils'
 import { Adblock } from './adblock'
+import { Agent } from './agent'
 import { Bookmarks } from './bookmarks'
 import { registerContextMenus } from './context-menu'
 import { Downloads } from './downloads'
 import { registerIpc } from './ipc'
 import { registerPermissions } from './permissions'
 import { handleInternalProtocol, registerInternalScheme } from './protocol'
-import { parseSettings } from './settings'
+import { parseSettings, type Settings } from './settings'
 import { registerShortcuts } from './shortcuts'
 import { JsonStore } from './store'
 import { cleanUserAgent } from './user-agent'
@@ -20,8 +21,21 @@ registerInternalScheme()
 // Look like plain Chrome, so sites (notably Google sign-in) don't block us as an embedded browser.
 app.userAgentFallback = cleanUserAgent(app.userAgentFallback, app.getName())
 
-function openWindow(downloads: Downloads, bookmarks: Bookmarks, adblock: Adblock): void {
-  const opened = createMainWindow(downloads, bookmarks, adblock)
+function openWindow(
+  downloads: Downloads,
+  bookmarks: Bookmarks,
+  adblock: Adblock,
+  agent: Agent,
+  settings: JsonStore<Settings>
+): void {
+  const opened = createMainWindow(
+    downloads,
+    bookmarks,
+    adblock,
+    agent,
+    settings,
+    app.getPath('userData')
+  )
   main = opened
   registerShortcuts(opened)
   registerContextMenus(opened)
@@ -62,17 +76,20 @@ app.whenReady().then(() => {
   const settings = new JsonStore(join(userData, 'settings.json'), { parse: parseSettings })
   const bookmarks = new Bookmarks(userData, settings)
   const adblock = new Adblock(userData, settings)
+  const agent = new Agent(userData, settings, () => main)
   registerIpc(() => main)
-  openWindow(downloads, bookmarks, adblock)
+  openWindow(downloads, bookmarks, adblock, agent, settings)
 
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) openWindow(downloads, bookmarks, adblock)
+    if (BrowserWindow.getAllWindows().length === 0)
+      openWindow(downloads, bookmarks, adblock, agent, settings)
   })
   app.on('before-quit', (event) => {
     if (!downloads.confirmQuit(main?.window ?? null)) event.preventDefault()
   })
   app.on('will-quit', () => {
     downloads.cancelAll()
+    agent.dispose()
     bookmarks.flush()
     settings.flush()
   })

@@ -4,6 +4,7 @@
   /* The Claude desktop app's colours. Dark: warm charcoal, off-white text, clay accent. */
   --color-strip: #1f1e1d;
   --color-bar: #262624;
+  --color-tab: #262624;
   --color-field: #30302e;
   --color-field-hover: #3a3936;
   --color-ink: #faf9f5;
@@ -11,6 +12,8 @@
   --color-ink-faint: #75736c;
   --color-accent: #d97757;
   --color-line: rgb(255 255 255 / 0.08);
+  /* The terminal panel. Solid even on glass: text must stay readable. Main paints it too (theme.ts). */
+  --color-console: #191817;
 
   --font-sans: 'Segoe UI Variable Text', 'Segoe UI', system-ui, -apple-system, sans-serif;
 }
@@ -20,6 +23,7 @@
   :root {
     --color-strip: #f0eee6;
     --color-bar: #faf9f5;
+    --color-tab: #faf9f5;
     --color-field: #eae8e0;
     --color-field-hover: #e2e0d7;
     --color-ink: #141413;
@@ -27,7 +31,47 @@
     --color-ink-faint: #8f8d85;
     --color-accent: #b85a3a;
     --color-line: rgb(20 20 19 / 0.1);
+    --color-console: #fdfcf9;
   }
+}
+
+/*
+ * Glass (Windows 11 acrylic, macOS vibrancy): the OS draws a frosted backdrop behind the window,
+ * and the same palette is painted translucent over it. Without glass the colours above stay solid.
+ */
+:root[data-glass] {
+  /* A light tint, so the backdrop shows through; the sheen and edges below keep it reading as glass. */
+  --color-strip: rgb(31 30 29 / 0.16);
+  /* One glass surface: the toolbar rows don't band, only the active tab is lifted. */
+  --color-bar: transparent;
+  --color-tab: rgb(255 255 255 / 0.09);
+  --color-field: rgb(255 255 255 / 0.07);
+  --color-field-hover: rgb(255 255 255 / 0.11);
+  /* Light catching the top of the pane, and the bright rim of raised surfaces. */
+  --glass-sheen: linear-gradient(rgb(255 255 255 / 0.06), rgb(255 255 255 / 0) 120px);
+  --glass-edge: inset 0 1px 0 rgb(255 255 255 / 0.1), inset 0 0 0 1px rgb(255 255 255 / 0.05);
+}
+@media (prefers-color-scheme: light) {
+  :root[data-glass] {
+    --color-strip: rgb(240 238 230 / 0.22);
+    --color-bar: transparent;
+    --color-tab: rgb(255 255 255 / 0.55);
+    --color-field: rgb(255 255 255 / 0.4);
+    --color-field-hover: rgb(255 255 255 / 0.55);
+    --glass-sheen: linear-gradient(rgb(255 255 255 / 0.25), rgb(255 255 255 / 0) 120px);
+    --glass-edge: inset 0 1px 0 rgb(255 255 255 / 0.7), inset 0 0 0 1px rgb(20 20 19 / 0.06);
+  }
+}
+
+/* Raised glass surfaces (active tab, address field) get a lit rim. A pseudo-element, so it never
+   fights the focus ring's box-shadow; the element must be positioned. */
+:root[data-glass] .glass-edge::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: var(--glass-edge);
+  pointer-events: none;
 }
 
 :root {
@@ -40,7 +84,11 @@ body,
   height: 100%;
   margin: 0;
   overflow: hidden;
-  background: var(--color-strip);
+}
+
+/* Painted once: translucent layers would stack up if html and #root painted it too. */
+body {
+  background: var(--glass-sheen, none), var(--color-strip);
   color: var(--color-ink);
   font-family: var(--font-sans);
   user-select: none;
@@ -104,5 +152,33 @@ body,
   }
   .tab-spinner {
     animation-duration: 2.4s;
+  }
+}
+
+/* An agent is acting on the page on screen: a ring in the margin around it (the page's view
+   covers everything inside). Placed by App over the page's bounds. */
+.agent-glow {
+  position: fixed;
+  pointer-events: none;
+  box-shadow:
+    0 0 0 2px var(--color-accent),
+    0 0 14px 2px color-mix(in srgb, var(--color-accent) 45%, transparent);
+  animation: agent-pulse 1.6s ease-in-out infinite;
+}
+
+.agent-pulse {
+  animation: agent-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes agent-pulse {
+  50% {
+    opacity: 0.55;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .agent-glow,
+  .agent-pulse {
+    animation: none;
   }
 }

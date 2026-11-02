@@ -9,13 +9,18 @@ export function AddressBar({
   isErrorPage,
   zoomFactor,
   isBookmarked,
-  shield
+  shield,
+  focusRequested,
+  onFocused
 }: {
   url: string
   isErrorPage: boolean
   zoomFactor: number
   isBookmarked: boolean
   shield: ShieldState | null
+  /** Take the keyboard now (Ctrl+L, a new tab); call onFocused once done. */
+  focusRequested: boolean
+  onFocused: () => void
 }): React.JSX.Element {
   const inputRef = useRef<HTMLInputElement>(null)
   const [draft, setDraft] = useState(url)
@@ -28,14 +33,12 @@ export function AddressBar({
     if (document.activeElement !== inputRef.current) setDraft(url)
   }, [url])
 
-  useEffect(
-    () =>
-      window.browser.onFocusAddressBar(() => {
-        inputRef.current?.focus()
-        inputRef.current?.select()
-      }),
-    []
-  )
+  useEffect(() => {
+    if (!focusRequested) return
+    inputRef.current?.focus()
+    inputRef.current?.select()
+    onFocused()
+  }, [focusRequested, onFocused])
 
   const submit = (event: FormEvent): void => {
     event.preventDefault()
@@ -58,7 +61,7 @@ export function AddressBar({
 
   return (
     <form onSubmit={submit} className="app-no-drag min-w-0 flex-1">
-      <label className="group flex h-8 items-center gap-2 rounded-lg bg-field px-3 ring-1 ring-transparent transition-[background-color,box-shadow] hover:bg-field-hover focus-within:bg-field focus-within:ring-accent/70">
+      <label className="glass-edge group relative flex h-8 items-center gap-2 rounded-lg bg-field px-3 ring-1 ring-transparent transition-[background-color,box-shadow] hover:bg-field-hover focus-within:bg-field focus-within:ring-accent/70">
         <span className="shrink-0 text-ink-faint group-focus-within:text-accent">
           {isSecure && !editing ? (
             <LockIcon width={13} height={13} />

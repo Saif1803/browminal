@@ -1,8 +1,13 @@
 import { app, protocol } from 'electron'
 import { readFile } from 'fs/promises'
-import { join } from 'path'
+import { basename, join } from 'path'
 import { INTERNAL_SCHEME } from '../shared/url'
 import { resolveInternalFile } from './internal-files'
+import { GLASS_MATERIAL } from './theme'
+
+// A page's glass.css (translucent palette) is served only when the window is see-through; the
+// page links it unconditionally, so it never needs script or IPC to know.
+const GLASS_STYLESHEET = 'glass.css'
 
 // Internal pages are static: their own scripts/styles only, no network requests of their own.
 const CSP = [
@@ -30,7 +35,8 @@ export function handleInternalProtocol(): void {
     const file = request.method === 'GET' ? resolveInternalFile(root, request.url) : null
     if (!file) return new Response('Not found', { status: 404 })
     try {
-      const body = await readFile(file.path)
+      const isGlassSheet = basename(file.path) === GLASS_STYLESHEET
+      const body = isGlassSheet && !GLASS_MATERIAL ? Buffer.alloc(0) : await readFile(file.path)
       return new Response(new Uint8Array(body), {
         headers: { 'content-type': file.mimeType, 'content-security-policy': CSP }
       })

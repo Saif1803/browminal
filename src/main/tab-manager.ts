@@ -1,12 +1,18 @@
 import type { BrowserWindow, WebContents } from 'electron'
-import { INITIAL_CHROME_HEIGHT } from '../shared/layout'
+import { INITIAL_CHROME_HEIGHT, PAGE_RADIUS, windowLayout, type Rect } from '../shared/layout'
 import type { TabSummary } from '../shared/types'
 import { HOME_URL, isHomeUrl, isHttpUrl } from '../shared/url'
 import { confirmOpenExternal } from './external-links'
+import { PageVeil } from './page-veil'
 import { activeAfterClose, insertionIndex } from './tab-order'
 import { Tab, type OpenRequest, type TabActiveState, type TabHooks } from './tabs'
 
 const MAX_CLOSED_TABS = 25
+// Switching tabs keeps the old page on screen until the new one has drawn a frame, or this long.
+const SWITCH_FRAME_TIMEOUT_MS = 250
+// The veil fades in over a page that's being replaced, and out once the new one has drawn.
+const VEIL_FADE_IN_MS = 120
+const VEIL_FADE_OUT_MS = 220
 
 interface ClosedTab {
   url: string
@@ -23,13 +29,18 @@ interface CreateOptions {
 
 /**
  * Owns the window's tabs: their order, which one is active, and the closed-tab stack.
- * Only the active tab's view is attached to the window; the others keep running detached.
+ * Only the tab on screen has its view attached; the others keep running detached. The window
+ * never shows a blank page: while the active tab's next view hasn't drawn, the one before stays
+ * on top (see show), and a page loading in the tab on screen is veiled until it draws.
  */
 export class TabManager {
   private tabs: Tab[] = []
   private activeTab!: Tab
   private closed: ClosedTab[] = []
   private chromeHeight = INITIAL_CHROME_HEIGHT
+  /** The terminal panel's height while it's open (it takes space from the page), else null. */
+  private panelHeight: number | null = null
+  private layoutListeners: ((terminal: Rect | null) => void)[] = []
   private changeListener: (() => void) | null = null
   private createdListeners: ((tab: Tab) => void)[] = []
   private faviconListeners: ((url: string, favicon: string) => void)[] = []
@@ -38,6 +49,13 @@ export class TabManager {
   private fullscreenTab: Tab | null = null
   // Whether the window was already fullscreen (F11) when the page went fullscreen.
   private windowWasFullscreen = false
+  /** The tab whose view is on top. Differs from activeTab while a switch waits for a frame. */
+  private shownTab: Tab | null = null
+  // Bumped by every show(), so a slower earlier switch can't finish after a newer one.
+  private showRequest = 0
+  // Closed while on screen: kept up until the next tab can take its place, then destroyed.
+  private retiring = new Set<Tab>()
+  private readonly veil: PageVeil
 
   private readonly hooks: TabHooks = {
     changed: () => this.notifyChange(),
@@ -50,10 +68,16 @@ export class TabManager {
     destroyed: (tab) => this.remove(tab, false),
     faviconLoaded: (tab, favicon) => {
       for (const listener of this.faviconListeners) listener(tab.url, favicon)
+    },
+    paintChanged: (tab) => {
+      if (tab === this.activeTab) this.updateVeil(true)
     }
   }
 
   constructor(private readonly window: BrowserWindow) {
+    this.veil = new PageVeil(window.contentView, () => {
+      if (!this.disposed) this.activeTab.webContents.focus()
+    })
     this.create()
   }
 
@@ -85,7 +109,7 @@ export class TabManager {
     this.faviconListeners.push(listener)
   }
 
-  getState(): { tabs: TabSummary[]; active: TabActiveState } {
+  getState(): { tabs: Omit<TabSummary, 'agentShared'>[]; active: TabActiveState } {
     return {
       tabs: this.tabs.map((tab) => tab.getSummary()),
       active: this.activeTab.getActiveState()
@@ -95,8 +119,9 @@ export class TabManager {
   create({ url = HOME_URL, background = false, openerId = null, index }: CreateOptions = {}): Tab {
     const tab = new Tab({ id: nextId(), openerId }, this.hooks)
     this.insert(tab, index ?? insertionIndex(this.tabs, openerId))
-    if (!background || !this.activeTab) this.activate(tab.id)
+    // Loading first lets activate() see where it's going (a nebula:// page shows no white).
     tab.load(url)
+    if (!background || !this.activeTab) this.activate(tab.id)
     return tab
   }
 
@@ -111,10 +136,7 @@ export class TabManager {
     const previous = this.activeTab
     this.activeTab = tab
     if (this.fullscreenTab && this.fullscreenTab !== tab) this.fullscreenTab.exitHtmlFullscreen()
-    if (previous !== tab) {
-      if (previous) this.window.contentView.removeChildView(previous.view)
-      this.window.contentView.addChildView(tab.view)
-    }
+    if (previous !== tab) this.show(tab)
     this.layout()
     tab.webContents.focus()
     this.notifyChange()
@@ -177,20 +199,42 @@ export class TabManager {
     this.layout()
   }
 
+  /** The UI's height (see setChromeHeight). */
+  get uiHeight(): number {
+    return this.chromeHeight
+  }
+
+  /** The terminal panel opened (with its height) or closed (null): the page makes room. */
+  setPanelHeight(height: number | null): void {
+    if (height === this.panelHeight) return
+    this.panelHeight = height
+    this.layout()
+  }
+
+  /** Called after every layout with where the terminal view goes (null: hidden). */
+  onLayout(listener: (terminal: Rect | null) => void): void {
+    this.layoutListeners.push(listener)
+  }
+
   layout(): void {
     if (this.window.isDestroyed()) return
     const { width, height } = this.window.getContentBounds()
-    const page = {
-      x: 0,
-      y: this.chromeHeight,
+    // The page sits inset from the window's sides and bottom (and the terminal panel, when it's
+    // open), with rounded corners. A fullscreen page covers the panel too.
+    const { page, terminal } = windowLayout(
       width,
-      height: Math.max(0, height - this.chromeHeight)
-    }
+      height,
+      this.chromeHeight,
+      this.fullscreenTab ? null : this.panelHeight
+    )
     // Background tabs get sized too, so pages loading there lay out at the right width.
-    // A fullscreen page covers the UI.
+    // A fullscreen page covers the whole window, UI and margins, with square corners.
     for (const tab of this.tabs) {
-      tab.setBounds(tab === this.fullscreenTab ? { x: 0, y: 0, width, height } : page)
+      if (tab === this.fullscreenTab) tab.setBounds({ x: 0, y: 0, width, height }, 0)
+      else tab.setBounds(page, PAGE_RADIUS)
     }
+    if (this.activeTab) this.veil.setBounds(this.activeTab.bounds, this.activeTab.cornerRadius)
+    for (const listener of this.layoutListeners) listener(terminal)
   }
 
   /** Destroys every tab. Call when the window closes. */
@@ -198,8 +242,62 @@ export class TabManager {
     this.disposed = true
     this.changeListener = null
     this.faviconListeners = []
-    for (const tab of this.tabs) tab.destroy()
+    this.layoutListeners = []
+    for (const tab of [...this.tabs, ...this.retiring]) tab.destroy()
     this.tabs = []
+    this.retiring.clear()
+    this.veil.destroy()
+  }
+
+  /**
+   * Puts `tab`'s view on screen. A detached view has usually dropped its last frame and would
+   * show a blank page until it draws again, so the view on screen stays on top until then; a tab
+   * whose page hasn't drawn at all (just opened from a link) is waited for too.
+   */
+  private show(tab: Tab): void {
+    const request = ++this.showRequest
+    const current = this.shownTab
+    // A nebula:// page that hasn't drawn shows the theme's page colour, so it can go up at once.
+    if (!current || current === tab || (!tab.isPainted && tab.hasThemedBackground)) {
+      this.reveal(tab)
+      return
+    }
+    // Beneath the page on screen, so it can draw unseen.
+    this.window.contentView.addChildView(tab.view, 0)
+    const ready = async (): Promise<void> => {
+      await tab.whenPainted()
+      await tab.nextFrame(SWITCH_FRAME_TIMEOUT_MS)
+    }
+    ready().then(() => {
+      if (request === this.showRequest && !this.disposed) this.reveal(tab)
+    })
+  }
+
+  /** Makes `tab`'s view the only one on screen. */
+  private reveal(tab: Tab): void {
+    if (this.window.isDestroyed()) return
+    const content = this.window.contentView
+    content.addChildView(tab.view)
+    for (const other of this.tabs) {
+      if (other !== tab && content.children.includes(other.view))
+        content.removeChildView(other.view)
+    }
+    for (const closed of this.retiring) {
+      content.removeChildView(closed.view)
+      closed.destroy()
+    }
+    this.retiring.clear()
+    this.shownTab = tab
+    this.updateVeil(false)
+  }
+
+  /** Veils the tab on screen while its new document hasn't drawn; `fade`: animate the change. */
+  private updateVeil(fade: boolean): void {
+    const tab = this.activeTab
+    if (this.disposed || this.window.isDestroyed() || tab !== this.shownTab) return
+    const color = tab.coverColor
+    if (tab.isPainted || !color) this.veil.uncover(fade ? VEIL_FADE_OUT_MS : 0)
+    else this.veil.cover(tab.bounds, tab.cornerRadius, color, fade ? VEIL_FADE_IN_MS : 0)
   }
 
   /** A page entered or left HTML fullscreen: the window follows, and the page covers the UI. */
@@ -229,8 +327,8 @@ export class TabManager {
   ): WebContents {
     const tab = new Tab({ id: nextId(), openerId: opener.id, webContents }, this.hooks)
     this.insert(tab, insertionIndex(this.tabs, opener.id))
-    if (!background) this.activate(tab.id)
     if (!webContents) tab.loadOpened(details)
+    if (!background) this.activate(tab.id)
     return tab.webContents
   }
 
@@ -258,8 +356,15 @@ export class TabManager {
     this.tabs.splice(index, 1)
     for (const other of this.tabs) if (other.openerId === tab.id) other.openerId = null
     if (tab === this.fullscreenTab) this.setPageFullscreen(tab, false)
-    if (!this.window.isDestroyed()) this.window.contentView.removeChildView(tab.view)
-    tab.destroy()
+    if (tab === this.shownTab && byUser && !this.window.isDestroyed()) {
+      // Stays on screen, silent, until the tab after it has drawn (see show).
+      tab.webContents.setAudioMuted(true)
+      this.retiring.add(tab)
+    } else {
+      if (!this.window.isDestroyed()) this.window.contentView.removeChildView(tab.view)
+      if (tab === this.shownTab) this.shownTab = null
+      tab.destroy()
+    }
 
     if (nextActiveId === null) {
       // Closing the last tab leaves a fresh home tab, not an empty window.

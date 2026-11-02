@@ -1,0 +1,25 @@
+/* The terminal view: xterm on the console colour (tokens from main.css), nothing else. */
+.terminal-page {
+  background: var(--color-console);
+}
+
+#terminals {
+  position: fixed;
+  inset: 0;
+}
+
+/* One per session; only the shown one is displayed. Padding keeps text off the rounded edge. */
+.session {
+  position: absolute;
+  inset: 6px 6px 6px 12px;
+  display: none;
+}
+
+.session.active {
+  display: block;
+}
+
+.session .xterm-viewport {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--color-ink) 22%, transparent) transparent;
+}

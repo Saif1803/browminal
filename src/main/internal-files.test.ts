@@ -13,6 +13,10 @@ describe('resolveInternalFile', () => {
     expect(resolveInternalFile(root, 'nebula://home/home.css')?.path).toBe(
       join(root, 'home', 'home.css')
     )
+    expect(resolveInternalFile(root, 'nebula://home/icons/google.png')).toEqual({
+      path: join(root, 'home', 'icons', 'google.png'),
+      mimeType: 'image/png'
+    })
   })
 
   test('serves the error page', () => {

@@ -9,6 +9,8 @@ export interface StoreOptions<T> {
   /** What to write; defaults to the value itself. */
   serialize?: (value: T) => unknown
   saveDelayMs?: number
+  /** File permissions on macOS and Linux, e.g. 0o600 for a file only the user may read. */
+  mode?: number
 }
 
 /**
@@ -25,13 +27,15 @@ export class JsonStore<T> {
   private dirty = false
   private readonly serialize: (value: T) => unknown
   private readonly saveDelayMs: number
+  private readonly mode: number | undefined
 
   constructor(
     readonly path: string,
-    { parse, serialize = (value) => value, saveDelayMs = SAVE_DELAY_MS }: StoreOptions<T>
+    { parse, serialize = (value) => value, saveDelayMs = SAVE_DELAY_MS, mode }: StoreOptions<T>
   ) {
     this.serialize = serialize
     this.saveDelayMs = saveDelayMs
+    this.mode = mode
     this.value = parse(this.read())
   }
 
@@ -76,7 +80,9 @@ export class JsonStore<T> {
     const temp = `${this.path}.tmp`
     try {
       mkdirSync(dirname(this.path), { recursive: true })
-      writeFileSync(temp, `${JSON.stringify(this.serialize(this.value), null, 2)}\n`)
+      writeFileSync(temp, `${JSON.stringify(this.serialize(this.value), null, 2)}\n`, {
+        mode: this.mode
+      })
       renameSync(temp, this.path)
       this.dirty = false
     } catch (error) {

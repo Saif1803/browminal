@@ -1,9 +1,10 @@
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron'
-import { IpcChannel, type BrowserApi, type BrowserState } from '../shared/types'
+import { GLASS_SWITCH, IpcChannel, type BrowserApi, type BrowserState } from '../shared/types'
 
 // Only named, typed calls cross the bridge. ipcRenderer itself is never exposed.
 const browser: BrowserApi = {
   platform: process.platform,
+  glass: process.argv.includes(GLASS_SWITCH),
   navigate: (input) => ipcRenderer.invoke(IpcChannel.Navigate, input),
   back: () => ipcRenderer.invoke(IpcChannel.Back),
   forward: () => ipcRenderer.invoke(IpcChannel.Forward),
@@ -26,6 +27,16 @@ const browser: BrowserApi = {
   showBookmarksOverflow: (from, x, y) =>
     ipcRenderer.invoke(IpcChannel.ShowBookmarksOverflow, from, x, y),
   showAdblockMenu: (x, y) => ipcRenderer.invoke(IpcChannel.ShowAdblockMenu, x, y),
+  showAgentMenu: (x, y) => ipcRenderer.invoke(IpcChannel.ShowAgentMenu, x, y),
+  stopAgent: (id) => ipcRenderer.invoke(IpcChannel.StopAgent, id),
+  toggleTerminal: () => ipcRenderer.invoke(IpcChannel.ToggleTerminal),
+  newTerminal: () => ipcRenderer.invoke(IpcChannel.NewTerminal),
+  closeTerminal: (id) => ipcRenderer.invoke(IpcChannel.CloseTerminal, id),
+  selectTerminal: (id) => ipcRenderer.invoke(IpcChannel.SelectTerminal, id),
+  setTerminalHeight: (px) => ipcRenderer.invoke(IpcChannel.SetTerminalHeight, px),
+  attachTerminal: (id) => ipcRenderer.invoke(IpcChannel.AttachTerminal, id),
+  startAgentInTerminal: (id) => ipcRenderer.invoke(IpcChannel.StartAgentInTerminal, id),
+  chooseTerminalFolder: () => ipcRenderer.invoke(IpcChannel.ChooseTerminalFolder),
   setChromeHeight: (px) => ipcRenderer.invoke(IpcChannel.SetChromeHeight, px),
   getState: () => ipcRenderer.invoke(IpcChannel.GetState),
 
@@ -36,7 +47,9 @@ const browser: BrowserApi = {
   },
 
   onFocusAddressBar(callback) {
-    const listener = (): void => callback()
+    const listener = (_event: IpcRendererEvent, tabId: unknown): void => {
+      if (typeof tabId === 'number') callback(tabId)
+    }
     ipcRenderer.on(IpcChannel.FocusAddressBar, listener)
     return () => ipcRenderer.removeListener(IpcChannel.FocusAddressBar, listener)
   },

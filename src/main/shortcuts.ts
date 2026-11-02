@@ -6,12 +6,22 @@ import type { MainWindow } from './window'
 
 const platform = process.platform === 'darwin' ? 'mac' : 'other'
 
+/** The browser shortcuts that still work while the terminal has the keyboard. */
+const TERMINAL_COMMANDS = new Set<Command['type']>([
+  'toggleTerminal',
+  'newTerminal',
+  'nextTab',
+  'previousTab',
+  'toggleFullscreen'
+])
+
 /**
  * Browser shortcuts (see shortcut-map.ts). They're caught with before-input-event on the UI
  * and on every tab so they work wherever focus is, before the page or the UI sees the key.
  * Also handles the mouse's back/forward buttons (Windows, Linux) and swipes (macOS).
  */
-export function registerShortcuts({ window, tabs, bookmarks }: MainWindow): void {
+export function registerShortcuts(main: MainWindow): void {
+  const { window, tabs, bookmarks } = main
   const ui = window.webContents
 
   const focusUi = (channel: string): void => {
@@ -23,7 +33,7 @@ export function registerShortcuts({ window, tabs, bookmarks }: MainWindow): void
     const tab = tabs.active
     switch (command.type) {
       case 'newTab':
-        return void tabs.create()
+        return main.newTab()
       case 'closeTab':
         return tabs.close(tab.id)
       case 'reopenTab':
@@ -37,7 +47,7 @@ export function registerShortcuts({ window, tabs, bookmarks }: MainWindow): void
       case 'selectLastTab':
         return tabs.activateIndex(tabs.all.length - 1)
       case 'focusAddressBar':
-        return focusUi(IpcChannel.FocusAddressBar)
+        return main.focusAddressBar()
       case 'reload':
         return tab.reload()
       case 'hardReload':
@@ -74,6 +84,12 @@ export function registerShortcuts({ window, tabs, bookmarks }: MainWindow): void
         return bookmarks.toggleTab(tab)
       case 'toggleBookmarksBar':
         return bookmarks.toggleBar()
+      case 'toggleAgentShare':
+        return main.agent.toggleShared(tab.id)
+      case 'toggleTerminal':
+        return main.terminals.toggle()
+      case 'newTerminal':
+        return main.terminals.create()
     }
   }
 
@@ -89,6 +105,8 @@ export function registerShortcuts({ window, tabs, bookmarks }: MainWindow): void
 
     const command = commandForInput(input, platform)
     if (!command) return
+    // In the terminal, keys belong to the shell (Ctrl+W, Ctrl+R, Ctrl+L…) except these few.
+    if (from === main.terminals.view.webContents && !TERMINAL_COMMANDS.has(command.type)) return
 
     // Esc belongs to the UI (address bar, find bar) and to the page, unless it has
     // something to stop: a fullscreen page, or a page that's loading.
@@ -107,6 +125,7 @@ export function registerShortcuts({ window, tabs, bookmarks }: MainWindow): void
     wc.on('before-input-event', handle(wc))
   }
   attach(ui)
+  attach(main.terminals.view.webContents)
   tabs.onTabCreated((tab) => attach(tab.webContents))
 
   // Mouse buttons 4/5.

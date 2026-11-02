@@ -94,6 +94,19 @@ describe('commandForInput', () => {
     expect(mac(press('d', cmd))).toBe('bookmark')
     expect(win(press('B', { ...ctrl, shift: true }))).toBe('toggleBookmarksBar')
     expect(mac(press('b', { ...cmd, shift: true }))).toBe('toggleBookmarksBar')
+    expect(win(press('A', { ...ctrl, shift: true }))).toBe('toggleAgentShare')
+    expect(mac(press('a', { ...cmd, shift: true }))).toBe('toggleAgentShare')
+  })
+
+  test('Ctrl+` toggles the terminal (Ctrl on macOS too); with Shift, a new one', () => {
+    expect(win(press('`', ctrl, 'Backquote'))).toBe('toggleTerminal')
+    expect(mac(press('`', ctrl, 'Backquote'))).toBe('toggleTerminal')
+    expect(mac(press('`', cmd, 'Backquote'))).toBeUndefined()
+    // Shift+` is ~ on US keyboards; the key is what counts.
+    expect(win(press('~', { ...ctrl, shift: true }, 'Backquote'))).toBe('newTerminal')
+    expect(mac(press('~', { ...ctrl, shift: true }, 'Backquote'))).toBe('newTerminal')
+    // Other layouts put other characters on that key.
+    expect(win(press('²', ctrl, 'Backquote'))).toBe('toggleTerminal')
     expect(win(press('b', ctrl))).toBeUndefined()
   })
 

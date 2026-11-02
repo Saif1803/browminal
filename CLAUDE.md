@@ -1,5 +1,8 @@
 # Nebula — desktop web browser (Electron)
 
+A developer's browser for localhost work: terminal coding agents (Claude Code or any MCP client)
+see, drive and debug the tabs the user shares with them (see **Agent bridge** below).
+
 ## Stack
 - **electron-vite** (React + TypeScript template, `@quick-start/electron`).
 - **Bun** is the package manager and script runner only. The app runs on Electron's Node:
@@ -8,9 +11,15 @@
 - `package.json` has `"trustedDependencies": ["electron", "esbuild"]` so their install scripts run under Bun.
 - **Tailwind CSS v4** via `@tailwindcss/vite` (theme tokens in `src/renderer/src/assets/main.css`).
 - **Theme:** the Claude desktop app's colours, light or dark following the OS (`prefers-color-scheme`).
-  Use the tokens (`strip`, `bar`, `field`, `ink*`, `accent`, `line`), never raw colours. The internal
+  Use the tokens (`strip`, `bar`, `tab`, `field`, `ink*`, `accent`, `line`), never raw colours. The internal
   pages' CSS repeats the palette, and `src/main/theme.ts` holds the few colours main paints itself
   (native window controls, window and loading backgrounds); keep all three in sync.
+- **Glass:** on Windows 11 22H2+ (acrylic) and macOS (vibrancy) the window is see-through
+  (`glass.ts`); main passes `--nebula-glass` to the UI, which sets `data-glass` on `<html>` and paints
+  the same palette translucent (`strip` tints the window, `bar` is clear, `tab` lifts the active tab;
+  `.glass-edge` gives raised surfaces a lit rim). Elsewhere the colours stay solid. The home page
+  links `glass.css`, which `nebula://` serves only on a glass window (empty otherwise), and its tab
+  view is clear there (`GLASS_MATERIAL` in `theme.ts`), so it sits on the same backdrop.
 
 ## Commands
 ```bash
@@ -31,10 +40,21 @@ Run `bun run typecheck`, `bun test` and `bun run lint` before calling work done.
   `src/shared/layout.ts`, which the native window controls match.
 - **Tabs** are `WebContentsView`s owned by `TabManager` (`src/main/tab-manager.ts`). Only the active
   tab's view is attached (`window.contentView.addChildView`); all are sized below the UI with
-  `setBounds`. The UI never sends bounds, only its height.
+  `setBounds`, inset `PAGE_INSET` from the sides and bottom with `PAGE_RADIUS` corners (a fullscreen
+  page covers the whole window, square). The UI never sends bounds, only its height.
+  `windowLayout` in `src/shared/layout.ts` (pure, used by main and the UI) places the page and,
+  while it's open, the terminal panel under it.
+- **Terminal panel** (`src/main/terminals.ts`): an IDE-style panel under the page (Ctrl+` toggles,
+  Ctrl+Shift+` adds a terminal). Shells are `@lydell/node-pty` ptys in main (prebuilt binaries, no
+  build tools); the UI draws the panel's header row (sessions, the tab it works on, folder,
+  **Claude**, drag-to-resize) and the **terminal view**, a second `WebContentsView` with xterm
+  (`src/renderer/terminal.html`, `src/renderer/src/terminal/`), shows the shell below it. Every
+  session works on a tab: Claude started from its button gets an MCP config with the
+  `x-nebula-terminal` header, so tools that name no tab act on that tab. Links in the output open in
+  that tab (or a new one next to it). Project folders are remembered per site.
 - **UI ↔ main** only through the typed API in `src/preload/index.ts`, exposed via `contextBridge`
   as `window.browser` (navigation calls act on the active tab; tab calls take a numeric tab id)
-  plus push events main sends (`onState` → one `BrowserState` of tabs, downloads and bookmarks, batched in
+  plus push events main sends (`onState` → one `BrowserState` of tabs, downloads, bookmarks and the agent bridge, batched in
   `window.ts` to at most one per tick; `onFocusAddressBar`).
   Pure helpers both sides use live in `src/shared/` (`url.ts`, `downloads.ts`, `layout.ts`). The contract lives in `src/shared/types.ts` (`BrowserApi`, `BrowserState`,
   `IpcChannel`); change it there first.
@@ -44,8 +64,11 @@ Run `bun run typecheck`, `bun test` and `bun run lint` before calling work done.
 - **Storage:** small JSON files in `userData` through `JsonStore` (`src/main/store.ts`): read once
   and checked (`parseBookmarkFile`, `parseSettings`; bad entries are dropped, a file that isn't JSON
   is kept as `*.broken`), written debounced and atomically (temp file + rename), flushed on quit.
-  Files: `bookmarks.json` (`{version: 1, bookmarks}`) and `settings.json` (bookmarks bar, and
-  `adblock: {enabled, pausedSites}`). Pure file formats live in their own tested modules.
+  Files: `bookmarks.json` (`{version: 1, bookmarks}`), `settings.json` (bookmarks bar,
+  `adblock: {enabled, pausedSites}`, `agent: {enabled, port, shareAll}`,
+  `terminal: {height, folders, agentCommand}`) and `agent.json` (`{version: 1, token}`, written
+  `0o600`). Per-terminal MCP configs live in `agent-mcp/` (`0o600`, deleted with the terminal and
+  cleared on start). Pure file formats live in their own tested modules.
   The ad blocker's engine is cached separately as `adblock-engine.bin` (binary, not a JsonStore).
 - Address-bar input is resolved **in main** by `resolveInput` in `src/shared/url.ts`
   (http(s) as-is; bare domains get `https://`; localhost/IPs get `http://`; everything else,
@@ -65,6 +88,7 @@ Run `bun run typecheck`, `bun test` and `bun run lint` before calling work done.
 | `tab-manager.ts` | Tab list, active tab, closed-tab stack, layout, batched state push |
 | `tab-order.ts` | Pure: where new tabs go, which tab is active after a close |
 | `tabs.ts` | `Tab` class: one `WebContentsView`, its events, window.open → new tab, find, zoom, error pages |
+| `scrollbars.ts` | Thin, faint page scrollbars tinted with the page's theme-color (user-origin CSS; the page's own styles win) |
 | `favicons.ts` | Fetches favicons in main and returns checked `data:` URLs (`image-type.ts` sniffs) |
 | `user-agent.ts` | Pure: strips `Electron/x` and the app token from the user agent |
 | `navigation-policy.ts` | Pure: where pages may navigate (web yes; `mailto:`/`tel:` ask; everything else blocked) |
@@ -79,11 +103,25 @@ Run `bun run typecheck`, `bun test` and `bun run lint` before calling work done.
 | `adblock-policy.ts` | Pure: sites, paused list, shield status, update timing, page-scan checks |
 | `adblock-worker.ts` | Worker thread that parses the filter lists (keeps main responsive) |
 | `adblock-menu.ts` | Native menu for the shield (placeholder until the design pass) |
+| `agent.ts` | `Agent`: the bridge on/off, which tabs are shared, debugger sessions, "agent working" state |
+| `agent-server.ts` | Loopback HTTP server for MCP (Streamable HTTP, stateless); checks every request first |
+| `agent-auth.ts` | Pure: request checks (host, not from a browser, token), `agent.json` format |
+| `agent-policy.ts` | Pure: which pages agents may touch, default tab, reply formatting, connect command |
+| `agent-tools.ts` | The MCP server and tab tools (list/open/select/close tabs, navigate, screenshot, page text, evaluate) |
+| `agent-page-tools.ts` | Page tools: read_page/find (refs), click, hover, type, fill, select_option, press_key, scroll, wait_for, handle_dialog |
+| `agent-tool-helpers.ts` | What tools share: `AgentContext`, tabId input, inspectable check, load waiting |
+| `ax-tree.ts` | Pure: the accessibility tree as compact text with refs (backend DOM node ids); find |
+| `cdp-keys.ts` | Pure: "Control+a" → CDP key events; refuses keys that are Nebula shortcuts |
+| `agent-menu.ts` | Native menu for the agent button (placeholder until the design pass) |
+| `terminals.ts` | `Terminals`: pty sessions, the terminal view, panel open/height, Claude button, links |
+| `terminal-policy.ts` | Pure: default shell, quoting, agent command line, output buffer, folder keys |
+| `cdp.ts` | `CdpSession`: the DevTools protocol on one tab through `webContents.debugger`: timeouts, events, open dialogs |
 | `bookmark-list.ts` | Pure: `bookmarks.json` format, add/remove/find, URL and favicon checks |
 | `bookmarks.ts` | `Bookmarks`: the list and the bar setting; star/Ctrl+D toggle, favicon refresh, open |
 | `bookmarks-menu.ts` | Native menus: right-click on a bookmark or the bar, and the "»" overflow |
 | `menu-text.ts` | Escapes `&` in native menu labels |
 | `theme.ts` | Light/dark colours main paints itself; follows `nativeTheme` |
+| `glass.ts` | Pure: which see-through window material this OS supports (acrylic, vibrancy, none) |
 | `zoom-levels.ts` | Pure: Chrome's zoom steps |
 | `permission-policy.ts` | Pure: allow / ask / deny per permission, prompt text, session memory of answers |
 | `permissions.ts` | Session permission, check, screen-share and device handlers; Allow/Block dialogs |
@@ -104,10 +142,14 @@ space for the native controls.
 
 ## Security rules (non-negotiable)
 - Tab views: `sandbox: true`, `contextIsolation: true`, `nodeIntegration: false`, **no preload**.
-- Only the UI renderer gets the preload. Never expose `ipcRenderer` or generic
-  send/invoke helpers; expose one named function per action.
+- Only the UI renderer gets the preload (`src/preload/index.ts`), plus the terminal view, which gets
+  its own (`src/preload/terminal.ts`: terminal I/O only, no `window.browser`). Never expose
+  `ipcRenderer` or generic send/invoke helpers; expose one named function per action. The two
+  preloads must not import the same module (a shared chunk can't load in a sandboxed preload): the
+  terminal view's contract is `src/shared/terminal-view.ts`, apart from `types.ts`.
 - Validate the sender of **every** IPC message in main (`assertTrustedSender` in `ipc.ts`:
-  must be the main window's UI webContents, top frame, trusted URL). Validate argument types too.
+  must be the main window's UI webContents, top frame, trusted URL; `terminalSender` likewise for
+  the terminal view and `terminal.html`). Validate argument types too.
 - Pages never open OS windows. `window.open`/`target=_blank`/middle-click open a **new tab**
   (http(s) or blank only; everything else is denied). A `window.open` page is adopted so
   `window.opener` works, with the same forced `webPreferences` (`overrideBrowserWindowOptions`).
@@ -137,6 +179,26 @@ space for the native controls.
   blocked. Element hiding is CSS main inserts (`cssOrigin: 'user'`); the page scan for class
   names/ids runs in an isolated world and its result is checked (`parseDomTokens`). No scriptlets,
   redirect resources or `$csp` rules: nothing from the lists runs as code in pages.
+- **Agent bridge** (`agent*.ts`): off until the user switches it on (agent button, or sharing a
+  tab). An MCP server on **127.0.0.1 only** (port 9339, or the next free one); every request must
+  be addressed to `127.0.0.1`/`localhost` on that port, carry **no** `Origin`/`Sec-Fetch-Site`
+  (so no web page can reach it, not even ours) and the bearer token from `agent.json` (compared in
+  constant time; "New token" replaces it). Never use `--remote-debugging-port`: it has no auth and
+  exposes the UI. Agents see and act only on **shared** tabs: shared by the user (Ctrl+Shift+A),
+  opened by an agent (`new_tab`), or opened by a shared tab; "Share every tab" shares all. Main
+  attaches the debugger only to shared tabs, and never reads or scripts `nebula://` pages
+  (`canInspect`). Agents load http(s) only, close only tabs they opened, and their actions still go
+  through the usual navigation, download and permission rules. Keys an agent presses that are
+  Nebula shortcuts (Ctrl+W, F5…) are refused (`browserCommandFor`), since CDP key events reach
+  `before-input-event`. A page's alert/confirm/prompt shows Electron's native box as usual; the
+  agent is told and may answer it (`handle_dialog`), or the user does. While an agent works the tab is
+  marked, the page gets an accent ring and "Agent working · Stop"; Stop unshares the tab (and turns
+  "Share every tab" off), detaching the debugger.
+- **Terminal** (`terminals.ts`): shells run as the user, so only the user starts them (panel,
+  Ctrl+`); no page and no agent tool can. The terminal view is sandboxed, can't navigate or open
+  windows, and its messages are size-checked (input ≤ 64 KB). The shell's environment drops
+  `ELECTRON_*`; the agent token is never put in it (only the config file has it). Keys go to the
+  shell except Ctrl+`, Ctrl+Shift+`, tab switching and fullscreen.
 
 ## Roadmap
 - **Milestone 1 (done):** frameless window, back/forward/reload-stop, address bar, title sync,
@@ -144,6 +206,11 @@ space for the native controls.
 - **Home page (done):** `nebula://home/` with ChatGPT/Claude prompt; Google search.
 - **Browser essentials (done):** tabs, page essentials, permissions, downloads, bookmarks, ad
   blocker — [docs/plans/browser-essentials.md](docs/plans/browser-essentials.md).
+- **Agent browser (approved; the main purpose from now on):** Phases 1 (agent bridge), 2 (read and
+  act: refs, click, type, forms, keys, dialogs) and 5 (terminal panel) done; use it for real, then
+  Phases 3, 4 and 6 (debug tools: console and network; page ↔ source; docs) — [docs/plans/agent-browser.md](docs/plans/agent-browser.md).
+- **Creator browser (parked):** capture, studio mode, device preview, profiles, clips panel,
+  Claude/ChatGPT handoff — [docs/plans/creator-browser.md](docs/plans/creator-browser.md).
 - **Later (don't start until asked):** history + address suggestions, session restore, design pass
-  (replaces the placeholder native menus for downloads, bookmark overflow and the shield, and the
+  (replaces the placeholder native menus for downloads, bookmark overflow, the shield and agents, and the
   plain tab strip).

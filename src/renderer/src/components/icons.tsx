@@ -143,3 +143,25 @@ export const ShieldOffIcon = (p: IconProps): React.JSX.Element => (
     <path d="M3 3l18 18" />
   </Icon>
 )
+
+/** A spark: agents (the agent button, a tab shared with them, the terminal's Claude button). */
+export const AgentIcon = (p: IconProps): React.JSX.Element => (
+  <Icon strokeWidth="1.9" {...p}>
+    <path d="M12 3.5c.6 4.2 2.3 5.9 6.5 6.5-4.2.6-5.9 2.3-6.5 6.5-.6-4.2-2.3-5.9-6.5-6.5 4.2-.6 5.9-2.3 6.5-6.5z" />
+    <path d="M18.5 15.5c.25 1.6.9 2.25 2.5 2.5-1.6.25-2.25.9-2.5 2.5-.25-1.6-.9-2.25-2.5-2.5 1.6-.25 2.25-.9 2.5-2.5z" />
+  </Icon>
+)
+
+/** A terminal prompt: the terminal panel. */
+export const TerminalIcon = (p: IconProps): React.JSX.Element => (
+  <Icon strokeWidth="1.9" {...p}>
+    <rect x="3" y="4.5" width="18" height="15" rx="3" />
+    <path d="M7.5 9.5l3 2.5-3 2.5M12.5 15h4" />
+  </Icon>
+)
+
+export const FolderIcon = (p: IconProps): React.JSX.Element => (
+  <Icon strokeWidth="1.9" {...p}>
+    <path d="M3.5 7.5a2 2 0 0 1 2-2h4l2 2.5h7a2 2 0 0 1 2 2v7.5a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z" />
+  </Icon>
+)
