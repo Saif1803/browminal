@@ -1,5 +1,11 @@
 import type { BrowserWindow, WebContents } from 'electron'
-import { INITIAL_CHROME_HEIGHT, PAGE_RADIUS, windowLayout, type Rect } from '../shared/layout'
+import {
+  INITIAL_CHROME_HEIGHT,
+  PAGE_RADIUS,
+  windowLayout,
+  type PanelPlacement,
+  type Rect
+} from '../shared/layout'
 import type { TabSummary } from '../shared/types'
 import { HOME_URL, isHomeUrl, isHttpUrl } from '../shared/url'
 import { confirmOpenExternal } from './external-links'
@@ -38,8 +44,8 @@ export class TabManager {
   private activeTab!: Tab
   private closed: ClosedTab[] = []
   private chromeHeight = INITIAL_CHROME_HEIGHT
-  /** The terminal panel's height while it's open (it takes space from the page), else null. */
-  private panelHeight: number | null = null
+  /** Where the terminal panel is while it's open (it takes space from the page), else null. */
+  private panel: PanelPlacement | null = null
   private layoutListeners: ((terminal: Rect | null) => void)[] = []
   private changeListener: (() => void) | null = null
   private createdListeners: ((tab: Tab) => void)[] = []
@@ -204,10 +210,10 @@ export class TabManager {
     return this.chromeHeight
   }
 
-  /** The terminal panel opened (with its height) or closed (null): the page makes room. */
-  setPanelHeight(height: number | null): void {
-    if (height === this.panelHeight) return
-    this.panelHeight = height
+  /** The terminal panel opened, moved or resized, or closed (null): the page makes room. */
+  setPanel(panel: PanelPlacement | null): void {
+    if (panel?.dock === this.panel?.dock && panel?.size === this.panel?.size) return
+    this.panel = panel
     this.layout()
   }
 
@@ -219,13 +225,13 @@ export class TabManager {
   layout(): void {
     if (this.window.isDestroyed()) return
     const { width, height } = this.window.getContentBounds()
-    // The page sits inset from the window's sides and bottom (and the terminal panel, when it's
-    // open), with rounded corners. A fullscreen page covers the panel too.
+    // The page sits inset from the window's sides and bottom (and the terminal panel under it or
+    // to its right, when it's open), with rounded corners. A fullscreen page covers the panel too.
     const { page, terminal } = windowLayout(
       width,
       height,
       this.chromeHeight,
-      this.fullscreenTab ? null : this.panelHeight
+      this.fullscreenTab ? null : this.panel
     )
     // Background tabs get sized too, so pages loading there lay out at the right width.
     // A fullscreen page covers the whole window, UI and margins, with square corners.

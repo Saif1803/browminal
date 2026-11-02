@@ -1,8 +1,34 @@
-import { useRef, type PointerEvent } from 'react'
-import { PAGE_INSET, TERMINAL_HEADER_HEIGHT, windowLayout } from '@shared/layout'
+import { useRef, useState, type KeyboardEvent, type PointerEvent } from 'react'
+import {
+  TERMINAL_DEFAULT_HEIGHT,
+  TERMINAL_DEFAULT_WIDTH,
+  TERMINAL_HEADER_HEIGHT,
+  TERMINAL_MIN_HEIGHT,
+  TERMINAL_MIN_WIDTH,
+  panelPlacement,
+  windowLayout,
+  type PanelDock
+} from '@shared/layout'
 import type { TabSummary, TerminalPanelState, TerminalSession } from '@shared/types'
 import { useWindowSize } from '../use-window-size'
-import { AgentIcon, ChevronDownIcon, CloseIcon, FolderIcon, PlusIcon, TerminalIcon } from './icons'
+import {
+  AgentIcon,
+  ChevronDownIcon,
+  ChevronRightIcon,
+  CloseIcon,
+  FolderIcon,
+  PanelBottomIcon,
+  PanelRightIcon,
+  PlusIcon,
+  TerminalIcon
+} from './icons'
+
+/** Arrow keys on the resize handle move it this far (four times with Shift). */
+const RESIZE_STEP = 24
+/** Asked for by End; main clamps it to what the window allows. */
+const LARGEST_SIZE = 10_000
+/** Narrower than this, the Claude button shows only its icon. */
+const COMPACT_PANEL_WIDTH = 480
 
 const ICON_BUTTON =
   'grid size-6 shrink-0 place-items-center rounded-md text-ink-muted transition-colors hover:bg-field-hover hover:text-ink focus-visible:outline-2 focus-visible:outline-accent'
@@ -26,28 +52,84 @@ export function TerminalButton({ open }: { open: boolean }): React.JSX.Element {
   )
 }
 
-/** Dragging the panel's top edge resizes it (main clamps the height). */
-function ResizeHandle(): React.JSX.Element {
+/**
+ * The panel's inner edge, in the gap between it and the page (its top at the bottom, its left
+ * side on the right). Drag it, or focus it and use the arrow keys, to resize; double-click puts
+ * back the default size. `size` is the panel's size on screen; main clamps what is asked for.
+ */
+function ResizeHandle({ dock, size }: { dock: PanelDock; size: number }): React.JSX.Element {
+  const bottom = dock === 'bottom'
+  const drag = useRef<{ from: number; size: number } | null>(null)
   const frame = useRef(0)
+  const [dragging, setDragging] = useState(false)
+
+  const position = (event: PointerEvent): number => (bottom ? event.clientY : event.clientX)
+  const resize = (px: number): void => {
+    const size = Math.min(Math.max(0, Math.round(px)), LARGEST_SIZE)
+    cancelAnimationFrame(frame.current)
+    frame.current = requestAnimationFrame(() => window.browser.setTerminalSize(size))
+  }
+  const endDrag = (): void => {
+    drag.current = null
+    setDragging(false)
+  }
+
   const onPointerDown = (event: PointerEvent<HTMLDivElement>): void => {
+    if (event.button !== 0) return
     event.preventDefault()
     event.currentTarget.setPointerCapture(event.pointerId)
+    event.currentTarget.focus({ preventScroll: true })
+    drag.current = { from: position(event), size }
+    setDragging(true)
   }
   const onPointerMove = (event: PointerEvent<HTMLDivElement>): void => {
-    if (!event.currentTarget.hasPointerCapture(event.pointerId)) return
-    const px = Math.round(window.innerHeight - PAGE_INSET - event.clientY)
-    cancelAnimationFrame(frame.current)
-    frame.current = requestAnimationFrame(() => window.browser.setTerminalHeight(Math.max(0, px)))
+    if (!drag.current || !event.currentTarget.hasPointerCapture(event.pointerId)) return
+    // The inner edge follows the pointer: up (or left) makes the panel bigger.
+    resize(drag.current.size + drag.current.from - position(event))
   }
+  const onKeyDown = (event: KeyboardEvent<HTMLDivElement>): void => {
+    const step = event.shiftKey ? 4 * RESIZE_STEP : RESIZE_STEP
+    let px: number
+    if (event.key === (bottom ? 'ArrowUp' : 'ArrowLeft')) px = size + step
+    else if (event.key === (bottom ? 'ArrowDown' : 'ArrowRight')) px = size - step
+    else if (event.key === 'Home') px = 0
+    else if (event.key === 'End') px = LARGEST_SIZE
+    else return
+    event.preventDefault()
+    resize(px)
+  }
+
   return (
     <div
       role="separator"
-      aria-orientation="horizontal"
-      aria-label="Resize terminal"
+      tabIndex={0}
+      // The separator runs along the edge: a horizontal line above a bottom panel.
+      aria-orientation={bottom ? 'horizontal' : 'vertical'}
+      aria-label={bottom ? 'Resize terminal height' : 'Resize terminal width'}
+      aria-valuenow={size}
+      aria-valuemin={bottom ? TERMINAL_MIN_HEIGHT : TERMINAL_MIN_WIDTH}
+      title="Drag to resize · double-click for the default size"
+      data-dragging={dragging || undefined}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
-      className="absolute inset-x-3 -top-1.5 h-3 cursor-row-resize"
-    />
+      onPointerUp={endDrag}
+      onLostPointerCapture={endDrag}
+      onDoubleClick={() => resize(bottom ? TERMINAL_DEFAULT_HEIGHT : TERMINAL_DEFAULT_WIDTH)}
+      onKeyDown={onKeyDown}
+      className={`group absolute z-10 focus-visible:outline-none ${
+        bottom
+          ? 'inset-x-3 -top-2 h-3 cursor-row-resize'
+          : 'inset-y-3 -left-2 w-3 cursor-col-resize'
+      }`}
+    >
+      {/* A line in the middle of the gap while the edge is hovered, focused or dragged. */}
+      <span
+        aria-hidden="true"
+        className={`pointer-events-none absolute rounded-full bg-accent opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100 group-data-dragging:opacity-100 ${
+          bottom ? 'inset-x-0 top-[3px] h-0.5' : 'inset-y-0 left-[3px] w-0.5'
+        }`}
+      />
+    </div>
   )
 }
 
@@ -120,7 +202,7 @@ function TabChip({
 }
 
 /**
- * The terminal panel's header, under the page: the sessions, the tab the active one works on,
+ * The terminal panel's header, under the page or beside it: the sessions, the tab the active one works on,
  * and its actions. The terminal itself is main's terminal view, placed right below this row.
  */
 export function TerminalPanel({
@@ -135,8 +217,11 @@ export function TerminalPanel({
   chromeHeight: number
 }): React.JSX.Element | null {
   const { width, height } = useWindowSize()
-  const { panel } = windowLayout(width, height, chromeHeight, terminal.height)
+  const { dock } = terminal
+  const { panel } = windowLayout(width, height, chromeHeight, panelPlacement(terminal))
   if (!panel) return null
+  const compact = panel.width < COMPACT_PANEL_WIDTH
+  const toRight = dock === 'bottom'
   const session = terminal.sessions.find((other) => other.id === terminal.activeId)
   const tab = tabs.find((other) => other.id === session?.tabId)
 
@@ -146,8 +231,11 @@ export function TerminalPanel({
       className="glass-edge app-no-drag fixed rounded-[10px] bg-console text-[12px]"
       style={{ left: panel.x, top: panel.y, width: panel.width, height: panel.height }}
     >
-      <ResizeHandle />
-      <div className="flex items-center gap-1 px-2" style={{ height: TERMINAL_HEADER_HEIGHT }}>
+      <ResizeHandle dock={dock} size={dock === 'bottom' ? panel.height : panel.width} />
+      <div
+        className="flex items-center gap-1 overflow-hidden px-2"
+        style={{ height: TERMINAL_HEADER_HEIGHT }}
+      >
         <TerminalIcon width={14} height={14} className="mr-1 shrink-0 text-ink-faint" />
         <div className="no-scrollbar flex min-w-0 shrink items-center gap-0.5 overflow-x-auto">
           {terminal.sessions.map((other) => (
@@ -179,6 +267,7 @@ export function TerminalPanel({
           type="button"
           disabled={!session || session.exited}
           onClick={() => session && window.browser.startAgentInTerminal(session.id)}
+          aria-label="Start Claude Code here"
           title={
             tab
               ? `Start Claude Code here, connected to Nebula and working on “${tab.title}”`
@@ -187,7 +276,24 @@ export function TerminalPanel({
           className="flex h-6 shrink-0 items-center gap-1.5 rounded-md bg-accent/15 px-2 font-medium text-accent transition-colors hover:bg-accent/25 focus-visible:outline-2 focus-visible:outline-accent disabled:opacity-40"
         >
           <AgentIcon width={13} height={13} />
-          Claude
+          {!compact && 'Claude'}
+        </button>
+        <button
+          type="button"
+          aria-label={toRight ? 'Move terminal to the right' : 'Move terminal to the bottom'}
+          title={
+            toRight
+              ? 'Move the terminal beside the page (side by side)'
+              : 'Move the terminal under the page (stacked)'
+          }
+          onClick={() => window.browser.setTerminalDock(toRight ? 'right' : 'bottom')}
+          className={ICON_BUTTON}
+        >
+          {toRight ? (
+            <PanelRightIcon width={14} height={14} />
+          ) : (
+            <PanelBottomIcon width={14} height={14} />
+          )}
         </button>
         <button
           type="button"
@@ -196,7 +302,11 @@ export function TerminalPanel({
           onClick={() => window.browser.toggleTerminal()}
           className={ICON_BUTTON}
         >
-          <ChevronDownIcon width={14} height={14} />
+          {dock === 'bottom' ? (
+            <ChevronDownIcon width={14} height={14} />
+          ) : (
+            <ChevronRightIcon width={14} height={14} />
+          )}
         </button>
       </div>
     </section>

@@ -15,7 +15,9 @@ describe('parseSettings', () => {
       adblock: { enabled: false, pausedSites: ['example.com', 'news.bbc.co.uk'] },
       agent: { enabled: true, port: 9400, shareAll: true },
       terminal: {
+        dock: 'right' as const,
         height: 420,
+        width: 640,
         folders: { 'http://localhost:5173': process.platform === 'win32' ? 'C:\\shop' : '/shop' },
         agentCommand: 'claude --model opus'
       }
@@ -62,7 +64,9 @@ describe('parseSettings', () => {
     const folder = process.platform === 'win32' ? 'C:\\shop' : '/shop'
     const { terminal } = parseSettings({
       terminal: {
+        dock: 'left',
         height: 50,
+        width: 4.5,
         folders: {
           'http://localhost:5173': folder,
           'http://localhost:5173/path': folder,

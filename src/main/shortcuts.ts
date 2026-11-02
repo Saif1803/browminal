@@ -12,7 +12,8 @@ const TERMINAL_COMMANDS = new Set<Command['type']>([
   'newTerminal',
   'nextTab',
   'previousTab',
-  'toggleFullscreen'
+  'toggleFullscreen',
+  'pickElement'
 ])
 
 /**
@@ -86,6 +87,8 @@ export function registerShortcuts(main: MainWindow): void {
         return bookmarks.toggleBar()
       case 'toggleAgentShare':
         return main.agent.toggleShared(tab.id)
+      case 'pickElement':
+        return void main.agent.togglePicking(tab.id)
       case 'toggleTerminal':
         return main.terminals.toggle()
       case 'newTerminal':
@@ -109,8 +112,12 @@ export function registerShortcuts(main: MainWindow): void {
     if (from === main.terminals.view.webContents && !TERMINAL_COMMANDS.has(command.type)) return
 
     // Esc belongs to the UI (address bar, find bar) and to the page, unless it has
-    // something to stop: a fullscreen page, or a page that's loading.
+    // something to stop: picking an element, a fullscreen page, or a page that's loading.
     if (command.type === 'stop') {
+      if (main.agent.getState().picking !== null) {
+        event.preventDefault()
+        return main.agent.cancelPicking()
+      }
       if (from === ui) return
       if (tabs.exitPageFullscreen()) return void event.preventDefault()
       if (!tabs.active.webContents.isLoading()) return

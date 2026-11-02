@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
-import { PAGE_RADIUS, windowLayout } from '@shared/layout'
+import { PAGE_RADIUS, panelPlacement, windowLayout } from '@shared/layout'
 import type { BrowserState } from '@shared/types'
 import { isHomeUrl } from '@shared/url'
 import { AddressBar } from './components/AddressBar'
-import { AgentButton, AgentWorking } from './components/AgentButton'
+import { AgentButton, AgentPicking, AgentWorking, PickSent } from './components/AgentButton'
 import { BookmarksBar } from './components/BookmarksBar'
 import { DownloadsButton } from './components/DownloadsButton'
 import { FindBar } from './components/FindBar'
@@ -26,13 +26,22 @@ const EMPTY_STATE: BrowserState = {
     find: null,
     isBookmarked: false,
     shield: null,
-    emulation: null
+    emulation: null,
+    errors: 0
   },
   downloads: [],
   bookmarks: [],
   bookmarksBarVisible: false,
-  agent: { enabled: false, port: null, error: null, shareAll: false, working: null },
-  terminal: { open: false, height: 0, sessions: [], activeId: null }
+  agent: {
+    enabled: false,
+    port: null,
+    error: null,
+    shareAll: false,
+    working: null,
+    picking: null,
+    pick: null
+  },
+  terminal: { open: false, dock: 'bottom', height: 0, width: 0, sessions: [], activeId: null }
 }
 
 /** Reports the header's height to main, which places tabs directly below it; returns it too. */
@@ -86,7 +95,7 @@ function App(): React.JSX.Element {
     windowSize.width,
     windowSize.height,
     chromeHeight,
-    terminal.open ? terminal.height : null
+    terminal.open ? panelPlacement(terminal) : null
   )
 
   return (
@@ -105,9 +114,15 @@ function App(): React.JSX.Element {
             shield={tab.shield}
             emulation={tab.emulation}
             onResetEmulation={() => window.browser.resetEmulation(tab.id)}
+            errors={tab.errors}
             focusRequested={focusTabId === tab.id}
             onFocused={() => setFocusTabId(null)}
           />
+          {agent.picking !== null ? (
+            <AgentPicking />
+          ) : (
+            agent.pick && <PickSent notice={agent.pick} />
+          )}
           {workingTab && (
             <AgentWorking
               tabId={workingTab.id}

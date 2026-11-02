@@ -3,6 +3,7 @@ import {
   formatBoxModel,
   formatComputed,
   formatMatchedStyles,
+  rulePlaces,
   type SheetInfo
 } from './element-inspect'
 
@@ -194,5 +195,65 @@ describe('formatMatchedStyles', () => {
 
   test('says when nothing matches', () => {
     expect(formatMatchedStyles({}, sheets, 'http://x/')).toBe('(no author CSS rules match)')
+  })
+})
+
+describe('rule locations from source maps and Vite', () => {
+  const sheets = new Map<string, SheetInfo>([
+    [
+      'css',
+      {
+        sourceURL: 'http://localhost:5173/assets/index.css',
+        startLine: 0,
+        isInline: false,
+        isConstructed: false
+      }
+    ],
+    [
+      'vite',
+      {
+        sourceURL: '',
+        startLine: 0,
+        isInline: true,
+        isConstructed: false,
+        file: 'C:/shop/src/Cart.css'
+      }
+    ]
+  ])
+  const rule = (
+    styleSheetId: string | undefined,
+    selector: string,
+    range?: { startLine: number; startColumn: number }
+  ): { rule: object } => ({
+    rule: {
+      styleSheetId,
+      origin: styleSheetId ? 'regular' : 'user-agent',
+      selectorList: { text: selector },
+      style: { range, cssProperties: [] }
+    }
+  })
+  const matched = {
+    matchedCSSRules: [
+      rule('vite', '.cart', { startLine: 4, startColumn: 0 }),
+      rule('css', '.btn', { startLine: 0, startColumn: 120 }),
+      rule(undefined, 'div')
+    ]
+  }
+
+  test('rulePlaces: author rules with a range, 1-based', () => {
+    expect(rulePlaces(matched)).toEqual([
+      { styleSheetId: 'vite', line: 5, column: 1 },
+      { styleSheetId: 'css', line: 1, column: 121 }
+    ])
+  })
+
+  test('a source map wins; Vite’s injected styles name their file', () => {
+    const text = formatMatchedStyles(matched, sheets, 'http://localhost:5173/', (place) =>
+      place.styleSheetId === 'css' ? 'src/Button.module.css:7:1' : null
+    )
+    expect(text).toContain('.btn {  /* src/Button.module.css:7:1 */')
+    expect(text).toContain(
+      '.cart {  /* C:/shop/src/Cart.css (line 5 of the CSS Vite serves for it) */'
+    )
   })
 })

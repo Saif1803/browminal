@@ -33,6 +33,13 @@ export function showAgentMenu(main: MainWindow, x: number, y: number): void {
       click: () => agent.toggleShared(tab.id)
     },
     {
+      label: 'Pick an element for agents',
+      enabled: canInspect(tab.webContents.getURL()),
+      accelerator: 'CmdOrCtrl+Shift+X',
+      registerAccelerator: false,
+      click: () => void agent.togglePicking(tab.id)
+    },
+    {
       label: 'Share every tab',
       type: 'checkbox',
       checked: agent.shareAll,
@@ -69,4 +76,22 @@ export function showAgentMenu(main: MainWindow, x: number, y: number): void {
     })
   }
   Menu.buildFromTemplate(template).popup({ window, x, y })
+}
+
+/**
+ * The errors badge's menu: send the active tab's new errors to agents, or dismiss them.
+ * A placeholder until the design pass.
+ */
+export function showErrorsMenu(main: MainWindow, x: number, y: number): void {
+  const { window, tabs, agent } = main
+  if (window.isDestroyed()) return
+  const tabId = tabs.active.id
+  const count = agent.errorsOf(tabId)
+  if (count === 0) return
+  Menu.buildFromTemplate([
+    { label: `${count} new error${count === 1 ? '' : 's'} on this page`, enabled: false },
+    { type: 'separator' },
+    { label: 'Send to agent', click: () => void agent.sendErrors(tabId) },
+    { label: 'Dismiss', click: () => agent.dismissErrors(tabId) }
+  ]).popup({ window, x, y })
 }

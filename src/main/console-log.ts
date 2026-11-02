@@ -1,3 +1,12 @@
+import {
+  formatOriginal,
+  locationsIn,
+  replaceLocations,
+  type PositionLookup,
+  type SourceMaps,
+  type SourcePosition
+} from './source-maps'
+
 /**
  * A tab's console as agents read it: console.* calls, uncaught exceptions and the browser's own
  * messages (Log domain), from the moment the tab was shared. Pure: the CDP events come in as
@@ -21,7 +30,10 @@ export interface StackFrame {
 }
 
 export interface ConsoleEntry {
-  /** Grows by one per entry, across the tab's whole log: `since` asks for newer ones. */
+  /**
+   * Grows by one per entry, across the tab's whole log: `since` asks for newer ones. An entry
+   * repeated in a row takes the next one again.
+   */
   seq: number
   /** ms since the epoch. */
   time: number
@@ -260,6 +272,7 @@ export interface ConsoleQuery {
 export class ConsoleLog {
   private entries: ConsoleEntry[] = []
   private nextSeq = 1
+  private navigationSeq = 0
 
   constructor(private readonly max = MAX_CONSOLE_ENTRIES) {}
 
@@ -275,14 +288,29 @@ export class ConsoleLog {
     if (last && sameEntry(last, entry)) {
       last.count++
       last.time = entry.time
+      // It happened again just now: newer than anything read so far (`since`, the errors badge).
+      last.seq = this.nextSeq++
       return
     }
+    if (entry.source === 'navigation') this.navigationSeq = this.nextSeq
     this.entries.push({ ...entry, seq: this.nextSeq++, count: 1 })
     if (this.entries.length > this.max) this.entries.splice(0, this.entries.length - this.max)
   }
 
+  /** The seq of the entry for the page now loaded (0 before the first navigation). */
+  get pageSeq(): number {
+    return this.navigationSeq
+  }
+
   clear(): void {
     this.entries = []
+  }
+
+  /** The page's errors (uncaught exceptions and console.error) after `since`, repeats included. */
+  errorsAfter(since: number): ConsoleEntry[] {
+    return this.entries.filter(
+      (entry) => entry.seq > since && entry.level === 'error' && isPageError(entry)
+    )
   }
 
   query({ level = 'debug', since = 0, pattern, limit = 50 }: ConsoleQuery = {}): {
@@ -311,22 +339,53 @@ export function clockTime(ms: number): string {
   return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}.${pad(d.getMilliseconds(), 3)}`
 }
 
-export const frameText = (frame: StackFrame): string => `${frame.url}:${frame.line}:${frame.column}`
+/** Errors from the page's own code, not the browser's (failed loads, CSP…). */
+const isPageError = (entry: ConsoleEntry): boolean =>
+  entry.source === 'console' || entry.source === 'exception'
 
-/** One entry as the agent reads it: a header line, then the stack for errors. */
-export function formatConsoleEntry(entry: ConsoleEntry): string {
+const noLookup: PositionLookup = () => null
+
+/** Where a frame is: its original file and line when a source map says, else the script's. */
+export function frameText(frame: StackFrame, lookup: PositionLookup = noLookup): string {
+  const original = lookup(frame.url, frame.line, frame.column)
+  return original ? formatOriginal(original) : `${frame.url}:${frame.line}:${frame.column}`
+}
+
+/**
+ * One entry as the agent reads it: a header line, then the stack for errors. With `lookup`,
+ * places are shown in the original files (see source-maps.ts).
+ */
+export function formatConsoleEntry(entry: ConsoleEntry, lookup: PositionLookup = noLookup): string {
   const times = entry.count > 1 ? ` (×${entry.count})` : ''
-  const head = `#${entry.seq} ${clockTime(entry.time)} [${entry.level}]${times} ${entry.text}`
+  const message = replaceLocations(entry.text, lookup)
+  const head = `#${entry.seq} ${clockTime(entry.time)} [${entry.level}]${times} ${message}`
   if (entry.frames.length === 0) return head
   // Exceptions carry their JS stack in the text already; elsewhere say where it came from.
   const textHasStack = /\n\s+at /.test(entry.text)
   if (textHasStack) return head
-  if (entry.level !== 'error') return `${head}\n    at ${frameText(entry.frames[0])}`
+  if (entry.level !== 'error') return `${head}\n    at ${frameText(entry.frames[0], lookup)}`
   const stack = entry.frames
-    .map(
-      (frame) =>
-        `    at ${frame.functionName ? `${frame.functionName} (${frameText(frame)})` : frameText(frame)}`
-    )
+    .map((frame) => {
+      const where = frameText(frame, lookup)
+      return `    at ${frame.functionName ? `${frame.functionName} (${where})` : where}`
+    })
     .join('\n')
   return `${head}\n${stack}`
+}
+
+/** Every place the entries name: their stack frames, and stacks written in their text. */
+export function positionsOf(entries: readonly ConsoleEntry[]): SourcePosition[] {
+  return entries.flatMap((entry) => [
+    ...entry.frames.map(({ url, line, column }) => ({ url, line, column })),
+    ...locationsIn(entry.text)
+  ])
+}
+
+/** The entries as the agent reads them, mapped to the original files through `sourceMaps`. */
+export async function formatConsoleEntries(
+  entries: readonly ConsoleEntry[],
+  sourceMaps: SourceMaps
+): Promise<string> {
+  const lookup = await sourceMaps.resolveAll(positionsOf(entries))
+  return entries.map((entry) => formatConsoleEntry(entry, lookup)).join('\n')
 }

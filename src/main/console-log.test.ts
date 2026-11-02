@@ -8,8 +8,10 @@ import {
   fromExceptionThrown,
   fromLogEntry,
   navigationEntry,
+  positionsOf,
   type NewConsoleEntry
 } from './console-log'
+import type { PositionLookup } from './source-maps'
 
 const str = (value: string): { type: string; value: string } => ({ type: 'string', value })
 const num = (value: number): { type: string; value: number } => ({ type: 'number', value })
@@ -257,4 +259,67 @@ test("Electron's own warnings are not the page's: left out", () => {
     frames: [{ functionName: '', url: 'node:electron/js2c/sandbox_bundle', line: 2, column: 1 }]
   })
   expect(log.query().entries).toEqual([])
+})
+
+describe('errors for the badge', () => {
+  const exception = (text: string): NewConsoleEntry => ({
+    ...entry(text, 'error'),
+    source: 'exception'
+  })
+
+  test('the page’s own errors after a seq; failed loads and other levels are not counted', () => {
+    const log = new ConsoleLog()
+    log.add(entry('old', 'error'))
+    log.add(navigationEntry('http://localhost:5173/', at))
+    expect(log.pageSeq).toBe(2)
+    log.add(exception('Uncaught TypeError: x'))
+    log.add({ ...entry('[network] Failed to load resource: 404', 'error'), source: 'browser' })
+    log.add(entry('careful', 'warning'))
+    log.add(entry('console.error call', 'error'))
+    expect(log.errorsAfter(log.pageSeq).map((e) => e.text)).toEqual([
+      'Uncaught TypeError: x',
+      'console.error call'
+    ])
+    expect(log.errorsAfter(log.lastSeq)).toEqual([])
+  })
+
+  test('an error repeated in a row counts as new again', () => {
+    const log = new ConsoleLog()
+    log.add(exception('Uncaught TypeError: x'))
+    const seen = log.lastSeq
+    log.add(exception('Uncaught TypeError: x'))
+    expect(log.errorsAfter(seen).map((e) => [e.seq, e.count])).toEqual([[2, 2]])
+    expect(log.query({ since: seen }).entries).toHaveLength(1)
+  })
+})
+
+describe('source-mapped places', () => {
+  const bundle = 'http://localhost:3000/assets/index.js'
+  const lookup: PositionLookup = (url, line, column) =>
+    url === bundle ? { source: 'src/Cart.tsx', line: line + 40, column, name: null } : null
+  const frames = [
+    { functionName: 'checkout', url: bundle, line: 1, column: 9 },
+    { functionName: '', url: 'http://localhost:3000/vendor.js', line: 2, column: 1 }
+  ]
+
+  test('frames and stacks in the text show the original file', () => {
+    expect(formatConsoleEntry({ ...entry('bad', 'error'), frames, seq: 1, count: 1 }, lookup)).toBe(
+      '#1 14:03:07.215 [error] bad\n' +
+        '    at checkout (src/Cart.tsx:41:9)\n' +
+        '    at http://localhost:3000/vendor.js:2:1'
+    )
+    const text = `Uncaught Error: x\n    at checkout (${bundle}:1:9)`
+    expect(formatConsoleEntry({ ...entry(text, 'error'), frames, seq: 2, count: 1 }, lookup)).toBe(
+      '#2 14:03:07.215 [error] Uncaught Error: x\n    at checkout (src/Cart.tsx:41:9)'
+    )
+  })
+
+  test('positionsOf: every frame and every place in the text', () => {
+    const text = `Error\n    at f (${bundle}:3:4)`
+    expect(positionsOf([{ ...entry(text, 'error'), frames, seq: 1, count: 1 }])).toEqual([
+      { url: bundle, line: 1, column: 9 },
+      { url: 'http://localhost:3000/vendor.js', line: 2, column: 1 },
+      { url: bundle, line: 3, column: 4 }
+    ])
+  })
 })

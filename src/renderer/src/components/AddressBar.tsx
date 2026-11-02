@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
 import type { ShieldState } from '@shared/types'
 import { isHttpUrl } from '@shared/url'
-import { CloseIcon, LockIcon, SearchIcon, StarIcon } from './icons'
+import { CloseIcon, ErrorIcon, LockIcon, SearchIcon, StarIcon } from './icons'
 import { ShieldButton } from './ShieldButton'
 
 export function AddressBar({
@@ -12,6 +12,7 @@ export function AddressBar({
   shield,
   emulation,
   onResetEmulation,
+  errors,
   focusRequested,
   onFocused
 }: {
@@ -23,6 +24,8 @@ export function AddressBar({
   /** What an agent emulates on the tab ("iPhone 15 · dark"), shown as a badge; null for none. */
   emulation: string | null
   onResetEmulation: () => void
+  /** New errors on a shared tab's page, shown as a badge that sends them to agents; 0 for none. */
+  errors: number
   /** Take the keyboard now (Ctrl+L, a new tab); call onFocused once done. */
   focusRequested: boolean
   onFocused: () => void
@@ -115,6 +118,21 @@ export function AddressBar({
           >
             {emulation}
             <CloseIcon width={10} height={10} className="opacity-60 group-hover/emu:opacity-100" />
+          </button>
+        )}
+        {errors > 0 && (
+          <button
+            type="button"
+            title="New errors on this page. Click to send them to the agent."
+            aria-label={`${errors} new error${errors === 1 ? '' : 's'} on this page. Send to agent`}
+            onClick={(event) => {
+              const rect = event.currentTarget.getBoundingClientRect()
+              window.browser.showErrorsMenu(Math.round(rect.left), Math.round(rect.bottom) + 4)
+            }}
+            className="flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 text-[11px] whitespace-nowrap text-accent tabular-nums ring-1 ring-accent/50 transition-colors hover:bg-field-hover focus-visible:outline-2 focus-visible:outline-accent"
+          >
+            <ErrorIcon width={11} height={11} />
+            {errors > 99 ? '99+' : errors}
           </button>
         )}
         {shield && <ShieldButton shield={shield} />}

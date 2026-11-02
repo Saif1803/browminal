@@ -5,6 +5,7 @@ import { isHttpUrl, resolveInput } from '../shared/url'
 import { describeTabs, formatValue, MAX_AGENT_TEXT, scaledSize, truncate } from './agent-policy'
 import { registerDebugTools } from './agent-debug-tools'
 import { registerPageTools } from './agent-page-tools'
+import { registerPickTools } from './agent-picks'
 import {
   AGENT_WORLD_ID,
   assertInspectable,
@@ -37,6 +38,11 @@ const INSTRUCTIONS = `Nebula is the user's own web browser. These tools act on i
   network_request (status, headers, bodies), inspect(ref) (box, computed styles, the CSS rules
   with file and line), set_style/set_attribute to try a fix live, emulate (phone, dark mode,
   offline). Pass the last #seq/#id you saw as since to read only what is new.
+- Errors, stack traces and CSS rules are shown in the original source files where the page
+  has source maps (a dev server's src/App.tsx:12:5, not the bundle); inspect also says which
+  file and line an element is written at in React, Vue and Svelte dev builds.
+- The user can pick an element or send a page's errors to you; when they mention a pick
+  ("pick 3", "the element I picked"), read it with get_picks.
 - The user can watch and stop you at any time; a tab they stop sharing disappears from list_tabs.`
 
 async function captureScreenshot(
@@ -362,5 +368,6 @@ export function createAgentMcp(context: AgentContext, version: string): McpServe
 
   registerPageTools(mcp, context)
   registerDebugTools(mcp, context)
+  registerPickTools(mcp, context)
   return mcp
 }

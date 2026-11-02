@@ -43,11 +43,13 @@ Run `bun run typecheck`, `bun test` and `bun run lint` before calling work done.
   `setBounds`, inset `PAGE_INSET` from the sides and bottom with `PAGE_RADIUS` corners (a fullscreen
   page covers the whole window, square). The UI never sends bounds, only its height.
   `windowLayout` in `src/shared/layout.ts` (pure, used by main and the UI) places the page and,
-  while it's open, the terminal panel under it.
-- **Terminal panel** (`src/main/terminals.ts`): an IDE-style panel under the page (Ctrl+` toggles,
-  Ctrl+Shift+` adds a terminal). Shells are `@lydell/node-pty` ptys in main (prebuilt binaries, no
-  build tools); the UI draws the panel's header row (sessions, the tab it works on, folder,
-  **Claude**, drag-to-resize) and the **terminal view**, a second `WebContentsView` with xterm
+  while it's open, the terminal panel under it or to its right (`PanelPlacement`: dock + size).
+- **Terminal panel** (`src/main/terminals.ts`): an IDE-style panel docked under the page or to its
+  right (header button; each dock remembers its own size; Ctrl+` toggles, Ctrl+Shift+` adds a
+  terminal). Shells are `@lydell/node-pty` ptys in main (prebuilt binaries, no build tools); the UI
+  draws the panel's header row (sessions, the tab it works on, folder, **Claude**, dock switch) and
+  its inner edge, which resizes it (drag, arrow keys when focused, double-click for the default;
+  main clamps with `clampPanelSize`), and the **terminal view**, a second `WebContentsView` with xterm
   (`src/renderer/terminal.html`, `src/renderer/src/terminal/`), shows the shell below it. Every
   session works on a tab: Claude started from its button gets an MCP config with the
   `x-nebula-terminal` header, so tools that name no tab act on that tab. Links in the output open in
@@ -66,7 +68,7 @@ Run `bun run typecheck`, `bun test` and `bun run lint` before calling work done.
   is kept as `*.broken`), written debounced and atomically (temp file + rename), flushed on quit.
   Files: `bookmarks.json` (`{version: 1, bookmarks}`), `settings.json` (bookmarks bar,
   `adblock: {enabled, pausedSites}`, `agent: {enabled, port, shareAll}`,
-  `terminal: {height, folders, agentCommand}`) and `agent.json` (`{version: 1, token}`, written
+  `terminal: {dock, height, width, folders, agentCommand}`) and `agent.json` (`{version: 1, token}`, written
   `0o600`). Per-terminal MCP configs live in `agent-mcp/` (`0o600`, deleted with the terminal and
   cleared on start). Pure file formats live in their own tested modules.
   The ad blocker's engine is cached separately as `adblock-engine.bin` (binary, not a JsonStore).
@@ -110,11 +112,15 @@ Run `bun run typecheck`, `bun test` and `bun run lint` before calling work done.
 | `agent-tools.ts` | The MCP server and tab tools (list/open/select/close tabs, navigate, screenshot, page text, evaluate) |
 | `agent-page-tools.ts` | Page tools: read_page/find (refs), click, hover, type, fill, select_option, press_key, scroll, wait_for, handle_dialog |
 | `agent-debug-tools.ts` | Debug tools: console_messages, network_requests/network_request, inspect, set_style/set_attribute, emulate, clear_site_data |
+| `agent-picks.ts` | Picks: capturing an element pick or an errors pick, an element's source line, the `get_picks` tool |
 | `agent-tool-helpers.ts` | What tools share: `AgentContext`, tabId input, inspectable check, load waiting |
-| `tab-debug.ts` | `TabDebug`: the debugger on one shared tab, its console and network logs, and emulation |
-| `console-log.ts` | Pure: console entries from CDP events (console, exceptions, browser log), ring buffer, filters |
+| `tab-debug.ts` | `TabDebug`: the debugger on one shared tab, its console and network logs, source maps, new-errors count, emulation, pick mode |
+| `console-log.ts` | Pure: console entries from CDP events (console, exceptions, browser log), ring buffer, filters, source-mapped formatting |
+| `source-maps.ts` | Pure: `SourceMaps` (script → map, maps loaded once), original positions, project-relative source names, places in stack text |
+| `component-source.ts` | Pure: where an element is written, from React/Vue/Svelte dev builds (the page's answer checked) |
+| `picks.ts` | Pure: the picks list, how picks read to agents, the prompt typed into the terminal |
 | `network-log.ts` | Pure: requests from Network events, filters, network idle, credentials redacted |
-| `element-inspect.ts` | Pure: inspect's box model, computed styles and matching CSS rules with file and line |
+| `element-inspect.ts` | Pure: inspect's box model, computed styles and matching CSS rules with file and line (source maps, Vite's injected styles) |
 | `emulation.ts` | Pure: device and network presets, emulation state, the address bar badge's label |
 | `ax-tree.ts` | Pure: the accessibility tree as compact text with refs (backend DOM node ids); find |
 | `cdp-keys.ts` | Pure: "Control+a" → CDP key events; refuses keys that are Nebula shortcuts |
@@ -205,11 +211,22 @@ space for the native controls.
   shown as `REDACTED`. What an agent emulates (device, colour scheme, network) shows as a badge in
   the address bar that resets it, and ends with Stop. `clear_site_data` runs only after the user
   agrees in a dialog (one question at a time).
+  **Page ↔ source:** the Debugger domain is on in shared tabs only for `scriptParsed` (source
+  maps) and must never pause a page: `setSkipAllPauses`, sent again on every new page (Chromium
+  drops it on a renderer swap), and any pause that slips through is resumed. Source maps are
+  inline `data:` or fetched by main through the tab's session, http(s) on the script's own origin
+  only, size-capped (`source-maps.ts`). An element's source line comes from the framework's dev
+  data in the page's main world, so it's untrusted and checked (`parseComponentSource`).
+  **Picks:** the user picks an element (Ctrl+Shift+X, the agent menu, or "Send to agent" in the
+  page menu; Esc cancels) or sends a shared tab's new errors (the address bar's errors badge);
+  picking shares the tab. Picks stay in memory (newest 20), agents read them with `get_picks`,
+  and if a Claude started from the terminal panel works on that tab, "Look at … (pick N): " is
+  typed into its prompt, never sent. Agents can't pick (Ctrl+Shift+X is a refused shortcut).
 - **Terminal** (`terminals.ts`): shells run as the user, so only the user starts them (panel,
   Ctrl+`); no page and no agent tool can. The terminal view is sandboxed, can't navigate or open
   windows, and its messages are size-checked (input ≤ 64 KB). The shell's environment drops
   `ELECTRON_*`; the agent token is never put in it (only the config file has it). Keys go to the
-  shell except Ctrl+`, Ctrl+Shift+`, tab switching and fullscreen.
+  shell except Ctrl+`, Ctrl+Shift+`, tab switching, fullscreen and Ctrl+Shift+X (pick).
 
 ## Roadmap
 - **Milestone 1 (done):** frameless window, back/forward/reload-stop, address bar, title sync,
@@ -218,8 +235,9 @@ space for the native controls.
 - **Browser essentials (done):** tabs, page essentials, permissions, downloads, bookmarks, ad
   blocker — [docs/plans/browser-essentials.md](docs/plans/browser-essentials.md).
 - **Agent browser (approved; the main purpose from now on):** Phases 1 (agent bridge), 2 (read and
-  act: refs, click, type, forms, keys, dialogs), 3 (debug: console, network, inspect, emulate) and
-  5 (terminal panel) done; next Phases 4 and 6 (page ↔ source: source maps, picks; docs) — [docs/plans/agent-browser.md](docs/plans/agent-browser.md).
+  act: refs, click, type, forms, keys, dialogs), 3 (debug: console, network, inspect, emulate),
+  4 (page ↔ source: source maps, picks, errors badge) and 5 (terminal panel) done; next Phase 6
+  (docs) — [docs/plans/agent-browser.md](docs/plans/agent-browser.md).
 - **Creator browser (parked):** capture, studio mode, device preview, profiles, clips panel,
   Claude/ChatGPT handoff — [docs/plans/creator-browser.md](docs/plans/creator-browser.md).
 - **Later (don't start until asked):** history + address suggestions, session restore, design pass

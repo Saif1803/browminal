@@ -15,19 +15,23 @@ export interface ThemeColors {
   internalPage: string
   /** --color-console: the terminal panel, behind the shell's text. */
   console: string
+  /** --color-accent: the highlight while the user picks an element for an agent. */
+  accent: string
 }
 
 const DARK: ThemeColors = {
   strip: '#1f1e1d',
   symbol: '#c2c0b6',
   internalPage: '#262624',
-  console: '#191817'
+  console: '#191817',
+  accent: '#d97757'
 }
 const LIGHT: ThemeColors = {
   strip: '#f0eee6',
   symbol: '#3d3d3a',
   internalPage: '#faf9f5',
-  console: '#fdfcf9'
+  console: '#fdfcf9',
+  accent: '#b85a3a'
 }
 
 /** Light or dark follows the OS setting, like the Claude desktop app. */

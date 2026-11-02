@@ -56,7 +56,19 @@ export interface SheetInfo {
   startLine: number
   isInline: boolean
   isConstructed: boolean
+  /** Vite in dev: the CSS file an injected <style> holds (its data-vite-dev-id). */
+  file?: string
 }
+
+/** Where a rule starts in its stylesheet's own text, 1-based: what its source map is read at. */
+export interface RulePlace {
+  styleSheetId: string
+  line: number
+  column: number
+}
+
+/** The original file and line of a rule ("src/Cart.module.css:12:1"), or null when unknown. */
+export type RuleLookup = (place: RulePlace) => string | null
 
 interface CssProperty {
   name: string
@@ -72,7 +84,7 @@ interface CssProperty {
 interface CssStyle {
   styleSheetId?: string
   cssProperties?: CssProperty[]
-  range?: { startLine: number }
+  range?: { startLine: number; startColumn?: number }
 }
 
 interface CssRule {
@@ -170,31 +182,57 @@ export function formatComputed(
 const declared = (property: CssProperty): boolean =>
   !property.disabled && (property.text !== undefined || property.range !== undefined)
 
+const placeOf = (rule: CssRule): RulePlace | null =>
+  rule.styleSheetId && rule.style?.range
+    ? {
+        styleSheetId: rule.styleSheetId,
+        line: rule.style.range.startLine + 1,
+        column: (rule.style.range.startColumn ?? 0) + 1
+      }
+    : null
+
+/** Where each author rule starts, to look up in the stylesheets' source maps first. */
+export function rulePlaces(matched: MatchedStyles): RulePlace[] {
+  return (matched.matchedCSSRules ?? [])
+    .filter(({ rule }) => !rule.origin || rule.origin === 'regular')
+    .map(({ rule }) => placeOf(rule))
+    .filter((place) => place !== null)
+}
+
 function location(
-  styleSheetId: string | undefined,
-  style: CssStyle | undefined,
+  rule: CssRule,
   sheets: ReadonlyMap<string, SheetInfo>,
-  documentUrl: string
+  documentUrl: string,
+  lookup: RuleLookup
 ): string {
-  const sheet = styleSheetId ? sheets.get(styleSheetId) : undefined
+  const sheet = rule.styleSheetId ? sheets.get(rule.styleSheetId) : undefined
   if (!sheet) return 'unknown stylesheet'
+  const place = placeOf(rule)
+  const original = place && lookup(place)
+  if (original) return original
   if (sheet.isConstructed) return 'constructed stylesheet (adoptedStyleSheets)'
+  if (sheet.file) {
+    const line = place ? ` (line ${place.line} of the CSS Vite serves for it)` : ''
+    return `${sheet.file}${line}`
+  }
   const url = sheet.sourceURL || documentUrl
   const where = sheet.isInline && !sheet.sourceURL ? `${url} (inline <style>)` : url
-  if (!style?.range) return where
-  return `${where}:${sheet.startLine + style.range.startLine + 1}`
+  if (!place) return where
+  return `${where}:${sheet.startLine + place.line}`
 }
 
 /**
  * The rules that match an element, most specific first like DevTools' Styles pane, each with
- * where it's written. A declaration a later one beats is marked overridden (by name only:
- * shorthand vs longhand isn't worked out, so the computed styles have the last word).
- * Browser defaults and Nebula's own styles are left out, and counted.
+ * where it's written (`lookup` gives the original file from a source map). A declaration a later
+ * one beats is marked overridden (by name only: shorthand vs longhand isn't worked out, so the
+ * computed styles have the last word). Browser defaults and Nebula's own styles are left out,
+ * and counted.
  */
 export function formatMatchedStyles(
   matched: MatchedStyles,
   sheets: ReadonlyMap<string, SheetInfo>,
-  documentUrl: string
+  documentUrl: string,
+  lookup: RuleLookup = () => null
 ): string {
   interface Block {
     head: string
@@ -212,7 +250,7 @@ export function formatMatchedStyles(
     }
     blocks.push({
       head: rule.selectorList?.text ?? '(rule)',
-      where: location(rule.styleSheetId, rule.style, sheets, documentUrl),
+      where: location(rule, sheets, documentUrl, lookup),
       media: (rule.media ?? []).map((m) => m.text ?? '').filter(Boolean),
       properties: (rule.style?.cssProperties ?? []).filter(declared)
     })

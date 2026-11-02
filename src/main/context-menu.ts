@@ -6,7 +6,7 @@ import {
   type WebContents
 } from 'electron'
 import { SEARCH_URL, isHttpUrl } from '../shared/url'
-import type { TabManager } from './tab-manager'
+import { canInspect } from './agent-policy'
 import type { Tab } from './tabs'
 import type { MainWindow } from './window'
 
@@ -49,7 +49,7 @@ function editItems(wc: WebContents, params: ContextMenuParams): MenuItemConstruc
 
 /** Right-click in a page. */
 function pageMenu(
-  tabs: TabManager,
+  { tabs, agent }: MainWindow,
   tab: Tab,
   params: ContextMenuParams
 ): MenuItemConstructorOptions[] | null {
@@ -109,6 +109,14 @@ function pageMenu(
   const inspect: MenuItemConstructorOptions[] = [
     { label: 'Inspect', click: () => tab.inspectElement(params.x, params.y) }
   ]
+  if (canInspect(wc.getURL())) {
+    // params are in the view's DIPs; the page's CSS px differ by its zoom.
+    const zoom = wc.getZoomFactor()
+    inspect.unshift({
+      label: 'Send to agent',
+      click: () => void agent.pickAt(tab.id, params.x / zoom, params.y / zoom)
+    })
+  }
 
   return joinSections([
     spellingItems(wc, params),
@@ -125,7 +133,8 @@ function pageMenu(
  * Native context menus: the full menu in pages, and cut/copy/paste in the UI's text fields
  * (the address bar and find bar). Everything else in the UI gets no menu.
  */
-export function registerContextMenus({ window, tabs }: MainWindow): void {
+export function registerContextMenus(main: MainWindow): void {
+  const { window, tabs } = main
   const ui = window.webContents
   const popup = (template: MenuItemConstructorOptions[] | null): void => {
     if (template && !window.isDestroyed()) Menu.buildFromTemplate(template).popup({ window })
@@ -135,6 +144,6 @@ export function registerContextMenus({ window, tabs }: MainWindow): void {
     popup(joinSections([spellingItems(ui, params), editItems(ui, params)]))
   })
   tabs.onTabCreated((tab) => {
-    tab.webContents.on('context-menu', (_event, params) => popup(pageMenu(tabs, tab, params)))
+    tab.webContents.on('context-menu', (_event, params) => popup(pageMenu(main, tab, params)))
   })
 }

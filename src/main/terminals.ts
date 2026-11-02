@@ -4,7 +4,7 @@ import { homedir } from 'os'
 import { join } from 'path'
 import { is } from '@electron-toolkit/utils'
 import { spawn, type IPty } from '@lydell/node-pty'
-import { PAGE_RADIUS, type Rect } from '../shared/layout'
+import { PAGE_RADIUS, panelPlacement, type PanelDock, type Rect } from '../shared/layout'
 import { TerminalViewChannel } from '../shared/terminal-view'
 import type { TerminalPanelState, TerminalSession } from '../shared/types'
 import { isHttpUrl } from '../shared/url'
@@ -114,9 +114,12 @@ export class Terminals {
   }
 
   getState(): TerminalPanelState {
+    const { dock, height, width } = this.settings.get().terminal
     return {
       open: this.isOpen,
-      height: this.settings.get().terminal.height,
+      dock,
+      height,
+      width,
       sessions: this.sessions.map(({ id, title, tabId, cwd, exited }) => ({
         id,
         title,
@@ -208,12 +211,23 @@ export class Terminals {
     this.changed()
   }
 
-  /** The panel's height from the UI's drag (clamped again by the layout). */
-  setHeight(px: number): void {
+  /** The panel's size across its dock, from the UI's drag (clamped again by the layout). */
+  setSize(px: number): void {
     const settings = this.settings.get()
-    if (settings.terminal.height === px) return
-    this.settings.set({ ...settings, terminal: { ...settings.terminal, height: px } })
-    if (this.isOpen) this.tabs.setPanelHeight(px)
+    const key = settings.terminal.dock === 'bottom' ? 'height' : 'width'
+    if (settings.terminal[key] === px) return
+    this.settings.set({ ...settings, terminal: { ...settings.terminal, [key]: px } })
+    this.placePanel()
+    this.changed()
+  }
+
+  /** Moves the panel under the page or to its right; it keeps the size it last had there. */
+  setDock(dock: PanelDock): void {
+    const settings = this.settings.get()
+    if (settings.terminal.dock === dock) return
+    this.settings.set({ ...settings, terminal: { ...settings.terminal, dock } })
+    this.placePanel()
+    this.focus()
     this.changed()
   }
 
@@ -244,6 +258,24 @@ export class Terminals {
     const { agentCommand } = this.settings.get().terminal
     session.pty.write(`${agentCommandLine(agentCommand, configPath, session.shell.kind)}\r`)
     this.select(id)
+  }
+
+  /**
+   * Types `text` into the prompt of the agent started with the Claude button in a terminal that
+   * works on tab `tabId` (the active one if several), without sending it, and shows that
+   * terminal. False when no such agent runs.
+   */
+  typeForAgent(tabId: number, text: string): boolean {
+    const agents = this.sessions.filter(
+      (session) => session.tabId === tabId && session.configPath !== null && !session.exited
+    )
+    const session = agents.find((other) => other.id === this.activeId) ?? agents.at(-1)
+    if (!session) return false
+    session.pty.write(text)
+    this.activeId = session.id
+    this.sendSessions()
+    this.show()
+    return true
   }
 
   /** Asks for a project folder, remembers it for the active tab's site, opens a terminal there. */
@@ -327,16 +359,21 @@ export class Terminals {
 
   private show(): void {
     this.isOpen = true
-    this.tabs.setPanelHeight(this.settings.get().terminal.height)
+    this.placePanel()
     this.focus()
     this.changed()
   }
 
   private hide(): void {
     this.isOpen = false
-    this.tabs.setPanelHeight(null)
+    this.tabs.setPanel(null)
     if (!this.window.isDestroyed()) this.tabs.active.webContents.focus()
     this.changed()
+  }
+
+  /** Tells the layout where the open panel goes and how big it is. */
+  private placePanel(): void {
+    if (this.isOpen) this.tabs.setPanel(panelPlacement(this.settings.get().terminal))
   }
 
   /** Puts the view where the layout says, or takes it off screen (panel hidden, fullscreen page). */

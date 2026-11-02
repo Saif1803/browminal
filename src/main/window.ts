@@ -122,7 +122,8 @@ export function createMainWindow(
         ...active,
         isBookmarked: bookmarks.isBookmarked(active.url),
         shield: adblock.shieldFor(active.url, tabs.active.webContents),
-        emulation: agent.emulationOf(active.id)
+        emulation: agent.emulationOf(active.id),
+        errors: agent.errorsOf(active.id)
       },
       downloads: downloads.getState(),
       bookmarks: [...bookmarks.all],

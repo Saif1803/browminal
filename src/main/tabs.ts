@@ -81,7 +81,10 @@ export interface TabHooks {
 }
 
 /** What a tab knows about itself for the toolbar; the window adds the star and the shield. */
-export type TabActiveState = Omit<ActiveTabState, 'isBookmarked' | 'shield' | 'emulation'>
+export type TabActiveState = Omit<
+  ActiveTabState,
+  'isBookmarked' | 'shield' | 'emulation' | 'errors'
+>
 
 export interface OpenRequest {
   /**

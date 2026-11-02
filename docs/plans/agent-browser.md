@@ -17,8 +17,19 @@ with it; emulation presets are iPhone 15, Pixel 8 and iPad Air, networks offline
 fast 3G; the emulation badge resets it when clicked. Not built: CPU throttling, and the rule
 locations of Vite's injected `<style>` tags point at the page, not the `.css` file (Phase 4's
 source maps).
+**Phase 4 done** 2026-11-02, checked with Claude Code finding the line behind a picked button
+in a Vite + React 19 test app (dev server and minified build). Differences from the text below:
+an element's source line comes from React's `_debugSource` (≤18) or `_debugStack` (19, resolved
+through source maps), Vue's `__file` (file only) and Svelte's `__svelte_meta`; `inspect` shows it
+too. CSS rules map through a stylesheet's source map, and Vite's injected `<style>`s name their
+file (`data-vite-dev-id`). "Send to agent" is in the page's right-click menu (it picks the
+element under the pointer); there is no tab right-click menu yet. The errors badge counts the
+page's uncaught errors and `console.error` since it loaded, until they're sent, dismissed or an
+agent reads them; it lives in the address bar, with a native placeholder menu. Picks are typed
+into the terminal agent's prompt (the Phase 5 item). Not built: original function names for
+minified frames (the stack shows the minified name with the original file and line).
 **Phase 5 done** 2026-11-02, moved ahead of Phases 2–4 at your request ("a literal terminal in the
-browser"). Differences from the text below: the panel sits at the bottom only (no right dock); the
+browser"). Differences from the text below: the panel docks at the bottom or on the right; the
 UI draws its header row and main lays the page out with `windowLayout` (no `setChromeInsets`);
 the terminal's agent finds its tab through an `x-nebula-terminal` header in its MCP config
 instead of environment variables; picks (Phase 4) don't exist yet, so nothing is typed into the

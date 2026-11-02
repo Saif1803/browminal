@@ -1,6 +1,13 @@
 import { MAX_PAUSED_SITES, isSite } from './adblock-policy'
 import { DEFAULT_AGENT_PORT, isAgentPort } from './agent-policy'
-import { TERMINAL_DEFAULT_HEIGHT, TERMINAL_MIN_HEIGHT } from '../shared/layout'
+import {
+  isPanelDock,
+  TERMINAL_DEFAULT_HEIGHT,
+  TERMINAL_DEFAULT_WIDTH,
+  TERMINAL_MIN_HEIGHT,
+  TERMINAL_MIN_WIDTH,
+  type PanelDock
+} from '../shared/layout'
 import {
   DEFAULT_AGENT_COMMAND,
   isAgentCommand,
@@ -26,8 +33,12 @@ export interface AgentSettings {
 }
 
 export interface TerminalSettings {
-  /** The panel's height in px, header included. */
+  /** Under the page or to its right. */
+  dock: PanelDock
+  /** The panel's height in px at the bottom, header included. */
   height: number
+  /** The panel's width in px on the right. */
+  width: number
   /** Project folders by site (origin): new terminals for that site start there. */
   folders: Record<string, string>
   /** What the panel's Claude button runs (with --mcp-config added). */
@@ -46,7 +57,13 @@ export const DEFAULT_SETTINGS: Settings = {
   bookmarksBarVisible: true,
   adblock: { enabled: true, pausedSites: [] },
   agent: { enabled: false, port: DEFAULT_AGENT_PORT, shareAll: false },
-  terminal: { height: TERMINAL_DEFAULT_HEIGHT, folders: {}, agentCommand: DEFAULT_AGENT_COMMAND }
+  terminal: {
+    dock: 'bottom',
+    height: TERMINAL_DEFAULT_HEIGHT,
+    width: TERMINAL_DEFAULT_WIDTH,
+    folders: {},
+    agentCommand: DEFAULT_AGENT_COMMAND
+  }
 }
 
 const asRecord = (value: unknown): Record<string, unknown> =>
@@ -74,23 +91,23 @@ function parseAgent(raw: unknown): AgentSettings {
   }
 }
 
-const MAX_TERMINAL_HEIGHT = 4000
+const MAX_TERMINAL_SIZE = 4000
+
+const sizeOr = (value: unknown, min: number, fallback: number): number =>
+  typeof value === 'number' && Number.isInteger(value) && value >= min && value <= MAX_TERMINAL_SIZE
+    ? value
+    : fallback
 
 function parseTerminal(raw: unknown): TerminalSettings {
   const input = asRecord(raw)
   const defaults = DEFAULT_SETTINGS.terminal
-  const { height } = input
   const folders = Object.entries(asRecord(input.folders))
     .filter(([site, folder]) => siteKey(site) === site && isFolderPath(folder))
     .slice(0, MAX_REMEMBERED_FOLDERS)
   return {
-    height:
-      typeof height === 'number' &&
-      Number.isInteger(height) &&
-      height >= TERMINAL_MIN_HEIGHT &&
-      height <= MAX_TERMINAL_HEIGHT
-        ? height
-        : defaults.height,
+    dock: isPanelDock(input.dock) ? input.dock : defaults.dock,
+    height: sizeOr(input.height, TERMINAL_MIN_HEIGHT, defaults.height),
+    width: sizeOr(input.width, TERMINAL_MIN_WIDTH, defaults.width),
     folders: Object.fromEntries(folders) as Record<string, string>,
     agentCommand: isAgentCommand(input.agentCommand) ? input.agentCommand : defaults.agentCommand
   }

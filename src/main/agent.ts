@@ -1,11 +1,13 @@
 import { app, dialog } from 'electron'
 import { join } from 'path'
-import type { AgentState } from '../shared/types'
+import type { AgentState, PickNotice } from '../shared/types'
 import { newAgentToken, parseAgentFile, toAgentFile, type AgentFile } from './agent-auth'
-import { defaultAgentTab, type AgentTab } from './agent-policy'
+import { captureElementPick, captureErrorsPick } from './agent-picks'
+import { canInspect, defaultAgentTab, type AgentTab } from './agent-policy'
 import { startAgentServer, type AgentServer } from './agent-server'
 import { createAgentMcp, type AgentContext } from './agent-tools'
 import type { Settings } from './settings'
+import { PickList, pickPrompt, type NewPick } from './picks'
 import { JsonStore } from './store'
 import { TabDebug } from './tab-debug'
 import type { Tab } from './tabs'
@@ -15,6 +17,8 @@ import type { MainWindow } from './window'
 const WORKING_LINGER_MS = 2000
 // How long whenListening waits for the server to start.
 const START_TIMEOUT_MS = 10_000
+// How long the toolbar says what became of a pick.
+const PICK_NOTICE_MS = 6000
 
 /** Who's calling: the id of the Nebula terminal an agent runs in, or null for any other agent. */
 type Client = number | null
@@ -43,6 +47,11 @@ export class Agent {
   private asking = false
   private working: number | null = null
   private workingTimer: NodeJS.Timeout | null = null
+  /** What the user picked to show agents (get_picks). */
+  private readonly picks = new PickList()
+  private picking: number | null = null
+  private pickNotice: PickNotice | null = null
+  private pickNoticeTimer: NodeJS.Timeout | null = null
   private readonly listeners = new Set<() => void>()
 
   constructor(
@@ -90,7 +99,9 @@ export class Agent {
       port: this.port,
       error: this.error,
       shareAll: this.shareAll,
-      working: this.working
+      working: this.working,
+      picking: this.picking,
+      pick: this.pickNotice
     }
   }
 
@@ -154,6 +165,78 @@ export class Agent {
     await this.debuggers.get(tabId)?.emulate('reset')
   }
 
+  /**
+   * Ctrl+Shift+X: the user picks an element on tab `tabId` (DevTools' inspect highlight; the
+   * next click picks), or stops picking. Picking shares the tab: the pick is for agents.
+   */
+  async togglePicking(tabId: number): Promise<void> {
+    if (this.picking === tabId) return this.cancelPicking()
+    this.cancelPicking()
+    const tab = this.getMain()?.tabs.get(tabId)
+    if (!tab || !canInspect(tab.webContents.getURL())) return
+    this.share(tabId)
+    const debug = this.debugOf(tab)
+    this.picking = tabId
+    this.changed()
+    try {
+      await debug.startPicking((ref) => {
+        if (this.picking === tabId) {
+          this.picking = null
+          this.changed()
+        }
+        if (ref !== null) this.pickElement(tabId, ref)
+      })
+    } catch (error) {
+      if (this.picking === tabId) this.picking = null
+      this.notify({ id: null, kind: 'element', typed: false, error: (error as Error).message })
+    }
+  }
+
+  /** Esc, or Cancel in the toolbar. */
+  cancelPicking(): void {
+    if (this.picking === null) return
+    const tabId = this.picking
+    this.picking = null
+    this.debuggers.get(tabId)?.endPicking(null)
+    this.changed()
+  }
+
+  /** "Send to agent" in a page's right-click menu: the element at (x, y), in CSS px. */
+  async pickAt(tabId: number, x: number, y: number): Promise<void> {
+    const tab = this.getMain()?.tabs.get(tabId)
+    if (!tab || !canInspect(tab.webContents.getURL())) return
+    this.share(tabId)
+    try {
+      const { backendNodeId } = await this.debugOf(tab).cdp.send<{ backendNodeId: number }>(
+        'DOM.getNodeForLocation',
+        { x: Math.round(x), y: Math.round(y), ignorePointerEventsNone: true }
+      )
+      this.pickElement(tabId, backendNodeId)
+    } catch (error) {
+      this.notify({ id: null, kind: 'element', typed: false, error: (error as Error).message })
+    }
+  }
+
+  /** The errors badge: how many new errors tab `tabId`'s page has (0 unless it's shared). */
+  errorsOf(tabId: number): number {
+    return this.isShared(tabId) ? (this.debuggers.get(tabId)?.newErrors.length ?? 0) : 0
+  }
+
+  /** The errors badge's "Send to agent": the page's new errors become a pick. */
+  async sendErrors(tabId: number): Promise<void> {
+    const tab = this.getMain()?.tabs.get(tabId)
+    const debug = this.debuggers.get(tabId)
+    if (!tab || !debug || !this.isShared(tabId)) return
+    const capture = captureErrorsPick(tab, debug)
+    debug.markErrorsSeen()
+    await this.addPick(capture, 'errors')
+  }
+
+  /** The errors badge's "Dismiss". */
+  dismissErrors(tabId: number): void {
+    this.debuggers.get(tabId)?.markErrorsSeen()
+  }
+
   /** A new token: agents set up with the old one are refused from the next request on. */
   renewToken(): void {
     this.tokens.set({ token: newAgentToken() })
@@ -193,6 +276,10 @@ export class Agent {
       this.shared.delete(tab.id)
       this.opened.delete(tab.id)
       this.debuggers.delete(tab.id)
+      if (this.picking === tab.id) {
+        this.picking = null
+        this.changed()
+      }
       for (const [client, id] of this.lastTabs) if (id === tab.id) this.lastTabs.delete(client)
     })
   }
@@ -223,7 +310,8 @@ export class Agent {
         this.getMain()?.tabs.activate(tab.id)
         this.lastTabs.set(client, tab.id)
         return tab
-      }
+      },
+      picks: () => this.picks
     }
   }
 
@@ -266,6 +354,40 @@ export class Agent {
       debug.start()
     }
     return debug
+  }
+
+  private pickElement(tabId: number, ref: number): void {
+    const tab = this.getMain()?.tabs.get(tabId)
+    const debug = this.debuggers.get(tabId)
+    if (!tab || !debug) return
+    void this.addPick(captureElementPick(tab, debug, ref), 'element')
+  }
+
+  /** Keeps a pick and hands it to the agent in the tab's Nebula terminal, if one runs there. */
+  private async addPick(capture: Promise<NewPick | null>, kind: PickNotice['kind']): Promise<void> {
+    let pick
+    try {
+      const captured = await capture
+      if (!captured) return
+      pick = this.picks.add(captured)
+    } catch (error) {
+      this.notify({ id: null, kind, typed: false, error: (error as Error).message })
+      return
+    }
+    const typed = this.getMain()?.terminals.typeForAgent(pick.tabId, pickPrompt(pick)) ?? false
+    this.notify({ id: pick.id, kind, typed, error: null })
+  }
+
+  /** Shows what became of a pick in the toolbar for a few seconds. */
+  private notify(notice: PickNotice): void {
+    this.pickNotice = notice
+    if (this.pickNoticeTimer) clearTimeout(this.pickNoticeTimer)
+    this.pickNoticeTimer = setTimeout(() => {
+      this.pickNoticeTimer = null
+      this.pickNotice = null
+      this.changed()
+    }, PICK_NOTICE_MS)
+    this.changed()
   }
 
   /** Attaches to a tab that was just shared, so its console and network are kept from now on. */

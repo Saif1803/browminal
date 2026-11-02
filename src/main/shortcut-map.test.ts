@@ -96,6 +96,8 @@ describe('commandForInput', () => {
     expect(mac(press('b', { ...cmd, shift: true }))).toBe('toggleBookmarksBar')
     expect(win(press('A', { ...ctrl, shift: true }))).toBe('toggleAgentShare')
     expect(mac(press('a', { ...cmd, shift: true }))).toBe('toggleAgentShare')
+    expect(win(press('X', { ...ctrl, shift: true }))).toBe('pickElement')
+    expect(mac(press('x', { ...cmd, shift: true }))).toBe('pickElement')
   })
 
   test('Ctrl+` toggles the terminal (Ctrl on macOS too); with Shift, a new one', () => {

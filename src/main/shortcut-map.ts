@@ -24,6 +24,7 @@ type SimpleCommand =
   | 'bookmark'
   | 'toggleBookmarksBar'
   | 'toggleAgentShare'
+  | 'pickElement'
   | 'toggleTerminal'
   | 'newTerminal'
 
@@ -66,7 +67,8 @@ const COMMON: Record<string, SimpleCommand> = {
   'Mod+0': 'zoomReset',
   'Mod+d': 'bookmark',
   'Mod+Shift+b': 'toggleBookmarksBar',
-  'Mod+Shift+a': 'toggleAgentShare'
+  'Mod+Shift+a': 'toggleAgentShare',
+  'Mod+Shift+x': 'pickElement'
 }
 
 const BY_PLATFORM: Record<Platform, Record<string, SimpleCommand>> = {

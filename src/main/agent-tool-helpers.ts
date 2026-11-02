@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { parseErrorPageUrl } from '../shared/url'
 import { canInspect, type AgentTab } from './agent-policy'
 import type { CdpSession } from './cdp'
+import type { PickList } from './picks'
 import type { TabDebug } from './tab-debug'
 import type { Tab } from './tabs'
 
@@ -28,6 +29,8 @@ export interface AgentContext {
   closeTab(tabId: number): void
   /** Brings a shared tab to the front and makes it the default for the next tools. */
   selectTab(tabId: number): Tab
+  /** What the user picked to show agents. */
+  picks(): PickList
 }
 
 export const text = (value: string): { content: { type: 'text'; text: string }[] } => ({

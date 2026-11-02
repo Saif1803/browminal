@@ -1,3 +1,5 @@
+import type { PanelDock } from './layout'
+
 /** One entry in the tab strip. */
 export interface TabSummary {
   id: number
@@ -40,6 +42,8 @@ export interface ActiveTabState {
   shield: ShieldState | null
   /** What an agent is emulating on this tab ("iPhone 15 · dark · offline"), or null. */
   emulation: string | null
+  /** New errors on a shared tab's page (uncaught or console.error) not yet sent or read; 0 if none. */
+  errors: number
 }
 
 /**
@@ -101,6 +105,21 @@ export interface AgentState {
   shareAll: boolean
   /** The tab an agent is acting on right now (and for a moment after), or null. */
   working: number | null
+  /** The tab the user is picking an element on for agents (Ctrl+Shift+X), or null. */
+  picking: number | null
+  /** What became of the user's last pick, for a few seconds after it; null otherwise. */
+  pick: PickNotice | null
+}
+
+/** A pick the user just made (an element, or a page's errors) and where it went. */
+export interface PickNotice {
+  /** Its number, which agents read it by (get_picks); null when it failed. */
+  id: number | null
+  kind: 'element' | 'errors'
+  /** It was typed into the prompt of the agent running in a Nebula terminal on that tab. */
+  typed: boolean
+  /** Why it failed, or null. */
+  error: string | null
 }
 
 /** One shell in the terminal panel. */
@@ -116,11 +135,15 @@ export interface TerminalSession {
   exited: boolean
 }
 
-/** The terminal panel under the page, like an IDE's. */
+/** The terminal panel under the page or beside it, like an IDE's. */
 export interface TerminalPanelState {
   open: boolean
-  /** Height in px, the header included (see terminalLayout). */
+  /** Where it sits; each dock keeps its own size. */
+  dock: PanelDock
+  /** Height in px at the bottom, the header included (see windowLayout). */
   height: number
+  /** Width in px on the right. */
+  width: number
   sessions: TerminalSession[]
   activeId: number | null
 }
@@ -187,6 +210,10 @@ export interface BrowserApi {
   stopAgent(id: number): Promise<void>
   /** The emulation badge: tab `id` goes back to its own size, colours and network. */
   resetEmulation(id: number): Promise<void>
+  /** Stops picking an element (Esc does too). */
+  cancelPick(): Promise<void>
+  /** The errors badge: send the active tab's new errors to the agent, or dismiss them, at (x, y). */
+  showErrorsMenu(x: number, y: number): Promise<void>
 
   // The terminal panel.
   /** Ctrl+`: opens the panel (with a terminal for the active tab if there is none), or closes it. */
@@ -195,8 +222,10 @@ export interface BrowserApi {
   newTerminal(): Promise<void>
   closeTerminal(id: number): Promise<void>
   selectTerminal(id: number): Promise<void>
-  /** Dragging the panel's top edge; main clamps it to the window. */
-  setTerminalHeight(px: number): Promise<void>
+  /** Resizing the panel (its height at the bottom, its width on the right); main clamps it. */
+  setTerminalSize(px: number): Promise<void>
+  /** Moves the panel under the page or to its right. */
+  setTerminalDock(dock: PanelDock): Promise<void>
   /** Points terminal `id` (and its agent) at the active tab. */
   attachTerminal(id: number): Promise<void>
   /** Shares the terminal's tab and starts the agent command (claude) in it, connected to Nebula. */
@@ -245,12 +274,15 @@ export const IpcChannel = {
   ShowAgentMenu: 'agent:show-menu',
   StopAgent: 'agent:stop',
   ResetEmulation: 'agent:reset-emulation',
+  CancelPick: 'agent:cancel-pick',
+  ShowErrorsMenu: 'agent:show-errors-menu',
   SetChromeHeight: 'ui:set-chrome-height',
   ToggleTerminal: 'terminal:toggle',
   NewTerminal: 'terminal:new',
   CloseTerminal: 'terminal:close',
   SelectTerminal: 'terminal:select',
-  SetTerminalHeight: 'terminal:set-height',
+  SetTerminalSize: 'terminal:set-size',
+  SetTerminalDock: 'terminal:set-dock',
   AttachTerminal: 'terminal:attach',
   StartAgentInTerminal: 'terminal:start-agent',
   ChooseTerminalFolder: 'terminal:choose-folder',

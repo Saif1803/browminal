@@ -112,6 +112,28 @@ export const ChevronDownIcon = (p: IconProps): React.JSX.Element => (
   </Icon>
 )
 
+export const ChevronRightIcon = (p: IconProps): React.JSX.Element => (
+  <Icon {...p}>
+    <path d="M9 6l6 6-6 6" />
+  </Icon>
+)
+
+/** A window split top and bottom: the panel under the page. */
+export const PanelBottomIcon = (p: IconProps): React.JSX.Element => (
+  <Icon strokeWidth="1.9" {...p}>
+    <rect x="3.5" y="4" width="17" height="16" rx="2.5" />
+    <path d="M3.5 14.5h17" />
+  </Icon>
+)
+
+/** A window split left and right: the panel beside the page. */
+export const PanelRightIcon = (p: IconProps): React.JSX.Element => (
+  <Icon strokeWidth="1.9" {...p}>
+    <rect x="3.5" y="4" width="17" height="16" rx="2.5" />
+    <path d="M14.5 4v16" />
+  </Icon>
+)
+
 export const DownloadIcon = (p: IconProps): React.JSX.Element => (
   <Icon {...p}>
     <path d="M12 4v11M7 10.5l5 5 5-5" />
@@ -149,6 +171,22 @@ export const AgentIcon = (p: IconProps): React.JSX.Element => (
   <Icon strokeWidth="1.9" {...p}>
     <path d="M12 3.5c.6 4.2 2.3 5.9 6.5 6.5-4.2.6-5.9 2.3-6.5 6.5-.6-4.2-2.3-5.9-6.5-6.5 4.2-.6 5.9-2.3 6.5-6.5z" />
     <path d="M18.5 15.5c.25 1.6.9 2.25 2.5 2.5-1.6.25-2.25.9-2.5 2.5-.25-1.6-.9-2.25-2.5-2.5 1.6-.25 2.25-.9 2.5-2.5z" />
+  </Icon>
+)
+
+/** A warning triangle: the page's errors badge. */
+export const ErrorIcon = (p: IconProps): React.JSX.Element => (
+  <Icon strokeWidth="2" {...p}>
+    <path d="M10.3 4.2 2.6 17.5A2 2 0 0 0 4.3 20.5h15.4a2 2 0 0 0 1.7-3L13.7 4.2a2 2 0 0 0-3.4 0z" />
+    <path d="M12 9.5v4M12 17h.01" />
+  </Icon>
+)
+
+/** A pointer on a box: picking an element for agents. */
+export const PickIcon = (p: IconProps): React.JSX.Element => (
+  <Icon strokeWidth="1.9" {...p}>
+    <path d="M10 20.5H5.5a2 2 0 0 1-2-2v-13a2 2 0 0 1 2-2h13a2 2 0 0 1 2 2V10" />
+    <path d="M13 13l2.6 8 1.6-3.4 3.4-1.6z" />
   </Icon>
 )
 

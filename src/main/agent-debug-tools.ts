@@ -9,15 +9,18 @@ import {
   text,
   type AgentContext
 } from './agent-tool-helpers'
-import { formatConsoleEntry, type ConsoleLevel } from './console-log'
+import { elementSource } from './agent-picks'
+import { formatConsoleEntries, type ConsoleLevel } from './console-log'
 import {
   formatBoxModel,
   formatComputed,
   formatMatchedStyles,
+  rulePlaces,
   type BoxModel,
   type MatchedStyles,
   type SheetInfo
 } from './element-inspect'
+import { formatOriginal, mapRefFor, type MapRef, type OriginalPosition } from './source-maps'
 import { DEVICE_NAMES, emulationLabel, NETWORKS, type NetworkName } from './emulation'
 import { formatBytes, formatNetworkDetail, formatNetworkLine } from './network-log'
 import type { Tab } from './tabs'
@@ -78,20 +81,23 @@ export function registerDebugTools(mcp: McpServer, context: AgentContext): void 
     async ({ tabId, level, since, pattern, limit, clear }) => {
       const { tab } = page(tabId)
       return context.run(tab, async () => {
-        const log = context.debug(tab).console
+        const debug = context.debug(tab)
+        const log = debug.console
         const { entries, matched } = log.query({
           level: level as ConsoleLevel | undefined,
           since,
           pattern,
           limit
         })
+        // The agent has seen the page's errors now: the user's errors badge starts again.
+        if (entries.some((entry) => entry.level === 'error')) debug.markErrorsSeen()
         if (clear) log.clear()
         const head = `${describeLoad(tab)}\n${RECORDING_NOTE}`
         if (entries.length === 0) {
           return text(`${head}\nNo console messages${since ? ` after #${since}` : ''}.`)
         }
         const shown = matched > entries.length ? `The newest ${entries.length} of ${matched}:` : ''
-        const body = entries.map(formatConsoleEntry).join('\n')
+        const body = await formatConsoleEntries(entries, debug.sourceMaps)
         const next = `(newest #${log.lastSeq}${clear ? '; log cleared' : ''})`
         return text(truncate([head, shown, body, next].filter(Boolean).join('\n')))
       })
@@ -249,6 +255,9 @@ export function registerDebugTools(mcp: McpServer, context: AgentContext): void 
           )
         }
         const parts = [truncate(outerHTML, maxHtml ?? DEFAULT_HTML_CHARS)]
+        const debug = context.debug(tab)
+        const source = await elementSource(cdp, debug, ref)
+        if (source) parts.push(`source: ${source}`)
         try {
           const { model } = await cdp.send<{ model: BoxModel }>('DOM.getBoxModel', {
             backendNodeId: ref
@@ -260,14 +269,23 @@ export function registerDebugTools(mcp: McpServer, context: AgentContext): void 
 
         // The CSS domain reports every stylesheet as it's enabled: that's where rules point to.
         const sheets = new Map<string, SheetInfo>()
+        // Each sheet's source map, and the <style> element of the sheets that have no URL.
+        const sheetMaps = new Map<string, MapRef>()
+        const owners = new Map<string, number>()
+        const documentUrl = tab.webContents.getURL()
         const offSheets = cdp.on('CSS.styleSheetAdded', ({ header }) => {
           const h = (header ?? {}) as Record<string, unknown>
-          sheets.set(String(h.styleSheetId), {
-            sourceURL: String(h.sourceURL ?? ''),
+          const id = String(h.styleSheetId)
+          const sourceURL = String(h.sourceURL ?? '')
+          sheets.set(id, {
+            sourceURL,
             startLine: Number(h.startLine ?? 0),
             isInline: Boolean(h.isInline),
             isConstructed: Boolean(h.isConstructed)
           })
+          const map = mapRefFor(sourceURL || documentUrl, String(h.sourceMapURL ?? ''))
+          if (map) sheetMaps.set(id, map)
+          if (!sourceURL && typeof h.ownerNode === 'number') owners.set(id, h.ownerNode)
         })
         try {
           await cdp.send('DOM.enable')
@@ -283,16 +301,38 @@ export function registerDebugTools(mcp: McpServer, context: AgentContext): void 
           }>('CSS.getComputedStyleForNode', { nodeId })
           parts.push(`Computed:\n${formatComputed(computedStyle, properties)}`)
           const matched = await cdp.send<MatchedStyles>('CSS.getMatchedStylesForNode', { nodeId })
-          parts.push(
-            `Matching CSS rules, most specific first:\n${formatMatchedStyles(matched, sheets, tab.webContents.getURL())}`
+          const places = rulePlaces(matched)
+          await Promise.all(
+            [...new Set(places.map((place) => place.styleSheetId))].map(async (id) => {
+              const sheet = sheets.get(id)
+              const owner = owners.get(id)
+              if (sheet && owner !== undefined && !sheetMaps.has(id))
+                sheet.file = (await viteFileOf(cdp, owner)) ?? undefined
+            })
           )
+          const originals = new Map<string, OriginalPosition>()
+          await Promise.all(
+            places.map(async (place) => {
+              const map = sheetMaps.get(place.styleSheetId)
+              const original =
+                map && (await debug.sourceMaps.original(map, place.line, place.column))
+              if (original)
+                originals.set(`${place.styleSheetId}:${place.line}:${place.column}`, original)
+            })
+          )
+          const rules = formatMatchedStyles(matched, sheets, documentUrl, (place) => {
+            const original = originals.get(`${place.styleSheetId}:${place.line}:${place.column}`)
+            return original ? formatOriginal(original) : null
+          })
+          parts.push(`Matching CSS rules, most specific first:\n${rules}`)
         } catch (error) {
           if (cdp.dialog) throw error
           parts.push(`(No styles: ${(error as Error).message}. Is ref=${ref} a text node?)`)
         } finally {
           offSheets()
           cdp.send('CSS.disable').catch(() => {})
-          cdp.send('DOM.disable').catch(() => {})
+          // Picking needs the DOM domain on (the inspect highlight).
+          if (!debug.picking) cdp.send('DOM.disable').catch(() => {})
         }
         return text(parts.join('\n'))
       })
@@ -449,4 +489,19 @@ export function registerDebugTools(mcp: McpServer, context: AgentContext): void 
       })
     }
   )
+}
+
+/** Vite in dev injects each CSS file as <style data-vite-dev-id="<its path>">: that path. */
+async function viteFileOf(cdp: CdpSession, backendNodeId: number): Promise<string | null> {
+  try {
+    const { node } = await cdp.send<{ node: { attributes?: string[] } }>('DOM.describeNode', {
+      backendNodeId
+    })
+    const attributes = node.attributes ?? []
+    const index = attributes.findIndex((name, i) => i % 2 === 0 && name === 'data-vite-dev-id')
+    const file = index >= 0 ? attributes[index + 1] : ''
+    return file ? file.replace(/\\/g, '/').slice(0, 1000) : null
+  } catch {
+    return null
+  }
 }

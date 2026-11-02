@@ -2,11 +2,11 @@ import { clipboard, ipcMain, type IpcMainEvent, type IpcMainInvokeEvent } from '
 import { join } from 'path'
 import { pathToFileURL } from 'url'
 import { is } from '@electron-toolkit/utils'
-import { clampTerminalHeight, MAX_CHROME_HEIGHT } from '../shared/layout'
+import { clampPanelSize, isPanelDock, MAX_CHROME_HEIGHT } from '../shared/layout'
 import { IpcChannel, type Bookmark, type OpenDisposition } from '../shared/types'
 import { TerminalViewChannel } from '../shared/terminal-view'
 import { showAdblockMenu } from './adblock-menu'
-import { showAgentMenu } from './agent-menu'
+import { showAgentMenu, showErrorsMenu } from './agent-menu'
 import { openBookmark } from './bookmarks'
 import { showBookmarkMenu, showBookmarksOverflow } from './bookmarks-menu'
 import { showDownloadsMenu } from './downloads-menu'
@@ -21,7 +21,7 @@ const isDisposition = (value: unknown): value is OpenDisposition =>
 
 const MAX_LINK_LENGTH = 8192
 const MAX_COPY_LENGTH = 1024 * 1024
-const MAX_TERMINAL_HEIGHT_INPUT = 10_000
+const MAX_TERMINAL_SIZE_INPUT = 10_000
 
 type RendererPage = 'index.html' | 'terminal.html'
 
@@ -201,6 +201,14 @@ export function registerIpc(getMain: () => MainWindow | null): void {
     const main = assertTrustedSender(event)
     return main.agent.resetEmulation(assertTabId(main, id))
   })
+  ipcMain.handle(IpcChannel.CancelPick, (event) => {
+    assertTrustedSender(event).agent.cancelPicking()
+  })
+  ipcMain.handle(IpcChannel.ShowErrorsMenu, (event, x: unknown, y: unknown) => {
+    const main = assertTrustedSender(event)
+    const point = assertPoint(main, x, y)
+    showErrorsMenu(main, point.x, point.y)
+  })
 
   /** Throws unless `id` is the id of a terminal in the panel. */
   const assertTerminalId = (main: MainWindow, id: unknown): number => {
@@ -220,18 +228,19 @@ export function registerIpc(getMain: () => MainWindow | null): void {
     const main = assertTrustedSender(event)
     main.terminals.select(assertTerminalId(main, id))
   })
-  ipcMain.handle(IpcChannel.SetTerminalHeight, (event, px: unknown) => {
+  ipcMain.handle(IpcChannel.SetTerminalSize, (event, px: unknown) => {
     const main = assertTrustedSender(event)
-    if (
-      typeof px !== 'number' ||
-      !Number.isInteger(px) ||
-      px < 0 ||
-      px > MAX_TERMINAL_HEIGHT_INPUT
-    ) {
-      throw new Error('setTerminalHeight: expected a height in px')
+    if (typeof px !== 'number' || !Number.isInteger(px) || px < 0 || px > MAX_TERMINAL_SIZE_INPUT) {
+      throw new Error('setTerminalSize: expected a size in px')
     }
-    const { height } = main.window.getContentBounds()
-    main.terminals.setHeight(clampTerminalHeight(px, height, main.tabs.uiHeight))
+    const { width, height } = main.window.getContentBounds()
+    const { dock } = main.terminals.getState()
+    main.terminals.setSize(clampPanelSize(px, dock, width, height, main.tabs.uiHeight))
+  })
+  ipcMain.handle(IpcChannel.SetTerminalDock, (event, dock: unknown) => {
+    const main = assertTrustedSender(event)
+    if (!isPanelDock(dock)) throw new Error('setTerminalDock: expected "bottom" or "right"')
+    main.terminals.setDock(dock)
   })
   ipcMain.handle(IpcChannel.AttachTerminal, (event, id: unknown) => {
     const main = assertTrustedSender(event)
