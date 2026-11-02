@@ -4,6 +4,8 @@ const PROTOCOL_VERSION = '1.3'
 const COMMAND_TIMEOUT_MS = 15_000
 
 type Params = Record<string, unknown>
+/** Sends a command straight to the debugger (for attach hooks, which run inside attach). */
+export type RawSend = (method: string, params?: Params) => Promise<unknown>
 
 /** An alert, confirm, prompt or "leave page?" dialog the page has open. */
 export interface DialogInfo {
@@ -23,7 +25,10 @@ export interface DialogInfo {
 export class CdpSession {
   private dialogInfo: DialogInfo | null = null
   private readonly handlers = new Map<string, Set<(params: Params) => void>>()
+  private readonly attachHooks = new Set<(send: RawSend) => Promise<void>>()
   private attached = false
+  /** Settles once a fresh attach has enabled Page and run the hooks. */
+  private setup: Promise<void> = Promise.resolve()
 
   constructor(private readonly webContents: WebContents) {}
 
@@ -41,6 +46,14 @@ export class CdpSession {
     }
     set.add(handler)
     return () => set.delete(handler)
+  }
+
+  /**
+   * Runs `hook` each time the debugger is attached afresh (the first time, and after something
+   * else detached it), to enable domains or put back state. Its errors are ignored.
+   */
+  onAttach(hook: (send: RawSend) => Promise<void>): void {
+    this.attachHooks.add(hook)
   }
 
   /** Resolves with the next `method` event, or null after `timeoutMs`. */
@@ -96,6 +109,7 @@ export class CdpSession {
 
   detach(): void {
     this.handlers.clear()
+    this.attachHooks.clear()
     this.dialogInfo = null
     if (this.webContents.isDestroyed()) return
     try {
@@ -105,10 +119,11 @@ export class CdpSession {
     }
   }
 
-  private async attach(): Promise<void> {
+  /** Attaches now (commands attach on their own; this is for listening from the start). */
+  async attach(): Promise<void> {
     if (this.webContents.isDestroyed()) throw new Error('The tab was closed')
     const { debugger: dbg } = this.webContents
-    if (this.attached && dbg.isAttached()) return
+    if (this.attached && dbg.isAttached()) return this.setup
     if (!dbg.isAttached()) {
       try {
         dbg.attach(PROTOCOL_VERSION)
@@ -119,16 +134,25 @@ export class CdpSession {
         )
       }
     }
-    if (!this.attached) {
-      this.attached = true
-      dbg.on('message', this.onMessage)
-      dbg.once('detach', () => {
-        dbg.off('message', this.onMessage)
-        this.attached = false
-        this.dialogInfo = null
-      })
+    if (this.attached) {
+      await dbg.sendCommand('Page.enable')
+      return
     }
-    await dbg.sendCommand('Page.enable')
+    // Callers that come while this runs wait for it too (through `setup`).
+    this.attached = true
+    dbg.on('message', this.onMessage)
+    dbg.once('detach', () => {
+      dbg.off('message', this.onMessage)
+      this.attached = false
+      this.dialogInfo = null
+    })
+    const send: RawSend = (method, params) => dbg.sendCommand(method, params)
+    const setup = (async () => {
+      await dbg.sendCommand('Page.enable')
+      for (const hook of this.attachHooks) await hook(send).catch(() => {})
+    })()
+    this.setup = setup.catch(() => {})
+    await setup
   }
 
   private readonly onMessage = (_event: Electron.Event, method: string, params: Params): void => {

@@ -1,13 +1,13 @@
-import { app } from 'electron'
+import { app, dialog } from 'electron'
 import { join } from 'path'
 import type { AgentState } from '../shared/types'
 import { newAgentToken, parseAgentFile, toAgentFile, type AgentFile } from './agent-auth'
 import { defaultAgentTab, type AgentTab } from './agent-policy'
 import { startAgentServer, type AgentServer } from './agent-server'
 import { createAgentMcp, type AgentContext } from './agent-tools'
-import { CdpSession } from './cdp'
 import type { Settings } from './settings'
 import { JsonStore } from './store'
+import { TabDebug } from './tab-debug'
 import type { Tab } from './tabs'
 import type { MainWindow } from './window'
 
@@ -35,10 +35,12 @@ export class Agent {
   private readonly shared = new Set<number>()
   /** Tabs an agent opened: the only ones it may close. */
   private readonly opened = new Set<number>()
-  private readonly sessions = new Map<number, CdpSession>()
+  /** The debugger and its logs, on shared tabs an agent used or the user shared. */
+  private readonly debuggers = new Map<number, TabDebug>()
   /** The tab each client acted on last: tools that name no tab act on it again. */
   private readonly lastTabs = new Map<Client, number>()
   private inFlight = 0
+  private asking = false
   private working: number | null = null
   private workingTimer: NodeJS.Timeout | null = null
   private readonly listeners = new Set<() => void>()
@@ -112,7 +114,7 @@ export class Agent {
     if (shareAll === this.shareAll) return
     this.saveSettings({ shareAll })
     if (!shareAll) {
-      for (const tabId of this.sessions.keys()) if (!this.shared.has(tabId)) this.release(tabId)
+      for (const tabId of this.debuggers.keys()) if (!this.shared.has(tabId)) this.release(tabId)
     }
     this.changed()
   }
@@ -121,6 +123,7 @@ export class Agent {
   share(tabId: number): void {
     this.shared.add(tabId)
     this.setEnabled(true)
+    this.record(tabId)
     this.changed()
   }
 
@@ -139,6 +142,16 @@ export class Agent {
     this.unshare(tabId)
     if (this.shareAll) this.setShareAll(false)
     this.changed()
+  }
+
+  /** What an agent emulates on a tab, for the address bar badge; null when nothing. */
+  emulationOf(tabId: number): string | null {
+    return this.debuggers.get(tabId)?.emulationLabel ?? null
+  }
+
+  /** The badge's reset: the tab goes back to its own size, colours and network. */
+  async resetEmulation(tabId: number): Promise<void> {
+    await this.debuggers.get(tabId)?.emulate('reset')
   }
 
   /** A new token: agents set up with the old one are refused from the next request on. */
@@ -172,11 +185,14 @@ export class Agent {
 
   /** Every tab goes through here when it's created (tabs a shared tab opens are shared too). */
   watchTab(tab: Tab): void {
-    if (tab.openerId !== null && this.shared.has(tab.openerId)) this.shared.add(tab.id)
+    if (tab.openerId !== null && this.shared.has(tab.openerId)) {
+      this.shared.add(tab.id)
+      this.record(tab.id, tab)
+    }
     tab.webContents.once('destroyed', () => {
       this.shared.delete(tab.id)
       this.opened.delete(tab.id)
-      this.sessions.delete(tab.id)
+      this.debuggers.delete(tab.id)
       for (const [client, id] of this.lastTabs) if (id === tab.id) this.lastTabs.delete(client)
     })
   }
@@ -196,7 +212,9 @@ export class Agent {
     return {
       listTabs: () => this.listTabs(),
       tab: (tabId) => this.tab(tabId, client),
-      cdp: (tab) => this.cdp(tab),
+      cdp: (tab) => this.debugOf(tab).cdp,
+      debug: (tab) => this.debugOf(tab),
+      confirm: (message, detail, action) => this.confirm(message, detail, action),
       run: (tab, work) => this.run(tab, work, client),
       openTab: (url, background) => this.openTab(url, background, client),
       closeTab: (tabId) => this.closeTab(tabId),
@@ -240,13 +258,42 @@ export class Agent {
     return tab
   }
 
-  private cdp(tab: Tab): CdpSession {
-    let session = this.sessions.get(tab.id)
-    if (!session) {
-      session = new CdpSession(tab.webContents)
-      this.sessions.set(tab.id, session)
+  private debugOf(tab: Tab): TabDebug {
+    let debug = this.debuggers.get(tab.id)
+    if (!debug) {
+      debug = new TabDebug(tab.webContents, () => this.changed())
+      this.debuggers.set(tab.id, debug)
+      debug.start()
     }
-    return session
+    return debug
+  }
+
+  /** Attaches to a tab that was just shared, so its console and network are kept from now on. */
+  private record(tabId: number, tab = this.getMain()?.tabs.get(tabId)): void {
+    if (tab && this.isShared(tabId)) this.debugOf(tab)
+  }
+
+  private async confirm(message: string, detail: string, action: string): Promise<boolean> {
+    const window = this.getMain()?.window
+    if (!window || window.isDestroyed()) return false
+    // One question at a time, so an agent can't stack up dialogs.
+    if (this.asking) throw new Error('The user is already being asked something: try again later')
+    this.asking = true
+    try {
+      const { response } = await dialog.showMessageBox(window, {
+        type: 'question',
+        title: 'Agent',
+        message,
+        detail,
+        buttons: [action, 'Cancel'],
+        defaultId: 1,
+        cancelId: 1,
+        noLink: true
+      })
+      return response === 0
+    } finally {
+      this.asking = false
+    }
   }
 
   private async run<T>(tab: Tab, work: () => Promise<T>, client: Client): Promise<T> {
@@ -272,14 +319,19 @@ export class Agent {
     }
   }
 
-  private openTab(url: string, background: boolean, client: Client): Tab {
+  private async openTab(url: string, background: boolean, client: Client): Promise<Tab> {
     const main = this.getMain()
     if (!main) throw new Error('No Nebula window is open')
-    const tab = main.tabs.create({ url, background, openerId: null })
+    // Blank first: the logs start before the page's first request.
+    const tab = main.tabs.create({ url: 'about:blank', background, openerId: null })
     this.shared.add(tab.id)
     this.opened.add(tab.id)
     this.lastTabs.set(client, tab.id)
     this.changed()
+    await this.debugOf(tab)
+      .cdp.attach()
+      .catch(() => {})
+    if (!tab.webContents.isDestroyed()) tab.load(url)
     return tab
   }
 
@@ -299,8 +351,8 @@ export class Agent {
 
   /** Lets go of a tab's debugger, ending anything an agent was doing there. */
   private release(tabId: number): void {
-    this.sessions.get(tabId)?.detach()
-    this.sessions.delete(tabId)
+    this.debuggers.get(tabId)?.dispose()
+    this.debuggers.delete(tabId)
     if (this.working === tabId) {
       this.working = null
       if (this.workingTimer) clearTimeout(this.workingTimer)
@@ -309,7 +361,7 @@ export class Agent {
   }
 
   private releaseAll(): void {
-    for (const tabId of [...this.sessions.keys()]) this.release(tabId)
+    for (const tabId of [...this.debuggers.keys()]) this.release(tabId)
   }
 
   private saveSettings(change: Partial<Settings['agent']>): void {

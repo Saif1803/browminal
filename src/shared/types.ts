@@ -38,6 +38,8 @@ export interface ActiveTabState {
   isBookmarked: boolean
   /** The ad blocker's shield in the address bar; null on pages that aren't on the web. */
   shield: ShieldState | null
+  /** What an agent is emulating on this tab ("iPhone 15 · dark · offline"), or null. */
+  emulation: string | null
 }
 
 /**
@@ -183,6 +185,8 @@ export interface BrowserApi {
   showAgentMenu(x: number, y: number): Promise<void>
   /** "Stop" while an agent works on tab `id`: it stops being shared. */
   stopAgent(id: number): Promise<void>
+  /** The emulation badge: tab `id` goes back to its own size, colours and network. */
+  resetEmulation(id: number): Promise<void>
 
   // The terminal panel.
   /** Ctrl+`: opens the panel (with a terminal for the active tab if there is none), or closes it. */
@@ -240,6 +244,7 @@ export const IpcChannel = {
   ShowAdblockMenu: 'adblock:show-menu',
   ShowAgentMenu: 'agent:show-menu',
   StopAgent: 'agent:stop',
+  ResetEmulation: 'agent:reset-emulation',
   SetChromeHeight: 'ui:set-chrome-height',
   ToggleTerminal: 'terminal:toggle',
   NewTerminal: 'terminal:new',

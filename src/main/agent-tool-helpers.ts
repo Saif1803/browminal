@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { parseErrorPageUrl } from '../shared/url'
 import { canInspect, type AgentTab } from './agent-policy'
 import type { CdpSession } from './cdp'
+import type { TabDebug } from './tab-debug'
 import type { Tab } from './tabs'
 
 const LOAD_TIMEOUT_MS = 30_000
@@ -15,10 +16,14 @@ export interface AgentContext {
   /** The shared tab a tool acts on; throws a message for the agent when there isn't one. */
   tab(tabId: number | undefined): Tab
   cdp(tab: Tab): CdpSession
+  /** The tab's debugger with its console and network logs and emulation. */
+  debug(tab: Tab): TabDebug
+  /** Asks the user in a native dialog; resolves true when they agree. */
+  confirm(message: string, detail: string, action: string): Promise<boolean>
   /** Runs one tool's work on `tab`, showing the user that an agent is at work there. */
   run<T>(tab: Tab, work: () => Promise<T>): Promise<T>
-  /** Opens a shared tab the agent may close again. */
-  openTab(url: string, background: boolean): Tab
+  /** Opens a shared tab the agent may close again (recorded from its first request). */
+  openTab(url: string, background: boolean): Promise<Tab>
   /** Closes a tab the agent opened; throws for any other. */
   closeTab(tabId: number): void
   /** Brings a shared tab to the front and makes it the default for the next tools. */

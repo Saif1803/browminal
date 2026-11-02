@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
 import type { ShieldState } from '@shared/types'
 import { isHttpUrl } from '@shared/url'
-import { LockIcon, SearchIcon, StarIcon } from './icons'
+import { CloseIcon, LockIcon, SearchIcon, StarIcon } from './icons'
 import { ShieldButton } from './ShieldButton'
 
 export function AddressBar({
@@ -10,6 +10,8 @@ export function AddressBar({
   zoomFactor,
   isBookmarked,
   shield,
+  emulation,
+  onResetEmulation,
   focusRequested,
   onFocused
 }: {
@@ -18,6 +20,9 @@ export function AddressBar({
   zoomFactor: number
   isBookmarked: boolean
   shield: ShieldState | null
+  /** What an agent emulates on the tab ("iPhone 15 · dark"), shown as a badge; null for none. */
+  emulation: string | null
+  onResetEmulation: () => void
   /** Take the keyboard now (Ctrl+L, a new tab); call onFocused once done. */
   focusRequested: boolean
   onFocused: () => void
@@ -98,6 +103,18 @@ export function AddressBar({
             className="shrink-0 rounded px-1.5 py-0.5 text-[11px] text-ink-muted tabular-nums ring-1 ring-line transition-colors hover:bg-field-hover hover:text-ink focus-visible:outline-2 focus-visible:outline-accent"
           >
             {zoomPercent}%
+          </button>
+        )}
+        {emulation && (
+          <button
+            type="button"
+            title="An agent is emulating this on the tab. Click to go back to normal."
+            aria-label={`Emulating ${emulation}. Reset`}
+            onClick={onResetEmulation}
+            className="group/emu flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 text-[11px] whitespace-nowrap text-accent ring-1 ring-accent/50 transition-colors hover:bg-field-hover focus-visible:outline-2 focus-visible:outline-accent"
+          >
+            {emulation}
+            <CloseIcon width={10} height={10} className="opacity-60 group-hover/emu:opacity-100" />
           </button>
         )}
         {shield && <ShieldButton shield={shield} />}

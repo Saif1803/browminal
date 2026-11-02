@@ -25,7 +25,8 @@ const EMPTY_STATE: BrowserState = {
     zoomFactor: 1,
     find: null,
     isBookmarked: false,
-    shield: null
+    shield: null,
+    emulation: null
   },
   downloads: [],
   bookmarks: [],
@@ -102,6 +103,8 @@ function App(): React.JSX.Element {
             zoomFactor={tab.zoomFactor}
             isBookmarked={tab.isBookmarked}
             shield={tab.shield}
+            emulation={tab.emulation}
+            onResetEmulation={() => window.browser.resetEmulation(tab.id)}
             focusRequested={focusTabId === tab.id}
             onFocused={() => setFocusTabId(null)}
           />

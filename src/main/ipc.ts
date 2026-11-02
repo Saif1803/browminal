@@ -197,6 +197,10 @@ export function registerIpc(getMain: () => MainWindow | null): void {
     const main = assertTrustedSender(event)
     main.agent.stop(assertTabId(main, id))
   })
+  ipcMain.handle(IpcChannel.ResetEmulation, (event, id: unknown) => {
+    const main = assertTrustedSender(event)
+    return main.agent.resetEmulation(assertTabId(main, id))
+  })
 
   /** Throws unless `id` is the id of a terminal in the panel. */
   const assertTerminalId = (main: MainWindow, id: unknown): number => {

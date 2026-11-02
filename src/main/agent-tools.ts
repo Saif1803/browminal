@@ -3,6 +3,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { z } from 'zod'
 import { isHttpUrl, resolveInput } from '../shared/url'
 import { describeTabs, formatValue, MAX_AGENT_TEXT, scaledSize, truncate } from './agent-policy'
+import { registerDebugTools } from './agent-debug-tools'
 import { registerPageTools } from './agent-page-tools'
 import {
   AGENT_WORLD_ID,
@@ -32,6 +33,10 @@ const INSTRUCTIONS = `Nebula is the user's own web browser. These tools act on i
 - get_page_text is the cheapest way to read a page; screenshot shows its layout.
 - evaluate runs JavaScript in the page itself, like the DevTools console (top-level await works).
 - If an action opens an alert/confirm/prompt, answer it with handle_dialog.
+- To debug like DevTools: console_messages (errors with stacks), network_requests and
+  network_request (status, headers, bodies), inspect(ref) (box, computed styles, the CSS rules
+  with file and line), set_style/set_attribute to try a fix live, emulate (phone, dark mode,
+  offline). Pass the last #seq/#id you saw as since to read only what is new.
 - The user can watch and stop you at any time; a tab they stop sharing disappears from list_tabs.`
 
 async function captureScreenshot(
@@ -57,8 +62,9 @@ async function captureScreenshot(
     return { image: nativeImage.createFromBuffer(Buffer.from(data, 'base64')), note }
   }
   // The view on screen draws its own frames; a tab in the background may not, so ask Chromium.
-  const image = await tab.webContents.capturePage()
-  if (!image.isEmpty()) return { image, note: '' }
+  // An emulated viewport is only part of the view: Chromium captures just that part.
+  const image = context.debug(tab).emulation.viewport ? null : await tab.webContents.capturePage()
+  if (image && !image.isEmpty()) return { image, note: '' }
   const { data } = await cdp.send<{ data: string }>('Page.captureScreenshot', { format: 'png' })
   return { image: nativeImage.createFromBuffer(Buffer.from(data, 'base64')), note: '' }
 }
@@ -171,7 +177,7 @@ export function createAgentMcp(context: AgentContext, version: string): McpServe
     async ({ url, background }) => {
       const target = resolveInput(url)
       if (!isHttpUrl(target)) throw new Error('Only http(s) addresses can be opened')
-      const tab = context.openTab(target, background ?? false)
+      const tab = await context.openTab(target, background ?? false)
       return context.run(tab, async () => {
         await waitForLoad(tab.webContents)
         return text(describeLoad(tab))
@@ -267,9 +273,12 @@ export function createAgentMcp(context: AgentContext, version: string): McpServe
       assertInspectable(tab)
       return context.run(tab, async () => {
         const { image, note } = await captureScreenshot(context, tab, fullPage ?? false)
+        // An emulated phone is drawn at its pixel ratio: shown at its CSS size unless asked.
+        const emulated = context.debug(tab).emulation.viewport?.width
+        const defaultWidth = Math.min(DEFAULT_SCREENSHOT_WIDTH, emulated ?? Infinity)
         if (image.isEmpty()) throw new Error('The page has not drawn anything yet')
         const size = image.getSize()
-        const target = scaledSize(size.width, size.height, maxWidth ?? DEFAULT_SCREENSHOT_WIDTH)
+        const target = scaledSize(size.width, size.height, maxWidth ?? defaultWidth)
         const scaled = target.width === size.width ? image : image.resize(target)
         const png = format === 'png'
         const data = png ? scaled.toPNG() : scaled.toJPEG(JPEG_QUALITY)
@@ -352,5 +361,6 @@ export function createAgentMcp(context: AgentContext, version: string): McpServe
   )
 
   registerPageTools(mcp, context)
+  registerDebugTools(mcp, context)
   return mcp
 }

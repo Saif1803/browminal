@@ -10,6 +10,13 @@ the agent button's native menu (copy command / JSON / new token), as planned for
 `drag` (CDP mouse events don't start HTML drag-and-drop; later with `Input.dispatchDragEvent`) and
 `wait_for(networkIdle)` (needs the network log of Phase 3). Refs are backend DOM node ids, and
 only the main frame's tree is read (no iframes yet).
+**Phase 3 done** 2026-11-02, checked with Claude Code finding a failed API call, an uncaught
+error and the CSS rule behind an invisible button in a test app. Differences from the text below:
+`reload(ignoreCache)` is `navigate` `hardReload` (already there); `wait_for(networkIdle)` came
+with it; emulation presets are iPhone 15, Pixel 8 and iPad Air, networks offline, slow 3G and
+fast 3G; the emulation badge resets it when clicked. Not built: CPU throttling, and the rule
+locations of Vite's injected `<style>` tags point at the page, not the `.css` file (Phase 4's
+source maps).
 **Phase 5 done** 2026-11-02, moved ahead of Phases 2–4 at your request ("a literal terminal in the
 browser"). Differences from the text below: the panel sits at the bottom only (no right dock); the
 UI draws its header row and main lays the page out with `windowLayout` (no `setChromeInsets`);

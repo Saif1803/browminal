@@ -109,7 +109,13 @@ Run `bun run typecheck`, `bun test` and `bun run lint` before calling work done.
 | `agent-policy.ts` | Pure: which pages agents may touch, default tab, reply formatting, connect command |
 | `agent-tools.ts` | The MCP server and tab tools (list/open/select/close tabs, navigate, screenshot, page text, evaluate) |
 | `agent-page-tools.ts` | Page tools: read_page/find (refs), click, hover, type, fill, select_option, press_key, scroll, wait_for, handle_dialog |
+| `agent-debug-tools.ts` | Debug tools: console_messages, network_requests/network_request, inspect, set_style/set_attribute, emulate, clear_site_data |
 | `agent-tool-helpers.ts` | What tools share: `AgentContext`, tabId input, inspectable check, load waiting |
+| `tab-debug.ts` | `TabDebug`: the debugger on one shared tab, its console and network logs, and emulation |
+| `console-log.ts` | Pure: console entries from CDP events (console, exceptions, browser log), ring buffer, filters |
+| `network-log.ts` | Pure: requests from Network events, filters, network idle, credentials redacted |
+| `element-inspect.ts` | Pure: inspect's box model, computed styles and matching CSS rules with file and line |
+| `emulation.ts` | Pure: device and network presets, emulation state, the address bar badge's label |
 | `ax-tree.ts` | Pure: the accessibility tree as compact text with refs (backend DOM node ids); find |
 | `cdp-keys.ts` | Pure: "Control+a" → CDP key events; refuses keys that are Nebula shortcuts |
 | `agent-menu.ts` | Native menu for the agent button (placeholder until the design pass) |
@@ -194,6 +200,11 @@ space for the native controls.
   agent is told and may answer it (`handle_dialog`), or the user does. While an agent works the tab is
   marked, the page gets an accent ring and "Agent working · Stop"; Stop unshares the tab (and turns
   "Share every tab" off), detaching the debugger.
+  Console and network logs are kept per shared tab from the moment it's shared (nothing while it
+  shows a `nebula://` page); header values with credentials (Authorization, cookies, API keys) are
+  shown as `REDACTED`. What an agent emulates (device, colour scheme, network) shows as a badge in
+  the address bar that resets it, and ends with Stop. `clear_site_data` runs only after the user
+  agrees in a dialog (one question at a time).
 - **Terminal** (`terminals.ts`): shells run as the user, so only the user starts them (panel,
   Ctrl+`); no page and no agent tool can. The terminal view is sandboxed, can't navigate or open
   windows, and its messages are size-checked (input ≤ 64 KB). The shell's environment drops
@@ -207,8 +218,8 @@ space for the native controls.
 - **Browser essentials (done):** tabs, page essentials, permissions, downloads, bookmarks, ad
   blocker — [docs/plans/browser-essentials.md](docs/plans/browser-essentials.md).
 - **Agent browser (approved; the main purpose from now on):** Phases 1 (agent bridge), 2 (read and
-  act: refs, click, type, forms, keys, dialogs) and 5 (terminal panel) done; use it for real, then
-  Phases 3, 4 and 6 (debug tools: console and network; page ↔ source; docs) — [docs/plans/agent-browser.md](docs/plans/agent-browser.md).
+  act: refs, click, type, forms, keys, dialogs), 3 (debug: console, network, inspect, emulate) and
+  5 (terminal panel) done; next Phases 4 and 6 (page ↔ source: source maps, picks; docs) — [docs/plans/agent-browser.md](docs/plans/agent-browser.md).
 - **Creator browser (parked):** capture, studio mode, device preview, profiles, clips panel,
   Claude/ChatGPT handoff — [docs/plans/creator-browser.md](docs/plans/creator-browser.md).
 - **Later (don't start until asked):** history + address suggestions, session restore, design pass

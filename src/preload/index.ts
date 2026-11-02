@@ -29,6 +29,7 @@ const browser: BrowserApi = {
   showAdblockMenu: (x, y) => ipcRenderer.invoke(IpcChannel.ShowAdblockMenu, x, y),
   showAgentMenu: (x, y) => ipcRenderer.invoke(IpcChannel.ShowAgentMenu, x, y),
   stopAgent: (id) => ipcRenderer.invoke(IpcChannel.StopAgent, id),
+  resetEmulation: (id) => ipcRenderer.invoke(IpcChannel.ResetEmulation, id),
   toggleTerminal: () => ipcRenderer.invoke(IpcChannel.ToggleTerminal),
   newTerminal: () => ipcRenderer.invoke(IpcChannel.NewTerminal),
   closeTerminal: (id) => ipcRenderer.invoke(IpcChannel.CloseTerminal, id),

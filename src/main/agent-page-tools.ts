@@ -39,7 +39,7 @@ const staleRef = (ref: number): Error =>
   new Error(`No element with ref=${ref} on the page now (it changed?). Call read_page again.`)
 
 /** A short description of an element for replies: tag and visible text. */
-const DESCRIBE_ELEMENT = `function () {
+export const DESCRIBE_ELEMENT = `function () {
   if (this.nodeType === Node.TEXT_NODE) return 'text "' + this.data.trim().slice(0, 60) + '"'
   const labelled = this.labels && this.labels[0] ? this.labels[0].innerText : ''
   const choice = this.type === 'checkbox' || this.type === 'radio'
@@ -55,7 +55,7 @@ interface RemoteObject {
 }
 
 /** Runs `fn` on the element `ref` in the page and returns its JSON result. */
-async function callOn<T>(
+export async function callOn<T>(
   cdp: CdpSession,
   ref: number,
   fn: string,
@@ -499,8 +499,8 @@ export function registerPageTools(mcp: McpServer, context: AgentContext): void {
     'wait_for',
     {
       description:
-        'Waits until text appears on the page, or disappears, or the page has loaded, or just for ' +
-        'some seconds.',
+        'Waits until text appears on the page, or disappears, or the page has loaded, or the ' +
+        'network is idle (nothing loading for 0.5 s), or just for some seconds.',
       inputSchema: {
         tabId: tabIdInput,
         text: z.string().max(500).optional().describe('Wait until the page shows this'),
@@ -509,6 +509,10 @@ export function registerPageTools(mcp: McpServer, context: AgentContext): void {
           .max(500)
           .optional()
           .describe('Wait until the page no longer shows this'),
+        networkIdle: z
+          .boolean()
+          .optional()
+          .describe('Also wait until no requests are open (long-open ones aside) for 0.5 s'),
         seconds: z
           .number()
           .min(0)
@@ -523,7 +527,7 @@ export function registerPageTools(mcp: McpServer, context: AgentContext): void {
           .describe(`Give up after (s, default ${DEFAULT_WAIT_MS / 1000})`)
       }
     },
-    async ({ tabId, text: shown, textGone, seconds, timeout }) => {
+    async ({ tabId, text: shown, textGone, networkIdle, seconds, timeout }) => {
       const { tab, cdp } = page(tabId)
       return context.run(tab, async () => {
         if (seconds !== undefined) {
@@ -534,7 +538,8 @@ export function registerPageTools(mcp: McpServer, context: AgentContext): void {
         if (tab.webContents.isLoading()) {
           await waitForLoad(tab.webContents, Math.max(0, deadline - Date.now()))
         }
-        if (shown === undefined && textGone === undefined)
+        const network = context.debug(tab).network
+        if (shown === undefined && textGone === undefined && !networkIdle)
           return text(`Loaded. ${describeLoad(tab)}`)
         for (;;) {
           if (cdp.dialog) {
@@ -543,23 +548,27 @@ export function registerPageTools(mcp: McpServer, context: AgentContext): void {
               `The page opened ${type}(${JSON.stringify(message)}): answer it with handle_dialog`
             )
           }
-          const body = await pageText(tab).catch(() => '')
-          const ok =
+          const needsText = shown !== undefined || textGone !== undefined
+          const body = needsText ? await pageText(tab).catch(() => '') : ''
+          const textOk =
             (shown === undefined || body.includes(shown)) &&
             (textGone === undefined || !body.includes(textGone))
-          if (ok) {
+          const idle = !networkIdle || network.isIdle()
+          if (textOk && idle) {
             const what = [
               shown !== undefined && `shows ${JSON.stringify(shown)}`,
-              textGone !== undefined && `no longer shows ${JSON.stringify(textGone)}`
+              textGone !== undefined && `no longer shows ${JSON.stringify(textGone)}`,
+              networkIdle && 'has nothing loading'
             ]
               .filter(Boolean)
               .join(' and ')
             return text(`The page ${what}.`)
           }
           if (Date.now() >= deadline) {
-            throw new Error(
-              `Gave up waiting: the page still ${shown !== undefined && !body.includes(shown) ? `doesn’t show ${JSON.stringify(shown)}` : `shows ${JSON.stringify(textGone)}`}`
-            )
+            const why = !textOk
+              ? `the page still ${shown !== undefined && !body.includes(shown) ? `doesn’t show ${JSON.stringify(shown)}` : `shows ${JSON.stringify(textGone)}`}`
+              : `${network.pending()} request(s) still loading (see network_requests)`
+            throw new Error(`Gave up waiting: ${why}`)
           }
           await sleep(POLL_MS)
         }
