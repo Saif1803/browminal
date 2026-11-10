@@ -7,20 +7,39 @@ you share with it.
 ## Connect an agent
 
 ### From Browminal's terminal panel (easiest)
-1. Open the panel (header button, or Ctrl+`) and pick the project folder.
-2. Click **Claude**. Browminal types `claude --mcp-config <file>` into the shell. That config already
-   holds the token and says which tab this terminal works on, so tools that name no tab act on it.
+1. Open the panel (header button, or Ctrl+`). With no session running it shows the start page;
+   **Agent** in the panel's header brings it back for another session.
+2. **Project:** choose the folder the agent works in. It's remembered for the site, and only its
+   name is shown.
+3. **Agent:** type the command, or pick one you used before: `claude`, `codex`, or any other.
+4. **Start session.** A new terminal opens with the agent already running, connected: nothing is
+   typed and there's nothing to press. It works on the current tab (shared for it). It connects
+   with a token of its own, which also tells Browminal which tab it works on, so tools that name
+   no tab act on that one. The token stops working when the session ends.
 
-The command comes from `terminal.agentCommand` in `settings.json` (default `claude`). Any agent
-that accepts `--mcp-config <file>` with an `mcpServers` JSON file works the same way.
+Browminal connects the agents it knows by itself, through your shell (so your profile's PATH
+applies):
+- `claude …` gets `--mcp-config <file>`.
+- `codex …` gets `-c mcp_servers.browminal.url=…` and `-c mcp_servers.browminal.http_headers=…`
+  (Codex reads no config file of ours, so its session token is on its command line).
+- Any other command runs as typed. Write `{mcp-config}` where it takes an MCP config file, e.g.
+  `copilot --additional-mcp-config @{mcp-config}`, and Browminal puts in the path of an
+  `mcpServers` JSON file. The path is also in the `BROWMINAL_MCP_CONFIG` environment variable.
+
+When the agent exits, so does its terminal; **Restart** starts it again. A plain shell is **+**
+in the header, or Ctrl+Shift+`.
 
 ### From your own terminal
-1. Agent button → **Let agents connect** (sharing a tab switches it on too).
-2. Agent button → **Copy command for Claude Code**, and run it once:
+The agent button (✦, right of the toolbar) opens the **Agents** sheet along the page's right side:
+the on/off switch in its header, this tab, and how to connect a client.
+
+1. Switch agents on (the switch next to **Agents**; sharing a tab switches it on too).
+2. Under **Connect a client**, pick **Claude Code** and **Copy**, then run it once (the sheet
+   shows the token masked; the copy has the real one):
    ```bash
    claude mcp add --scope user --transport http browminal http://127.0.0.1:9339/mcp --header "Authorization: Bearer <token>"
    ```
-   For other agents, **Copy MCP config (JSON)** gives an `mcpServers` entry:
+   For other agents, **MCP config** → **Copy** gives an `mcpServers` entry:
    ```json
    { "mcpServers": { "browminal": { "type": "http", "url": "http://127.0.0.1:9339/mcp",
        "headers": { "Authorization": "Bearer <token>" } } } }
@@ -28,24 +47,27 @@ that accepts `--mcp-config <file>` with an `mcpServers` JSON file works the same
 3. Share the tab you want it to work on (below).
 
 The port is 9339, or the next free one (up to 9348) if something else has it; the copied command
-always has the right one. **New token** replaces the token and disconnects every agent: copy the
+always has the right one. If the bridge can't start, the sheet says
+why, with **Try again**. **New token** replaces the token and disconnects every agent: copy the
 command again afterwards.
 
 ## Share tabs
-- **Ctrl+Shift+A** (Cmd+Shift+A on macOS), or the agent button → **Share this tab with agents**:
-  shares the active tab. Do it again to unshare.
+- **Ctrl+Shift+A** (Cmd+Shift+A on macOS), or **Share this tab** in the Agents sheet: shares the
+  active tab. Do it again to unshare. The agent button is tinted while the tab is shared.
 - Tabs an agent opens with `new_tab`, and tabs a shared tab opens, are shared too.
 - **Share every tab** shares all of them (off by default; keep your mail and bank out of it).
 - While an agent works on a tab it is marked, the page gets an accent ring and an
-  **Agent working · Stop** bar. **Stop** unshares the tab (and turns "Share every tab" off).
+  **Agent working · Stop** bar (the sheet shows it too). **Stop** unshares the tab (and turns
+  "Share every tab" off).
 
 Browminal's own pages (`browminal://home`, error pages) are never read or scripted, even when shared.
 
 ## Show the agent something
-- **Pick an element:** Ctrl+Shift+X (or the agent button, or right-click → **Send to agent**),
-  then click it; Esc cancels. Picking shares the tab.
+- **Pick an element:** Ctrl+Shift+X (or **Pick an element** in the Agents sheet, or right-click →
+  **Send to agent**), then click it; Esc cancels. Picking shares the tab.
 - **Send errors:** when a shared tab logs uncaught errors or `console.error`, the address bar shows
-  an errors badge; click it → **Send to agent**.
+  an errors badge. Click it to see the newest errors (message, file and line) and **Send to
+  agent**, or **Dismiss** them.
 
 The agent reads picks with `get_picks`: the element's HTML, box, styles, a screenshot and the
 file and line it's written at (React, Vue and Svelte dev builds), or the errors mapped to your
@@ -98,7 +120,8 @@ files (`src/App.tsx:12:5`), not the bundle.
 - Read credentials in network logs: `Authorization`, cookies and API-key headers show as `REDACTED`.
 - Get around the usual rules: its navigations, downloads and permission requests go through the
   same checks as yours (`mailto:` asks you, camera asks you, downloads are never opened).
-- Clear site data without your yes in a dialog.
+- Clear site data without your yes: Browminal asks you under the address bar, marked as an agent's
+  request, and the button says **Clear site data**.
 
 `evaluate` does run code in a shared page with that page's own rights, so share only the sites
 you'd let the agent use.
@@ -115,6 +138,5 @@ you'd let the agent use.
   with the terminal) holds it.
 
 ## Not built yet
-Drag and drop, pages inside iframes (only the main frame is read), CPU throttling, original
-function names in minified stack traces (the file and line are mapped), and a real "Connect an
-agent" dialog (the agent button's menu stands in for now).
+Drag and drop, pages inside iframes (only the main frame is read), CPU throttling, and original
+function names in minified stack traces (the file and line are mapped).

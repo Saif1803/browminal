@@ -32,7 +32,7 @@ minified frames (the stack shows the minified name with the original file and li
 browser"). Differences from the text below: the panel docks at the bottom or on the right; the
 UI draws its header row and main lays the page out with `windowLayout` (no `setChromeInsets`);
 the terminal's agent finds its tab through an `x-browminal-terminal` header in its MCP config
-instead of environment variables; picks (Phase 4) don't exist yet, so nothing is typed into the
+(now a session token of its own) instead of environment variables; picks (Phase 4) don't exist yet, so nothing is typed into the
 agent's prompt.
 **Phase 6 done** 2026-11-02: `docs/agents.md` (connecting from the panel or your own terminal,
 sharing, picks, every tool, what agents can't do, the bridge's checks) and `CLAUDE.md` brought up

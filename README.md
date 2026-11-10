@@ -1,6 +1,8 @@
 # Browminal
 
-A personal desktop web browser built with Electron, React, TypeScript and Tailwind CSS.
+A desktop browser for localhost development: terminal coding agents (Claude Code, Codex or any
+MCP client) see, drive and debug the tabs you share with them. Built with Electron, React,
+TypeScript, Tailwind CSS and a small Rust module. How to connect an agent: [docs/agents.md](docs/agents.md).
 
 ## Setup
 
