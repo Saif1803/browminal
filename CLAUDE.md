@@ -177,19 +177,19 @@ runs from `out/` first (the build fails on the locked native module).
 | `agent-auth.ts` | Pure: request checks (host, not from a browser, token), `agent.json` format |
 | `agent-policy.ts` | Pure: which pages agents may touch, default tab, reply formatting, connect command |
 | `agent-tools.ts` | The MCP server and tab tools (list/open/select/close tabs, navigate, screenshot, page text, evaluate) |
-| `agent-page-tools.ts` | Page tools: read_page/find (refs), click, hover, type, fill, select_option, press_key, scroll, wait_for, handle_dialog |
+| `agent-page-tools.ts` | Page tools: read_page/find (refs, same-process iframes joined in), click, drag, hover, type, fill, select_option, press_key, scroll, wait_for, handle_dialog |
 | `agent-debug-tools.ts` | Debug tools: console_messages, network_requests/network_request, inspect, set_style/set_attribute, emulate, clear_site_data |
 | `agent-picks.ts` | Picks: capturing an element pick or an errors pick, an element's source line, the `get_picks` tool |
 | `agent-tool-helpers.ts` | What tools share: `AgentContext`, tabId input, inspectable check, load waiting |
 | `tab-debug.ts` | `TabDebug`: the debugger on one shared tab, its console and network logs, source maps, new-errors count, emulation, pick mode |
 | `console-log.ts` | Pure: console entries from CDP events (console, exceptions, browser log), ring buffer, filters, source-mapped formatting |
-| `source-maps.ts` | Pure: `SourceMaps` (script → map, maps loaded once), original positions, project-relative source names, places in stack text |
+| `source-maps.ts` | Pure: `SourceMaps` (script → map, maps loaded once), original positions, project-relative source names, places in stack text, original function names (from the caller's call site) |
 | `component-source.ts` | Pure: where an element is written, from React/Vue/Svelte dev builds (the page's answer checked) |
 | `picks.ts` | Pure: the picks list, how picks read to agents, the prompt typed into the terminal |
 | `network-log.ts` | Pure: requests from Network events, filters, network idle, credentials redacted |
 | `element-inspect.ts` | Pure: inspect's box model, computed styles and matching CSS rules with file and line (source maps, Vite's injected styles) |
-| `emulation.ts` | Pure: device and network presets, emulation state, the address bar badge's label |
-| `ax-tree.ts` | Pure: the accessibility tree as compact text with refs (backend DOM node ids); find |
+| `emulation.ts` | Pure: device, network and CPU presets, emulation state, the address bar badge's label |
+| `ax-tree.ts` | Pure: the accessibility tree as compact text with refs (backend DOM node ids); frames' trees joined under their iframes; find |
 | `cdp-keys.ts` | Pure: "Control+a" → CDP key events; refuses keys that are Browminal shortcuts |
 | `overlay.ts` | `Overlay`: the view over the page for the agent sheet, the errors popover, menus (`showMenu`) and questions (`ask`) |
 | `overlay-content.ts` | Pure: the bridge status, masked connect texts, error rows, where popovers and the sheet go |
@@ -276,8 +276,10 @@ space for the native controls.
   exposes the UI. Agents see and act only on **shared** tabs: shared by the user (Ctrl+Shift+A),
   opened by an agent (`new_tab`), or opened by a shared tab; "Share every tab" shares all. Main
   attaches the debugger only to shared tabs, and never reads or scripts `browminal://` pages
-  (`canInspect`). Agents load http(s) only, close only tabs they opened, and their actions still go
-  through the usual navigation, download and permission rules. Keys an agent presses that are
+  (`canInspect`). Sharing a tab shares the frames it embeds from its own renderer (read_page
+  joins their trees; their refs work in every tool); a `browminal:` frame is never read.
+  Agents load http(s) only, close only tabs they opened, and their actions still go through the
+  usual navigation, download and permission rules. Keys an agent presses that are
   Browminal shortcuts (Ctrl+W, F5…) are refused (`browserCommandFor`), since CDP key events reach
   `before-input-event`. A page's alert/confirm/prompt shows Electron's native box as usual; the
   agent is told and may answer it (`handle_dialog`), or the user does. While an agent works the tab is
@@ -316,7 +318,8 @@ space for the native controls.
   act: refs, click, type, forms, keys, dialogs), 3 (debug: console, network, inspect, emulate),
   4 (page ↔ source: source maps, picks, errors badge), 5 (terminal panel) and 6 (docs:
   [docs/agents.md](docs/agents.md)) — [docs/plans/agent-browser.md](docs/plans/agent-browser.md).
-  Not built yet: drag and drop, iframes, CPU throttling, original names in minified stacks.
+  Since then: same-site iframes, `drag`, CPU throttling, original names in minified stacks
+  (next-steps Phase 2). Not built yet: cross-origin (out-of-process) iframes.
 - **Creator browser (parked):** capture, studio mode, device preview, profiles, clips panel,
   Claude/ChatGPT handoff — [docs/plans/creator-browser.md](docs/plans/creator-browser.md).
 - **Design pass (started):** done from the Claude Design project "Nebula Design Pass": the agent
@@ -324,7 +327,7 @@ space for the native controls.
   terminal panel (header, empty panel, exit bar) and the start page. Menus are drawn by the
   overlay (frosted), but downloads and the shield are still plain menus in place of real panels.
   Still placeholders: the screen-share picker (a native message box) and the plain tab strip.
-- **Next steps (draft, not approved):** commit the working tree, single instance, a smoke test,
+- **Next steps (approved 2026-11-10, in progress):** commit the working tree, single instance, a smoke test,
   Electron 39 → 45, agent gaps (iframes first), daily use, the rest of the design pass, shipping —
   [docs/plans/next-steps.md](docs/plans/next-steps.md).
 - **Later (don't start until asked):** history + address suggestions, session restore.

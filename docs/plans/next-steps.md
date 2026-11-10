@@ -1,6 +1,21 @@
 # Plan: next steps from where Browminal is now
 
-**Status:** draft 2026-11-10, waiting for your OK. Nothing here is built yet.
+**Status:** approved 2026-11-10 with the recommended answers (order as below, Electron to 45).
+Decisions 2 (history and session restore) and 4 (shipping) are still open: Phases 3 and 5 wait
+for them.
+
+**Progress (2026-11-10, branch `next-steps`):**
+- Phase 0 done: the working tree landed as four commits (rename, internal pages, overlay, docs),
+  each passing the three checks; the design inventory and the README are up to date.
+- Phase 1: single instance and `bun run smoke` are built, but the smoke test hasn't run yet. The
+  network was too slow to download Electron's binary, and `node_modules/electron/dist` is
+  missing (fix: `cd node_modules/electron && node install.js`). The Electron 39 → 45 upgrade and
+  the dependency updates wait for the download. Known for 45: screen sharing reaches the
+  permission handler as `display-capture` (`policyFor` must let it through to the picker), main's
+  `clipboard` calls return Promises (44), PDFs render as out-of-process frames (41).
+- Phase 2: same-site iframes, `drag`, CPU throttling and original names in minified stacks are
+  built and unit-tested, not yet run against the real app. Left: cross-origin (out-of-process)
+  iframes, which need child CDP sessions; to be built with the app running.
 
 ## Where it stands (checked 2026-11-10)
 - Browser essentials and the agent browser (Phases 1–6) are done. `bun run typecheck`,

@@ -1,6 +1,13 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { z } from 'zod'
-import { DEFAULT_AX_MAX_CHARS, findInTree, formatAXTree, type AXNode } from './ax-tree'
+import {
+  DEFAULT_AX_MAX_CHARS,
+  findInTree,
+  formatAXTree,
+  joinFrameTrees,
+  type AXNode,
+  type FrameTree
+} from './ax-tree'
 import {
   AGENT_WORLD_ID,
   assertInspectable,
@@ -89,11 +96,15 @@ export async function callOn<T>(
   return result.value as T
 }
 
-/** Scrolls element `ref` into view and returns its centre in CSS px. */
-async function centerOf(cdp: CdpSession, ref: number): Promise<{ x: number; y: number }> {
+/** Scrolls element `ref` into view (unless `scroll` is false) and returns its centre in CSS px. */
+async function centerOf(
+  cdp: CdpSession,
+  ref: number,
+  scroll = true
+): Promise<{ x: number; y: number }> {
   let quads: number[][] = []
   try {
-    await cdp.send('DOM.scrollIntoViewIfNeeded', { backendNodeId: ref })
+    if (scroll) await cdp.send('DOM.scrollIntoViewIfNeeded', { backendNodeId: ref })
     ;({ quads } = await cdp.send<{ quads: number[][] }>('DOM.getContentQuads', {
       backendNodeId: ref
     }))
@@ -137,6 +148,58 @@ async function target(
   return { x, y, what: `(${Math.round(x)}, ${Math.round(y)})` }
 }
 
+// A drag moves the mouse there in steps, a frame apart: pointer-based drag libraries (dnd-kit,
+// SortableJS's fallback…) start only after the pointer has moved a few px with the button down.
+const DRAG_STEPS = 12
+const DRAG_STEP_MS = 16
+
+interface DragEnd {
+  ref?: number
+  x?: number
+  y?: number
+}
+
+interface Point {
+  x: number
+  y: number
+  what: string
+}
+
+/** Where each end of a drag is, both on screen at once (the target is scrolled to first). */
+async function dragEnds(
+  cdp: CdpSession,
+  from: DragEnd,
+  to: DragEnd
+): Promise<{ start: Point; end: Point }> {
+  const point = async (at: DragEnd, name: string, scroll: boolean): Promise<Point> => {
+    if (at.ref === undefined) {
+      if (at.x === undefined || at.y === undefined) {
+        throw new Error(`Give ${name}Ref, or both ${name}X and ${name}Y`)
+      }
+      return { x: at.x, y: at.y, what: `(${Math.round(at.x)}, ${Math.round(at.y)})` }
+    }
+    const center = await centerOf(cdp, at.ref, scroll)
+    const what = await callOn<string>(cdp, at.ref, DESCRIBE_ELEMENT).catch(() => 'element')
+    return { ...center, what: `${what} [ref=${at.ref}]` }
+  }
+  if (from.ref !== undefined) await centerOf(cdp, from.ref)
+  const end = await point(to, 'to', true)
+  // Measured after the target was scrolled to, which may have moved the source.
+  const start = await point(from, 'from', false)
+  const { cssVisualViewport: view } = await cdp.send<{
+    cssVisualViewport: { clientWidth: number; clientHeight: number }
+  }>('Page.getLayoutMetrics')
+  const onScreen = (p: { x: number; y: number }): boolean =>
+    p.x >= 0 && p.y >= 0 && p.x <= view.clientWidth && p.y <= view.clientHeight
+  if (!onScreen(start) || !onScreen(end)) {
+    throw new Error(
+      'Both ends of the drag must be on screen at once: scroll (or emulate a bigger viewport) so ' +
+        'they are, then drag again'
+    )
+  }
+  return { start, end }
+}
+
 async function pressCombo(cdp: CdpSession, spec: string, times: number): Promise<void> {
   const combo = parseKeyCombo(spec, process.platform)
   const command = browserCommandFor(combo, process.platform)
@@ -177,6 +240,51 @@ async function act(
   if (tab.webContents.isLoading()) await waitForLoad(tab.webContents, NAVIGATION_TIMEOUT_MS)
   if (tab.webContents.isDestroyed()) return `${done}. The tab closed.`
   return tab.webContents.getURL() !== before ? `${done}. Now on: ${describeLoad(tab)}` : `${done}.`
+}
+
+// Frames read per page (a page full of ad frames shouldn't make read_page slow).
+const MAX_FRAMES = 20
+
+interface CdpFrameTree {
+  frame: { id: string; url: string }
+  childFrames?: CdpFrameTree[]
+}
+
+/**
+ * The page's accessibility tree with its iframes' trees joined in (see joinFrameTrees). Frames
+ * in the page's own renderer are read through the tab's session; one in another process (an
+ * embed from another site) can't be, and shows as not readable.
+ */
+async function pageTree(cdp: CdpSession): Promise<AXNode[]> {
+  const { nodes } = await cdp.send<{ nodes: AXNode[] }>('Accessibility.getFullAXTree')
+  const { frameTree } = await cdp
+    .send<{ frameTree: CdpFrameTree }>('Page.getFrameTree')
+    .catch(() => ({ frameTree: null }))
+  if (!frameTree) return nodes
+  const children: CdpFrameTree['frame'][] = []
+  const walk = (tree: CdpFrameTree): void => {
+    for (const child of tree.childFrames ?? []) {
+      children.push(child.frame)
+      walk(child)
+    }
+  }
+  walk(frameTree)
+  const frames = await Promise.all(
+    children.slice(0, MAX_FRAMES).map(async ({ id, url }): Promise<FrameTree> => {
+      const owner = await cdp
+        .send<{ backendNodeId: number }>('DOM.getFrameOwner', { frameId: id })
+        .then((reply) => reply.backendNodeId)
+        .catch(() => null)
+      // Never Browminal's own pages (pages can't load them in frames; this makes sure).
+      if (/^browminal:/i.test(url)) return { owner, url, nodes: null }
+      const tree = await cdp
+        .send<{ nodes: AXNode[] }>('Accessibility.getFullAXTree', { frameId: id })
+        .then((reply) => reply.nodes)
+        .catch(() => null)
+      return { owner, url, nodes: tree }
+    })
+  )
+  return joinFrameTrees(nodes, frames)
 }
 
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms))
@@ -222,7 +330,7 @@ export function registerPageTools(mcp: McpServer, context: AgentContext): void {
     async ({ tabId, interactive, ref, depth, maxChars }) => {
       const { tab, cdp } = page(tabId)
       return context.run(tab, async () => {
-        const { nodes } = await cdp.send<{ nodes: AXNode[] }>('Accessibility.getFullAXTree')
+        const nodes = await pageTree(cdp)
         const tree = formatAXTree(nodes, {
           interactiveOnly: interactive,
           rootRef: ref,
@@ -245,7 +353,7 @@ export function registerPageTools(mcp: McpServer, context: AgentContext): void {
     async ({ tabId, text: query }) => {
       const { tab, cdp } = page(tabId)
       return context.run(tab, async () => {
-        const { nodes } = await cdp.send<{ nodes: AXNode[] }>('Accessibility.getFullAXTree')
+        const nodes = await pageTree(cdp)
         return text(findInTree(formatAXTree(nodes, { maxChars: Infinity }), query))
       })
     }
@@ -281,6 +389,95 @@ export function registerPageTools(mcp: McpServer, context: AgentContext): void {
           }
         })
         return text(reply)
+      })
+    }
+  )
+
+  mcp.registerTool(
+    'drag',
+    {
+      description:
+        'Drags an element (by ref) or a point onto another element or point and drops it there: ' +
+        'sortable lists, kanban cards, sliders, file-like drop zones. Tries HTML5 drag and drop ' +
+        'first; if the page doesn’t start one, drags with the mouse (press, move in steps, ' +
+        'release) as pointer-based libraries need. Says which it used. Both ends must be on screen.',
+      inputSchema: {
+        tabId: tabIdInput,
+        fromRef: refInput.optional().describe('The element to drag (or fromX and fromY)'),
+        fromX: z.number().optional(),
+        fromY: z.number().optional(),
+        toRef: refInput.optional().describe('Where to drop it (or toX and toY)'),
+        toX: z.number().optional(),
+        toY: z.number().optional(),
+        modifiers: modifiersInput.describe('Keys held during the drag (Alt copies in some apps)')
+      }
+    },
+    async ({ tabId, fromRef, fromX, fromY, toRef, toX, toY, modifiers = [] }) => {
+      const { tab, cdp } = page(tabId)
+      return context.run(tab, async () => {
+        const { start, end } = await dragEnds(
+          cdp,
+          { ref: fromRef, x: fromX, y: fromY },
+          { ref: toRef, x: toX, y: toY }
+        )
+        const bits = modifiers.reduce((sum, m) => sum | MODIFIER_BITS[m], 0)
+        const mouse = (type: string, x: number, y: number, held: boolean): Promise<unknown> =>
+          cdp.send('Input.dispatchMouseEvent', {
+            type,
+            x,
+            y,
+            modifiers: bits,
+            button: 'left',
+            buttons: held ? 1 : 0,
+            clickCount: 1
+          })
+        // With drags intercepted, an HTML5 drag the page starts comes to us (its data) instead
+        // of going to the OS, and is finished with dispatchDragEvent.
+        let dragData: unknown = null
+        const off = cdp.on('Input.dragIntercepted', (params) => {
+          dragData = params.data
+        })
+        let way = 'with the mouse (press, move, release)'
+        const done = (): string => `Dragged ${start.what} to ${end.what} ${way}`
+        try {
+          await cdp.send('Input.setInterceptDrags', { enabled: true })
+          const reply = await act(cdp, tab, 'Dragged', async () => {
+            await cdp.send('Input.dispatchMouseEvent', {
+              type: 'mouseMoved',
+              x: start.x,
+              y: start.y,
+              modifiers: bits
+            })
+            await mouse('mousePressed', start.x, start.y, true)
+            for (let step = 1; step <= DRAG_STEPS && dragData === null; step++) {
+              const t = step / DRAG_STEPS
+              await mouse(
+                'mouseMoved',
+                start.x + (end.x - start.x) * t,
+                start.y + (end.y - start.y) * t,
+                true
+              )
+              await sleep(DRAG_STEP_MS)
+            }
+            if (dragData !== null) {
+              way = 'with HTML5 drag and drop'
+              for (const type of ['dragEnter', 'dragOver', 'drop']) {
+                await cdp.send('Input.dispatchDragEvent', {
+                  type,
+                  x: end.x,
+                  y: end.y,
+                  data: dragData,
+                  modifiers: bits
+                })
+              }
+            }
+            await mouse('mouseReleased', end.x, end.y, false)
+          })
+          return text(reply.replace(/^Dragged/, done()))
+        } finally {
+          off()
+          await cdp.send('Input.setInterceptDrags', { enabled: false }).catch(() => {})
+        }
       })
     }
   )

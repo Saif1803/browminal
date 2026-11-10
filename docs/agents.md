@@ -87,9 +87,10 @@ used last, the tab of the Browminal terminal it runs in, or the active shared ta
 | | `navigate` | Loads a URL, or back / forward / reload (`hardReload` skips the cache) |
 | Read | `get_page_text` | Title, URL and visible text: the cheapest read |
 | | `screenshot` | The visible part or the whole page, scaled to `maxWidth` |
-| | `read_page` | The accessibility tree, one element per line, each with a ref |
+| | `read_page` | The accessibility tree, one element per line, each with a ref; same-site iframes included |
 | | `find` | Elements whose role, name or value contains some text, with refs |
 | Act | `click`, `hover` | Real mouse events on a ref or a point |
+| | `drag` | Drags a ref or point onto another: HTML5 drag and drop, or press-move-release for pointer-based libraries (says which) |
 | | `type`, `fill` | Type where the keyboard is or into a ref; `fill` replaces a field's value |
 | | `select_option` | Chooses options in a `<select>` |
 | | `press_key` | Keys and combinations (`Enter`, `Control+a`, `Mod+z`) |
@@ -102,14 +103,22 @@ used last, the tab of the Browminal terminal it runs in, or the active shared ta
 | | `network_request` | One request in full: headers, request and response bodies |
 | | `inspect` | HTML, box model, computed styles, matching CSS rules with file and line |
 | | `set_style`, `set_attribute` | Try a fix live (lost on reload) |
-| | `emulate` | Phone or tablet (iPhone 15, Pixel 8, iPad Air), viewport, dark/light, offline, slow/fast 3G |
+| | `emulate` | Phone or tablet (iPhone 15, Pixel 8, iPad Air), viewport, dark/light, offline, slow/fast 3G, CPU 4× or 6× slower |
 | | `clear_site_data` | Cookies, storage, cache and service workers of the tab's site, after you agree |
 | Picks | `get_picks` | What you picked or sent (above) |
 
 Logs start when a tab is shared and keep the newest 1000 console entries and 500 requests per
 tab. `console_messages` and `network_requests` take `since` (the last `#seq` / `#id` seen) to read
 only what's new. Where the page has source maps (any dev server), stacks and CSS rules name your
-files (`src/App.tsx:12:5`), not the bundle.
+files (`src/App.tsx:12:5`), not the bundle; in a minified build, stack frames also get their
+functions' original names back (from the name the caller used, so `at t` reads `at checkout`).
+
+**Iframes:** `read_page` and `find` include what iframes show when they're from the page's own
+site (Storybook's preview, an app in a frame): their elements have refs like any other, so
+`click`, `fill`, `inspect` and the rest work on them. Sharing a tab shares what it embeds from its
+own site. An embed from another site (a payment form, a sign-in widget) runs in another process
+and shows as "frame content not readable" for now; `evaluate` and `get_page_text` read the main
+frame only.
 
 ## What an agent can't do
 - See or touch tabs you haven't shared, or Browminal's own pages.
@@ -138,5 +147,4 @@ you'd let the agent use.
   with the terminal) holds it.
 
 ## Not built yet
-Drag and drop, pages inside iframes (only the main frame is read), CPU throttling, and original
-function names in minified stack traces (the file and line are mapped).
+Iframes from other sites (cross-origin embeds run in their own process and aren't read yet).

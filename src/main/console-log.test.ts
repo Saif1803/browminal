@@ -314,6 +314,24 @@ describe('source-mapped places', () => {
     )
   })
 
+  test('a minified frame takes the name its caller called it by', () => {
+    const named: PositionLookup = (url, line, column) =>
+      url === bundle
+        ? { source: 'src/Cart.tsx', line, column, name: line === 2 ? 'checkout' : null }
+        : null
+    const minified = [
+      { functionName: 'e', url: bundle, line: 1, column: 9 },
+      { functionName: 'Cart.onSubmit', url: bundle, line: 2, column: 4 }
+    ]
+    expect(
+      formatConsoleEntry({ ...entry('bad', 'error'), frames: minified, seq: 1, count: 1 }, named)
+    ).toBe(
+      '#1 14:03:07.215 [error] bad\n' +
+        '    at checkout (src/Cart.tsx:1:9)\n' +
+        '    at Cart.onSubmit (src/Cart.tsx:2:4)'
+    )
+  })
+
   test('positionsOf: every frame and every place in the text', () => {
     const text = `Error\n    at f (${bundle}:3:4)`
     expect(positionsOf([{ ...entry(text, 'error'), frames, seq: 1, count: 1 }])).toEqual([

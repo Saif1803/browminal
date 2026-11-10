@@ -30,6 +30,19 @@ const PAGE = `<!doctype html>
 <label>Name <input id="name"></label>
 <button onclick="document.getElementById('out').textContent = 'Hello ' + document.getElementById('name').value">Say hi</button>
 <p id="out">Not clicked</p>
+<div id="card" draggable="true" role="button" aria-label="Card">Card</div>
+<div id="zone" role="region" aria-label="Drop zone" style="width:200px;height:60px;border:1px dashed">Drop here</div>
+<iframe src="/frame" title="Inner frame" style="width:300px;height:80px"></iframe>
+<script>
+  const card = document.getElementById('card')
+  const zone = document.getElementById('zone')
+  card.addEventListener('dragstart', (e) => e.dataTransfer.setData('text/plain', 'card'))
+  zone.addEventListener('dragover', (e) => e.preventDefault())
+  zone.addEventListener('drop', (e) => {
+    e.preventDefault()
+    zone.textContent = 'Dropped ' + e.dataTransfer.getData('text/plain')
+  })
+</script>
 <script>
   console.log('smoke console line')
   fetch('/api/ping').then((r) => r.text())
@@ -44,6 +57,14 @@ function startSite(port: number): Promise<Server> {
     if (path === '/api/ping') {
       res.writeHead(200, { 'content-type': 'application/json' })
       res.end('{"pong":true}')
+      return
+    }
+    if (path === '/frame') {
+      res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' })
+      res.end(
+        '<!doctype html><title>Frame</title><button onclick="parent.document.getElementById(' +
+          "'out').textContent = 'Frame clicked'\">Frame button</button>"
+      )
       return
     }
     const titles: Record<string, string> = {
@@ -319,7 +340,35 @@ async function run(): Promise<void> {
     })
     check(pageText.includes('Hello Ada'), 'fill and click change the page')
 
+    console.log('Iframes and drag')
+    const framed = await agent.ok('read_page', { tabId })
+    const frameButton = Number(
+      /button "Frame button" \[ref=(\d+)\]/.exec(framed)?.[1] ?? Number.NaN
+    )
+    check(Number.isInteger(frameButton), 'read_page shows a same-site iframe’s button', framed)
+    await agent.ok('click', { tabId, ref: frameButton })
+    const afterFrame = await until('the frame click', 5_000, async () => {
+      const text = await agent.ok('get_page_text', { tabId })
+      return text.includes('Frame clicked') ? text : null
+    })
+    check(afterFrame.includes('Frame clicked'), 'a click inside the iframe works')
+    const dragged = await agent.ok('drag', {
+      tabId,
+      fromRef: refOf(/button "Card"/),
+      toRef: refOf(/region "Drop zone"/)
+    })
+    const dropped = await until('the drop', 5_000, async () => {
+      const text = await agent.ok('get_page_text', { tabId })
+      return text.includes('Dropped card') ? text : null
+    })
+    check(dropped.includes('Dropped card'), 'drag drops with HTML5 drag and drop', dragged)
+    check(dragged.includes('HTML5'), 'drag says it used HTML5 drag and drop', dragged)
+
     console.log('Debug tools')
+    const slow = await agent.ok('emulate', { tabId, cpu: 4 })
+    check(slow.includes('CPU 4× slower'), 'emulate slows the CPU', slow)
+    const reset = await agent.ok('emulate', { tabId, reset: true })
+    check(reset.includes('Nothing is emulated'), 'emulate resets', reset)
     const consoleText = await agent.ok('console_messages', { tabId })
     check(consoleText.includes('smoke console line'), 'console_messages has the log', consoleText)
     const network = await until('the fetch in the network log', 5_000, async () => {

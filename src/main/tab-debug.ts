@@ -248,7 +248,7 @@ export class TabDebug {
 
   /** Sends every part of the emulation, on or off (each call is idempotent). */
   private async applyEmulation(send: RawSend): Promise<void> {
-    const { viewport, userAgent, colorScheme, network } = this.emulationState
+    const { viewport, userAgent, colorScheme, network, cpu } = this.emulationState
     if (viewport) {
       await send('Emulation.setDeviceMetricsOverride', { ...viewport })
     } else {
@@ -274,6 +274,7 @@ export class TabDebug {
     } else {
       await send('Network.emulateNetworkConditions', NO_NETWORK_THROTTLING)
     }
+    await send('Emulation.setCPUThrottlingRate', { rate: cpu ?? 1 })
   }
 }
 

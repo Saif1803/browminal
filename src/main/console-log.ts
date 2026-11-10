@@ -1,6 +1,7 @@
 import {
   formatOriginal,
   locationsIn,
+  originalFunctionName,
   replaceLocations,
   type PositionLookup,
   type SourceMaps,
@@ -365,9 +366,15 @@ export function formatConsoleEntry(entry: ConsoleEntry, lookup: PositionLookup =
   if (textHasStack) return head
   if (entry.level !== 'error') return `${head}\n    at ${frameText(entry.frames[0], lookup)}`
   const stack = entry.frames
-    .map((frame) => {
+    .map((frame, index) => {
       const where = frameText(frame, lookup)
-      return `    at ${frame.functionName ? `${frame.functionName} (${where})` : where}`
+      // The caller's place maps to the name this frame's function was called by.
+      const caller = entry.frames[index + 1]
+      const name =
+        frame.functionName && caller
+          ? originalFunctionName(frame.functionName, lookup(caller.url, caller.line, caller.column))
+          : frame.functionName
+      return `    at ${name ? `${name} (${where})` : where}`
     })
     .join('\n')
   return `${head}\n${stack}`

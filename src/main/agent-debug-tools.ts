@@ -21,7 +21,7 @@ import {
   type SheetInfo
 } from './element-inspect'
 import { formatOriginal, mapRefFor, type MapRef, type OriginalPosition } from './source-maps'
-import { DEVICE_NAMES, emulationLabel, NETWORKS, type NetworkName } from './emulation'
+import { DEVICE_NAMES, emulationLabel, NETWORKS, type CpuRate, type NetworkName } from './emulation'
 import { formatBytes, formatNetworkDetail, formatNetworkLine } from './network-log'
 import type { Tab } from './tabs'
 import type { CdpSession } from './cdp'
@@ -420,7 +420,7 @@ export function registerDebugTools(mcp: McpServer, context: AgentContext): void 
       description:
         'Makes the tab act like another device or setting: a phone or tablet (size, pixel ' +
         'ratio, touch, user agent), any viewport, dark or light colour scheme, offline or a slow ' +
-        'network. Changes add up; "none" turns one part off, reset turns all off. The user sees a ' +
+        'network, a slower CPU (to see jank and slow renders as on a low-end phone). Changes add up; "none" turns one part off, reset turns all off. The user sees a ' +
         'badge in the address bar while any is on. Call with nothing to see what is on.',
       inputSchema: {
         tabId: tabIdInput,
@@ -438,6 +438,10 @@ export function registerDebugTools(mcp: McpServer, context: AgentContext): void 
         network: z
           .enum([...(Object.keys(NETWORKS) as [NetworkName, ...NetworkName[]]), 'none'])
           .optional(),
+        cpu: z
+          .union([z.literal(1), z.literal(4), z.literal(6)] satisfies z.ZodLiteral<CpuRate>[])
+          .optional()
+          .describe('Run the CPU 4 or 6 times slower, as DevTools does; 1 is full speed again'),
         reset: z.boolean().optional().describe('Turn everything off')
       }
     },

@@ -4,8 +4,10 @@ import {
   displaySource,
   locationsIn,
   mapRefFor,
+  originalFunctionName,
   replaceLocations,
-  SourceMaps
+  SourceMaps,
+  type OriginalPosition
 } from './source-maps'
 
 const SCRIPT = 'http://localhost:3000/assets/index-a1b2.js'
@@ -199,6 +201,56 @@ describe('locations in text', () => {
         '    at src/Cart.tsx:30:2',
         '    at http://localhost:5173/src/App.tsx?t=1712:12:5'
       ].join('\n')
+    )
+  })
+})
+
+describe('original function names', () => {
+  const called = (name: string | null): OriginalPosition => ({
+    source: 'src/Cart.tsx',
+    line: 1,
+    column: 1,
+    name
+  })
+
+  test('a minified name becomes the name it was called by', () => {
+    expect(originalFunctionName('e', called('handleClick'))).toBe('handleClick')
+    expect(originalFunctionName('Object.Qe', called('checkout'))).toBe('checkout')
+    expect(originalFunctionName('async t', called('load'))).toBe('async load')
+    expect(originalFunctionName('new $t', called('Cart'))).toBe('new Cart')
+    expect(originalFunctionName('n [as onClick]', called('submit'))).toBe('submit')
+  })
+
+  test('readable names, unknown callers and odd map names are kept', () => {
+    expect(originalFunctionName('handleClick', called('f'))).toBe('handleClick')
+    expect(originalFunctionName('Cart.render', called('x'))).toBe('Cart.render')
+    expect(originalFunctionName('e', called(null))).toBe('e')
+    expect(originalFunctionName('e', null)).toBe('e')
+    expect(originalFunctionName('e', called('a b'))).toBe('e')
+    expect(originalFunctionName('e', called('e'))).toBe('e')
+  })
+
+  test('a stack in text gets its original names from a real map', async () => {
+    const { load } = loader({ [MAP_URL]: JSON.stringify(MAP) })
+    const maps = new SourceMaps(load)
+    maps.register(SCRIPT, 'index-a1b2.js.map')
+    // The bundle's line 1 col 15 calls `e`, which Cart.tsx calls handleClick.
+    const stack = ['TypeError: x', `    at e (${SCRIPT}:3:5)`, `    at ${SCRIPT}:1:15`].join('\n')
+    const lookup = await maps.resolveAll(locationsIn(stack))
+    expect(replaceLocations(stack, lookup)).toBe(
+      [
+        'TypeError: x',
+        '    at handleClick (src/util.ts:3:1)',
+        '    at src/components/Cart.tsx:20:5'
+      ].join('\n')
+    )
+  })
+
+  test('no name is taken across an await', async () => {
+    const stack = [`    at e (${SCRIPT}:3:5)`, `    at async t (${SCRIPT}:1:15)`].join('\n')
+    const lookup = (): OriginalPosition => called('handleClick')
+    expect(replaceLocations(stack, lookup)).toBe(
+      ['    at e (src/Cart.tsx:1:1)', '    at async t (src/Cart.tsx:1:1)'].join('\n')
     )
   })
 })

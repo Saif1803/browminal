@@ -1,6 +1,6 @@
 /**
  * What emulate can change about a tab: the device (screen size, pixel ratio, touch, user agent),
- * the colour scheme and the network. Pure: the state, the presets and the label the address bar
+ * the colour scheme, the network and the CPU's speed. Pure: the state, the presets and the label the address bar
  * shows while any of it is on. The CDP calls live with the tool.
  */
 
@@ -79,6 +79,10 @@ export const NETWORKS = {
 
 export type NetworkName = keyof typeof NETWORKS
 
+/** CPU slowdowns, as DevTools offers them (Emulation.setCPUThrottlingRate); 1 is full speed. */
+export const CPU_RATES = [1, 4, 6] as const
+export type CpuRate = (typeof CPU_RATES)[number]
+
 export interface Emulation {
   /** A preset's name, or null for a custom viewport (or none). */
   device: DeviceName | null
@@ -86,6 +90,8 @@ export interface Emulation {
   userAgent: string | null
   colorScheme: 'light' | 'dark' | null
   network: NetworkName | null
+  /** How many times slower the CPU runs, or null for full speed. */
+  cpu: Exclude<CpuRate, 1> | null
 }
 
 export const NO_EMULATION: Emulation = {
@@ -93,7 +99,8 @@ export const NO_EMULATION: Emulation = {
   viewport: null,
   userAgent: null,
   colorScheme: null,
-  network: null
+  network: null,
+  cpu: null
 }
 
 /** One emulate call. Each field left out keeps what's on; "none" turns that part off. */
@@ -102,6 +109,8 @@ export interface EmulationChange {
   viewport?: { width: number; height: number; deviceScaleFactor?: number; mobile?: boolean }
   colorScheme?: 'light' | 'dark' | 'none'
   network?: NetworkName | 'none'
+  /** 4 or 6 times slower; 1 is full speed again. */
+  cpu?: CpuRate
 }
 
 export function applyEmulationChange(current: Emulation, change: EmulationChange): Emulation {
@@ -129,10 +138,11 @@ export function applyEmulationChange(current: Emulation, change: EmulationChange
   if (change.colorScheme)
     next.colorScheme = change.colorScheme === 'none' ? null : change.colorScheme
   if (change.network) next.network = change.network === 'none' ? null : change.network
+  if (change.cpu !== undefined) next.cpu = change.cpu === 1 ? null : change.cpu
   return next
 }
 
-/** "iPhone 15 · dark · offline": what the address bar badge says; null when nothing is on. */
+/** "iPhone 15 · dark · offline · CPU 4× slower": what the address bar badge says; null when nothing is on. */
 export function emulationLabel(emulation: Emulation): string | null {
   const parts: string[] = []
   if (emulation.device) parts.push(DEVICES[emulation.device].label)
@@ -140,5 +150,6 @@ export function emulationLabel(emulation: Emulation): string | null {
     parts.push(`${emulation.viewport.width}×${emulation.viewport.height}`)
   if (emulation.colorScheme) parts.push(emulation.colorScheme)
   if (emulation.network) parts.push(NETWORKS[emulation.network].label)
+  if (emulation.cpu) parts.push(`CPU ${emulation.cpu}× slower`)
   return parts.length ? parts.join(' · ') : null
 }

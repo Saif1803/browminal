@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { findInTree, formatAXTree, type AXNode } from './ax-tree'
+import { findInTree, formatAXTree, joinFrameTrees, type AXNode } from './ax-tree'
 
 let nextId = 0
 /** A node with children; ids are made up, refs are backend ids. */
@@ -127,4 +127,83 @@ test('findInTree returns matching lines with refs', () => {
   expect(findInTree(text, 'checkout')).toBe('- button "Checkout" [ref=103]')
   expect(findInTree(text, 'nope')).toBe('Nothing on the page matches "nope".')
   expect(findInTree(text, 'e', 1)).toMatch(/^- page "Cart test" \[ref=109\]\n… and \d+ more$/)
+})
+
+describe('joinFrameTrees', () => {
+  const ax = (
+    nodeId: string,
+    role: string,
+    name: string,
+    ref: number,
+    childIds: string[] = []
+  ): AXNode => ({
+    nodeId,
+    ignored: false,
+    role: { type: 'role', value: role },
+    name: name ? { type: 'computedString', value: name } : undefined,
+    backendDOMNodeId: ref,
+    childIds
+  })
+  // The page: a heading and two iframes (refs 3 and 4). Each tree numbers its nodes from 1.
+  const main = [
+    ax('1', 'RootWebArea', 'Shop', 1, ['2', '3', '4']),
+    ax('2', 'heading', 'Cart', 2),
+    ax('3', 'Iframe', 'Preview', 3),
+    ax('4', 'Iframe', '', 4)
+  ]
+  const preview = [
+    ax('1', 'RootWebArea', 'Button story', 20, ['2', '3']),
+    ax('2', 'button', 'Buy', 21),
+    ax('3', 'Iframe', '', 22)
+  ]
+  const nested = [ax('1', 'RootWebArea', 'Inner', 30, ['2']), ax('2', 'link', 'Help', 31)]
+
+  test('each frame’s tree goes under its iframe, nested ones too, in any order', () => {
+    const joined = joinFrameTrees(main, [
+      { owner: 22, url: 'http://localhost:6006/inner.html', nodes: nested },
+      { owner: 3, url: 'http://localhost:6006/iframe.html', nodes: preview }
+    ])
+    expect(formatAXTree(joined)).toBe(
+      [
+        '- page "Shop" [ref=1]',
+        '  - heading "Cart" [ref=2]',
+        '  - frame "Preview" [ref=3]',
+        '    - page "Button story" [ref=20]',
+        '      - button "Buy" [ref=21]',
+        '      - frame [ref=22]',
+        '        - page "Inner" [ref=30]',
+        '          - link "Help" [ref=31]',
+        '  - frame [ref=4]'
+      ].join('\n')
+    )
+    expect(formatAXTree(joined, { interactiveOnly: true })).toBe(
+      ['- button "Buy" [ref=21]', '- link "Help" [ref=31]'].join('\n')
+    )
+    expect(formatAXTree(joined, { rootRef: 20 })).toContain('- button "Buy" [ref=21]')
+    // The page's own trees are untouched.
+    expect(main[2].childIds).toEqual([])
+  })
+
+  test('a frame that can’t be read says so; one without its iframe is left out', () => {
+    const joined = joinFrameTrees(main, [
+      { owner: 4, url: 'https://js.stripe.com/v3/', nodes: null },
+      { owner: 99, url: 'http://localhost/lost', nodes: nested },
+      { owner: null, url: 'http://localhost/unknown', nodes: nested }
+    ])
+    const text = formatAXTree(joined)
+    expect(text).toContain(
+      '  - frame [ref=4]\n    - frame content not readable (https://js.stripe.com/v3/): an embed from another site'
+    )
+    expect(text).not.toContain('Inner')
+  })
+
+  test('a frame already in the tree isn’t added twice', () => {
+    const withChild = [
+      ax('1', 'RootWebArea', 'Shop', 1, ['2']),
+      ax('2', 'Iframe', '', 3, ['3']),
+      ax('3', 'RootWebArea', 'Inner', 30)
+    ]
+    const joined = joinFrameTrees(withChild, [{ owner: 3, url: 'http://x/', nodes: nested }])
+    expect(formatAXTree(joined).match(/Inner/g)).toHaveLength(1)
+  })
 })

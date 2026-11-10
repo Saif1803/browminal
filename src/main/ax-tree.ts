@@ -53,6 +53,7 @@ export const INTERACTIVE_ROLES = new Set([
 /** Roles that give the page its shape. Shown even without a name. */
 const STRUCTURE_ROLES = new Set([
   'RootWebArea',
+  'Iframe',
   'heading',
   'list',
   'listitem',
@@ -81,6 +82,9 @@ const STRUCTURE_ROLES = new Set([
   'image',
   'img'
 ])
+
+/** Our own role: a frame whose content couldn't be read; its name is the frame's URL. */
+export const UNREAD_FRAME_ROLE = 'browminal:unread-frame'
 
 /** Never shown (their text is already in their parent's StaticText). */
 const HIDDEN_ROLES = new Set(['InlineTextBox', 'LineBreak'])
@@ -126,7 +130,17 @@ function states(node: AXNode): string[] {
 function describe(node: AXNode, role: string): string {
   const name = clip(text(node.name))
   const value = clip(text(node.value))
-  const label = role === 'RootWebArea' ? 'page' : role === 'StaticText' ? 'text' : role
+  if (role === UNREAD_FRAME_ROLE) {
+    return `frame content not readable${name ? ` (${name})` : ''}: an embed from another site`
+  }
+  const label =
+    role === 'RootWebArea'
+      ? 'page'
+      : role === 'StaticText'
+        ? 'text'
+        : role === 'Iframe'
+          ? 'frame'
+          : role
   let line = name ? `${label} "${name}"` : label
   if (value && value !== name) line += `: ${JSON.stringify(value)}`
   const marks = states(node)
@@ -202,6 +216,61 @@ export function formatAXTree(nodes: readonly AXNode[], options: AXTreeOptions = 
     )
   }
   return lines.join('\n')
+}
+
+/** One frame's accessibility tree, to join under the `<iframe>` element that holds it. */
+export interface FrameTree {
+  /** The backend DOM node id of its `<iframe>` (DOM.getFrameOwner), or null if unknown. */
+  owner: number | null
+  url: string
+  /** Its tree (Accessibility.getFullAXTree with its frameId), or null when it can't be read. */
+  nodes: readonly AXNode[] | null
+}
+
+/**
+ * The page's tree with each frame's tree under its `<iframe>` (nested frames too, in any order),
+ * so read_page and find see what iframes show. Node ids get a per-frame prefix (each tree counts
+ * its own); refs are backend DOM node ids, unique in the tab's renderer, so they work across
+ * frames. A frame that couldn't be read shows as one line saying so; one whose `<iframe>` isn't
+ * in the tree is left out.
+ */
+export function joinFrameTrees(main: readonly AXNode[], frames: readonly FrameTree[]): AXNode[] {
+  const copy = (node: AXNode, prefix: string): AXNode => ({
+    ...node,
+    nodeId: prefix + node.nodeId,
+    childIds: (node.childIds ?? []).map((id) => prefix + id)
+  })
+  const joined = main.map((node) => copy(node, ''))
+  const trees = frames.map((frame, index) =>
+    frame.nodes ? frame.nodes.map((node) => copy(node, `frame${index}:`)) : null
+  )
+  const byRef = new Map<number, AXNode>()
+  for (const node of [...joined, ...trees.flatMap((tree) => tree ?? [])]) {
+    if (node.backendDOMNodeId !== undefined && !byRef.has(node.backendDOMNodeId)) {
+      byRef.set(node.backendDOMNodeId, node)
+    }
+  }
+  const inMain = new Set(main.map((node) => node.backendDOMNodeId))
+  frames.forEach((frame, index) => {
+    const owner = frame.owner === null ? undefined : byRef.get(frame.owner)
+    if (!owner) return
+    const tree = trees[index]
+    // Already in the tree it's joined to (Chromium put it there itself): not twice.
+    const rootRef = tree?.[0]?.backendDOMNodeId
+    if (rootRef !== undefined && inMain.has(rootRef)) return
+    const root: AXNode =
+      tree && tree.length > 0
+        ? tree[0]
+        : {
+            nodeId: `frame${index}:unread`,
+            ignored: false,
+            role: { type: 'role', value: UNREAD_FRAME_ROLE },
+            name: { type: 'string', value: frame.url }
+          }
+    owner.childIds = [...(owner.childIds ?? []), root.nodeId]
+    joined.push(...(tree && tree.length > 0 ? tree : [root]))
+  })
+  return joined
 }
 
 /** Lines of formatAXTree's output that mention `query` (case-insensitive), at most `limit`. */

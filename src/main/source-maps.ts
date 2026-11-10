@@ -240,9 +240,71 @@ export function locationsIn(text: string): SourcePosition[] {
 }
 
 /** `text` with each place `lookup` resolves replaced by its original file and line. */
-export function replaceLocations(text: string, lookup: PositionLookup): string {
+function replacePlaces(text: string, lookup: PositionLookup): string {
   return text.replace(LOCATION_IN_TEXT, (match, url: string, line: string, column: string) => {
     const original = lookup(url, Number(line), Number(column))
     return original ? formatOriginal(original) : match
   })
+}
+
+// A minifier's names are one to three characters (a, Qe, $t1); longer ones are kept as written.
+const MANGLED = /^[A-Za-z_$][\w$]{0,2}$/
+
+/**
+ * A stack frame's function name as it was written. A map has no name for a function itself, but
+ * the place that called it (the caller's frame) maps to the name it was called by: `t()` in a
+ * bundle is `checkout()` in Cart.tsx. Only a minified-looking name is replaced, keeping `async `
+ * and `new `; `called` is the caller frame's original position (null when unknown).
+ */
+export function originalFunctionName(name: string, called: OriginalPosition | null): string {
+  const original = called?.name
+  if (!original || !/^[A-Za-z_$][\w$]*$/.test(original)) return name
+  const [, prefix = '', rest] = /^(async |new )?(.*)$/s.exec(name) ?? []
+  const core = (rest ?? '').replace(/ \[as [^\]]*\]$/, '')
+  const last = core.slice(core.lastIndexOf('.') + 1)
+  if (!MANGLED.test(last) || last === original) return name
+  return `${prefix}${original}`
+}
+
+// "    at name (place)" and "    at place", as V8 writes stack lines.
+const NAMED_FRAME = /^(\s*at )(.+?) \((.+?):(\d+):(\d+)\)(\s*)$/
+const PLAIN_FRAME = /^\s*at (?:async )?(.+?):(\d+):(\d+)\s*$/
+
+/**
+ * `text` with each place `lookup` resolves replaced by its original file and line, and in a
+ * stack written in it ("    at t (…)"), minified function names by their original ones.
+ */
+export function replaceLocations(text: string, lookup: PositionLookup): string {
+  const lines = text.split('\n')
+  // Each stack line's own place, for the line above it (its callee) to take its name from.
+  const places = lines.map((line) => {
+    const named = NAMED_FRAME.exec(line)
+    if (named) {
+      return {
+        async: named[2].startsWith('async '),
+        url: named[3],
+        line: +named[4],
+        column: +named[5]
+      }
+    }
+    const plain = PLAIN_FRAME.exec(line)
+    if (plain)
+      return {
+        async: /^\s*at async /.test(line),
+        url: plain[1],
+        line: +plain[2],
+        column: +plain[3]
+      }
+    return null
+  })
+  const renamed = lines.map((line, index) => {
+    const named = NAMED_FRAME.exec(line)
+    const caller = places[index + 1]
+    // Across an await the next frame isn't the call site.
+    if (!named || !caller || caller.async) return line
+    const name = originalFunctionName(named[2], lookup(caller.url, caller.line, caller.column))
+    if (name === named[2]) return line
+    return `${named[1]}${name} (${named[3]}:${named[4]}:${named[5]})${named[6]}`
+  })
+  return replacePlaces(renamed.join('\n'), lookup)
 }
