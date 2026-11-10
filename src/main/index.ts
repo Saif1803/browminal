@@ -11,15 +11,27 @@ import { registerPermissions } from './permissions'
 import { handleInternalProtocol, registerInternalScheme } from './protocol'
 import { parseSettings, type Settings } from './settings'
 import { registerShortcuts } from './shortcuts'
+import { launchUrl } from './launch-args'
 import { JsonStore } from './store'
 import { cleanUserAgent } from './user-agent'
 import { createMainWindow, type MainWindow } from './window'
 
 let main: MainWindow | null = null
 
-registerInternalScheme()
-// Look like plain Chrome, so sites (notably Google sign-in) don't block us as an embedded browser.
-app.userAgentFallback = cleanUserAgent(app.userAgentFallback, app.getName())
+// One Browminal per profile: a second one would write the same settings, bookmarks and token files
+// and compete for the bridge's port. A second launch hands its URL (if any) to this one and quits.
+if (app.requestSingleInstanceLock()) {
+  registerInternalScheme()
+  // Look like plain Chrome, so sites (notably Google sign-in) don't block us as an embedded browser.
+  app.userAgentFallback = cleanUserAgent(app.userAgentFallback, app.getName())
+  app.whenReady().then(startBrowser)
+  app.on('window-all-closed', () => {
+    if (process.platform !== 'darwin') app.quit()
+  })
+} else {
+  console.log('Browminal is already running with this profile; handed over to it.')
+  app.quit()
+}
 
 function openWindow(
   downloads: Downloads,
@@ -66,7 +78,7 @@ function setAppMenu(): void {
   )
 }
 
-app.whenReady().then(() => {
+function startBrowser(): void {
   electronApp.setAppUserModelId('com.browminal.browser')
   setAppMenu()
   handleInternalProtocol()
@@ -79,6 +91,20 @@ app.whenReady().then(() => {
   const agent = new Agent(userData, settings, () => main)
   registerIpc(() => main)
   openWindow(downloads, bookmarks, adblock, agent, settings)
+  const firstUrl = launchUrl(process.argv)
+  if (firstUrl) main?.tabs.active.load(firstUrl)
+
+  // Another launch of Browminal (it quits at once): show this window, and its URL in a new tab.
+  app.on('second-instance', (_event, commandLine) => {
+    if (!main) openWindow(downloads, bookmarks, adblock, agent, settings)
+    const opened = main
+    if (!opened) return
+    const url = launchUrl(commandLine)
+    if (url) opened.tabs.create({ url })
+    if (opened.window.isMinimized()) opened.window.restore()
+    opened.window.show()
+    opened.window.focus()
+  })
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0)
@@ -93,8 +119,4 @@ app.whenReady().then(() => {
     bookmarks.flush()
     settings.flush()
   })
-})
-
-app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') app.quit()
-})
+}

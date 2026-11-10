@@ -50,12 +50,16 @@ bun run build:native # rebuild the Rust module after changing native/
 bun run dev          # start the app with HMR
 bun run typecheck    # tsc for main/preload, renderer, and tests
 bun test             # unit tests (src/**/*.test.ts)
+bun run smoke        # builds, then drives the real app through the agent bridge (scripts/smoke.ts)
 bun run lint         # eslint
 bun run build        # typecheck + production bundle into out/
 bun run build:win    # package Windows installer (build:mac / build:linux likewise)
 ```
 Run `bun run typecheck`, `bun test` and `bun run lint` before calling work done (and clippy and
-rustfmt when `native/` changed).
+rustfmt when `native/` changed). Run `bun run smoke` too when main, the bridge or a dependency
+changed: it starts the built app on a throwaway profile (never the user's), with the bridge on a
+spare port, and checks the agent tools and the bridge's rules over MCP. Close every Browminal that
+runs from `out/` first (the build fails on the locked native module).
 
 ## Architecture
 - **UI** (tab strip + toolbar) is a React app in the renderer: `src/renderer/src`. It is the
@@ -144,7 +148,8 @@ rustfmt when `native/` changed).
 ### Main-process modules (`src/main`)
 | File | Responsibility |
 | --- | --- |
-| `index.ts` | App lifecycle only; wires the modules together |
+| `index.ts` | App lifecycle only; wires the modules together; the single-instance lock |
+| `launch-args.ts` | Pure: the http(s) URL a launch asks for on its command line |
 | `native.ts` | Loads the Rust module (`native/`); its path for workers |
 | `window.ts` | Frameless `BrowserWindow`, relays resize and state, window title |
 | `tab-manager.ts` | Tab list, active tab, closed-tab stack, layout, batched state push |
@@ -242,6 +247,11 @@ space for the native controls.
   ask; the UI and `browminal://` pages always get "no". Screen sharing asks every time (screens only,
   no audio) and needs a user gesture. USB, HID, serial and Bluetooth pickers are always cancelled.
 - Only http(s) URLs are loaded into tabs from the address bar.
+- **One instance per profile** (`app.requestSingleInstanceLock()`): a second launch quits and the
+  running one comes to the front. A launch's command line may name a page, which opens in a new tab
+  (the first launch: in its first tab), shared with agents only under "Share every tab", like any tab
+  the user opens; only an absolute http(s) URL counts
+  (`launchUrl`), so the command line can't load `browminal://`, `file:` or other schemes.
 - **Downloads** (`downloads.ts`): only pages in tabs can download. Files go straight into the OS
   Downloads folder under a cleaned, unique name (`download-names.ts`) and are **never opened
   automatically**, only from the user's Open. Chromium adds the mark-of-the-web on Windows.

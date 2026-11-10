@@ -12,6 +12,7 @@
     "typecheck:test": "tsc --noEmit -p tsconfig.test.json",
     "typecheck": "bun run typecheck:node && bun run typecheck:web && bun run typecheck:test",
     "test": "bun test",
+    "smoke": "bun scripts/smoke.ts",
     "start": "electron-vite preview",
     "dev": "bun run build:native && electron-vite dev",
     "build": "bun run build:native && bun run typecheck && electron-vite build",
