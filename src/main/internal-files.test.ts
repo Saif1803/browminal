@@ -17,6 +17,9 @@ describe('resolveInternalFile', () => {
       path: join(root, 'home', 'icons', 'google.png'),
       mimeType: 'image/png'
     })
+    expect(
+      resolveInternalFile(root, 'browminal://home/inter-latin-wght-normal.woff2')?.mimeType
+    ).toBe('font/woff2')
   })
 
   test('serves the error page', () => {

@@ -5,12 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; base-uri 'none'; form-action 'none'"
+      content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; base-uri 'none'; form-action 'none'"
     />
     <title>Home</title>
     <link rel="stylesheet" href="home.css" />
-    <!-- Empty unless the window is glass (see src/main/protocol.ts). -->
-    <link rel="stylesheet" href="glass.css" />
     <script src="home.js" defer></script>
   </head>
   <body>
@@ -35,56 +33,58 @@
             <span class="picker-thumb" aria-hidden="true"></span>
             <label class="picker-option">
               <input type="radio" name="assistant" value="chatgpt" checked />
-              <span>
-                <img class="icon" src="icons/chatgpt.svg" alt="" />
-                ChatGPT
-              </span>
+              <span><img class="picker-icon" src="icons/chatgpt.svg" alt="" />ChatGPT</span>
             </label>
             <label class="picker-option">
               <input type="radio" name="assistant" value="claude" />
-              <span>
-                <img class="icon" src="icons/claude.svg" alt="" />
-                Claude
-              </span>
+              <span><img class="picker-icon" src="icons/claude.svg" alt="" />Claude</span>
             </label>
             <label class="picker-option">
               <input type="radio" name="assistant" value="google" />
-              <span>
-                <img class="icon" src="icons/google.png" alt="" />
-                Google
-              </span>
+              <span><img class="picker-icon" src="icons/google.png" alt="" />Google</span>
             </label>
           </fieldset>
 
-          <button type="submit" class="ask" id="ask">Ask ChatGPT</button>
+          <!-- Icon only; home.js names it for the chosen assistant (aria-label, tooltip). -->
+          <button type="submit" class="ask" id="ask" aria-label="Ask ChatGPT">
+            <svg
+              class="ask-icon"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2.25"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <circle cx="11" cy="11" r="7" />
+              <path d="m20 20-4.2-4.2" />
+            </svg>
+          </button>
         </div>
       </form>
 
-      <p class="hint" id="hint">Press Enter to ask, Shift+Enter for a new line</p>
+      <!-- Favourite sites: filled by home.js from localStorage, with an Add tile last. -->
+      <nav class="shortcuts" id="shortcuts" aria-label="Favourite sites"></nav>
 
-      <nav class="shortcuts" aria-label="Quick links">
-        <a class="shortcut" href="https://chatgpt.com/">
-          <img class="shortcut-icon" src="icons/chatgpt.svg" alt="" />
-          <span class="shortcut-text">
-            <span class="shortcut-name">ChatGPT</span>
-            <span class="shortcut-host">chatgpt.com</span>
-          </span>
-        </a>
-        <a class="shortcut" href="https://claude.ai/new">
-          <img class="shortcut-icon" src="icons/claude.svg" alt="" />
-          <span class="shortcut-text">
-            <span class="shortcut-name">Claude</span>
-            <span class="shortcut-host">claude.ai</span>
-          </span>
-        </a>
-        <a class="shortcut" href="https://www.google.com/">
-          <img class="shortcut-icon" src="icons/google.png" alt="" />
-          <span class="shortcut-text">
-            <span class="shortcut-name">Google</span>
-            <span class="shortcut-host">google.com</span>
-          </span>
-        </a>
-      </nav>
+      <dialog class="dialog" id="add-dialog" aria-labelledby="add-title">
+        <form class="dialog-form" id="add-form" autocomplete="off" novalidate>
+          <h2 class="dialog-title" id="add-title">Add a site</h2>
+          <label class="field">
+            <span class="field-label">URL</span>
+            <input class="field-input" id="add-url" maxlength="2048" placeholder="example.com" />
+          </label>
+          <label class="field">
+            <span class="field-label">Name</span>
+            <input class="field-input" id="add-name" maxlength="40" placeholder="Optional" />
+          </label>
+          <p class="dialog-error" id="add-error" role="alert"></p>
+          <div class="dialog-actions">
+            <button type="button" class="button" id="add-cancel">Cancel</button>
+            <button type="submit" class="button button-primary">Add</button>
+          </div>
+        </form>
+      </dialog>
     </main>
   </body>
 </html>
