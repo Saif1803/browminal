@@ -1,4 +1,3 @@
-import { useRef } from 'react'
 import type { AgentState, PickNotice } from '@shared/types'
 import { AgentIcon, PickIcon } from './icons'
 
@@ -8,38 +7,42 @@ function describe(agent: AgentState, shared: boolean): string {
   return shared ? 'Agents: this tab is shared' : 'Agents: this tab is not shared'
 }
 
-/** Opens the agent menu: share this tab, switch agents on/off, copy the connect command. */
+/**
+ * Opens the agent sheet over the page: share this tab, switch agents on/off, how to connect.
+ * Tinted while the tab is shared, ringed while the sheet is open, dotted when agents can't connect.
+ */
 export function AgentButton({
   agent,
-  shared
+  shared,
+  open
 }: {
   agent: AgentState
   /** Whether the active tab is shared with agents. */
   shared: boolean
+  /** The sheet is open. */
+  open: boolean
 }): React.JSX.Element {
-  const ref = useRef<HTMLButtonElement>(null)
   const label = describe(agent, shared)
-
-  const openMenu = (): void => {
-    const rect = ref.current?.getBoundingClientRect()
-    if (!rect) return
-    window.browser.showAgentMenu(Math.round(rect.left), Math.round(rect.bottom) + 4)
-  }
-
   return (
     <button
-      ref={ref}
       type="button"
       aria-label={label}
+      aria-expanded={open}
+      aria-haspopup="dialog"
       title={label}
-      onClick={openMenu}
-      className={`app-no-drag relative grid size-8 shrink-0 place-items-center rounded-lg transition-colors hover:bg-field-hover hover:text-ink focus-visible:outline-2 focus-visible:outline-accent ${
-        shared ? 'text-accent' : 'text-ink-muted'
-      }`}
+      onClick={() => window.browser.toggleAgentSheet()}
+      className={`app-no-drag relative grid size-8 shrink-0 place-items-center rounded-lg transition-colors focus-visible:outline-2 focus-visible:outline-accent ${
+        shared
+          ? 'bg-accent/15 text-accent hover:bg-accent/25'
+          : 'text-ink-muted hover:bg-field-hover hover:text-ink'
+      } ${open ? 'ring-[1.5px] ring-accent ring-inset' : ''}`}
     >
       <AgentIcon />
-      {agent.error && (
-        <span aria-hidden="true" className="absolute top-1 right-1 size-1.5 rounded-full bg-ink" />
+      {agent.enabled && agent.error && (
+        <span
+          aria-hidden="true"
+          className="absolute top-1.5 right-1.5 size-[7px] rounded-full bg-danger ring-2 ring-strip"
+        />
       )}
     </button>
   )
@@ -52,7 +55,7 @@ const CHIP =
 export function AgentPicking(): React.JSX.Element {
   return (
     <div role="status" className={`${CHIP} pr-1 pl-2.5`}>
-      <PickIcon width={13} height={13} />
+      <PickIcon size={14} />
       <span className="whitespace-nowrap">Click an element to send it to the agent</span>
       <button
         type="button"
@@ -79,7 +82,7 @@ export function PickSent({ notice }: { notice: PickNotice }): React.JSX.Element 
   const text = noticeText(notice)
   return (
     <div role="status" title={text} className={`${CHIP} px-3`}>
-      <PickIcon width={13} height={13} className="shrink-0" />
+      <PickIcon size={14} className="shrink-0" />
       <span className="max-w-72 truncate">{text}</span>
     </div>
   )

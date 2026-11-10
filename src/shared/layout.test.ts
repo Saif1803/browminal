@@ -5,9 +5,11 @@ import {
   MIN_PAGE_HEIGHT,
   MIN_PAGE_WIDTH,
   PAGE_INSET,
+  PAGE_INSET_BOTTOM,
   panelPlacement,
   TERMINAL_HEADER_HEIGHT,
   TERMINAL_MIN_HEIGHT,
+  TERMINAL_TAB_ROW_HEIGHT,
   TERMINAL_MIN_WIDTH,
   windowLayout
 } from './layout'
@@ -15,7 +17,12 @@ import {
 describe('windowLayout', () => {
   test('without the panel the page fills the window below the UI, inset', () => {
     expect(windowLayout(1000, 800, 80, null)).toEqual({
-      page: { x: PAGE_INSET, y: 80, width: 1000 - 2 * PAGE_INSET, height: 800 - 80 - PAGE_INSET },
+      page: {
+        x: PAGE_INSET,
+        y: 80,
+        width: 1000 - 2 * PAGE_INSET,
+        height: 800 - 80 - PAGE_INSET_BOTTOM
+      },
       panel: null,
       terminal: null
     })
@@ -23,7 +30,7 @@ describe('windowLayout', () => {
 
   test('docked at the bottom: the panel under the page, the terminal below its header', () => {
     const { page, panel, terminal } = windowLayout(1000, 800, 80, { dock: 'bottom', size: 300 })
-    expect(panel).toEqual({ x: 8, y: 800 - 8 - 300, width: 984, height: 300 })
+    expect(panel).toEqual({ x: 8, y: 800 - 4 - 300, width: 984, height: 300 })
     expect(terminal).toEqual({
       x: 8,
       y: panel!.y + TERMINAL_HEADER_HEIGHT,
@@ -33,14 +40,15 @@ describe('windowLayout', () => {
     expect(page).toEqual({ x: 8, y: 80, width: 984, height: panel!.y - 8 - 80 })
   })
 
-  test('docked on the right: the panel beside the page, full height', () => {
+  test('docked on the right: the panel beside the page, full height, with a taller header', () => {
     const { page, panel, terminal } = windowLayout(1000, 800, 80, { dock: 'right', size: 400 })
-    expect(panel).toEqual({ x: 1000 - 8 - 400, y: 80, width: 400, height: 800 - 80 - 8 })
+    expect(panel).toEqual({ x: 1000 - 8 - 400, y: 80, width: 400, height: 800 - 80 - 4 })
+    const header = TERMINAL_HEADER_HEIGHT + TERMINAL_TAB_ROW_HEIGHT
     expect(terminal).toEqual({
       x: panel!.x,
-      y: 80 + TERMINAL_HEADER_HEIGHT,
+      y: 80 + header,
       width: 400,
-      height: panel!.height - TERMINAL_HEADER_HEIGHT
+      height: panel!.height - header
     })
     expect(page).toEqual({ x: 8, y: 80, width: panel!.x - 16, height: panel!.height })
   })
@@ -60,7 +68,7 @@ describe('clampPanelSize', () => {
     expect(clampPanelSize(10, 'bottom', 1000, 800, 80)).toBe(TERMINAL_MIN_HEIGHT)
     expect(clampPanelSize(300.4, 'bottom', 1000, 800, 80)).toBe(300)
     expect(clampPanelSize(9999, 'bottom', 1000, 800, 80)).toBe(
-      800 - 80 - MIN_PAGE_HEIGHT - 2 * PAGE_INSET
+      800 - 80 - MIN_PAGE_HEIGHT - PAGE_INSET - PAGE_INSET_BOTTOM
     )
     // A tiny window still gets the minimum panel; the page gives way.
     expect(clampPanelSize(300, 'bottom', 1000, 200, 80)).toBe(TERMINAL_MIN_HEIGHT)

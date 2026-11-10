@@ -8,7 +8,6 @@ import {
 } from '../shared/layout'
 import type { TabSummary } from '../shared/types'
 import { HOME_URL, isHomeUrl, isHttpUrl } from '../shared/url'
-import { confirmOpenExternal } from './external-links'
 import { PageVeil } from './page-veil'
 import { activeAfterClose, insertionIndex } from './tab-order'
 import { Tab, type OpenRequest, type TabActiveState, type TabHooks } from './tabs'
@@ -47,6 +46,8 @@ export class TabManager {
   /** Where the terminal panel is while it's open (it takes space from the page), else null. */
   private panel: PanelPlacement | null = null
   private layoutListeners: ((terminal: Rect | null) => void)[] = []
+  private restackListeners: (() => void)[] = []
+  private externalListener: ((tab: Tab, url: string) => void) | null = null
   private changeListener: (() => void) | null = null
   private createdListeners: ((tab: Tab) => void)[] = []
   private faviconListeners: ((url: string, favicon: string) => void)[] = []
@@ -68,7 +69,7 @@ export class TabManager {
     opened: (opener, request) => this.openFromPage(opener, request),
     openExternal: (tab, url) => {
       // Only the tab in front may ask; background tabs could otherwise pop dialogs at any time.
-      if (tab === this.activeTab) confirmOpenExternal(this.window, tab.url, url)
+      if (tab === this.activeTab) this.externalListener?.(tab, url)
     },
     fullscreenChanged: (tab, isFullscreen) => this.setPageFullscreen(tab, isFullscreen),
     destroyed: (tab) => this.remove(tab, false),
@@ -217,6 +218,19 @@ export class TabManager {
     this.layout()
   }
 
+  /** A mailto:/tel: link in the tab in front: the listener asks the user before opening it. */
+  onOpenExternal(listener: (tab: Tab, url: string) => void): void {
+    this.externalListener = listener
+  }
+
+  /**
+   * Called after views were added to the window (a tab shown, the veil, a layout), so a view
+   * that must stay on top (the overlay) can go back there.
+   */
+  onRestack(listener: () => void): void {
+    this.restackListeners.push(listener)
+  }
+
   /** Called after every layout with where the terminal view goes (null: hidden). */
   onLayout(listener: (terminal: Rect | null) => void): void {
     this.layoutListeners.push(listener)
@@ -241,6 +255,7 @@ export class TabManager {
     }
     if (this.activeTab) this.veil.setBounds(this.activeTab.bounds, this.activeTab.cornerRadius)
     for (const listener of this.layoutListeners) listener(terminal)
+    this.restacked()
   }
 
   /** Destroys every tab. Call when the window closes. */
@@ -249,6 +264,8 @@ export class TabManager {
     this.changeListener = null
     this.faviconListeners = []
     this.layoutListeners = []
+    this.restackListeners = []
+    this.externalListener = null
     for (const tab of [...this.tabs, ...this.retiring]) tab.destroy()
     this.tabs = []
     this.retiring.clear()
@@ -295,15 +312,22 @@ export class TabManager {
     this.retiring.clear()
     this.shownTab = tab
     this.updateVeil(false)
+    this.restacked()
+  }
+
+  private restacked(): void {
+    for (const listener of this.restackListeners) listener()
   }
 
   /** Veils the tab on screen while its new document hasn't drawn; `fade`: animate the change. */
   private updateVeil(fade: boolean): void {
     const tab = this.activeTab
     if (this.disposed || this.window.isDestroyed() || tab !== this.shownTab) return
-    const color = tab.coverColor
-    if (tab.isPainted || !color) this.veil.uncover(fade ? VEIL_FADE_OUT_MS : 0)
-    else this.veil.cover(tab.bounds, tab.cornerRadius, color, fade ? VEIL_FADE_IN_MS : 0)
+    if (tab.isPainted) this.veil.uncover(fade ? VEIL_FADE_OUT_MS : 0)
+    else {
+      this.veil.cover(tab.bounds, tab.cornerRadius, tab.coverColor, fade ? VEIL_FADE_IN_MS : 0)
+      this.restacked()
+    }
   }
 
   /** A page entered or left HTML fullscreen: the window follows, and the page covers the UI. */

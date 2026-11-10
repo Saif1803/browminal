@@ -86,29 +86,16 @@ export function scaledSize(
   return { width: maxWidth, height: Math.max(1, Math.round((height * maxWidth) / width)) }
 }
 
-const mcpUrl = (port: number): string => `http://127.0.0.1:${port}/mcp`
+export const mcpUrl = (port: number): string => `http://127.0.0.1:${port}/mcp`
 
 /** The line that adds Browminal to Claude Code, for every project. */
 export const claudeAddCommand = (port: number, token: string): string =>
   `claude mcp add --scope user --transport http browminal ${mcpUrl(port)} ` +
   `--header "Authorization: Bearer ${token}"`
 
-/** Sent by agents started from a Browminal terminal: which terminal (so which tab) they work on. */
-export const TERMINAL_HEADER = 'x-browminal-terminal'
-
-/** The terminal id in a request's TERMINAL_HEADER, or null. */
-export function parseTerminalHeader(value: string | undefined): number | null {
-  if (value === undefined || !/^[1-9]\d{0,8}$/.test(value)) return null
-  return Number(value)
-}
-
-/**
- * The same for agents configured with JSON (an "mcpServers" entry). `terminalId`: written for an
- * agent started in that terminal.
- */
-export function mcpConfigJson(port: number, token: string, terminalId?: number): string {
-  const headers: Record<string, string> = { Authorization: `Bearer ${token}` }
-  if (terminalId !== undefined) headers[TERMINAL_HEADER] = String(terminalId)
+/** The same for agents configured with JSON (an "mcpServers" entry). */
+export function mcpConfigJson(port: number, token: string): string {
+  const headers = { Authorization: `Bearer ${token}` }
   return JSON.stringify(
     { mcpServers: { browminal: { type: 'http', url: mcpUrl(port), headers } } },
     null,

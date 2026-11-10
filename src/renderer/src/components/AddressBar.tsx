@@ -13,6 +13,8 @@ export function AddressBar({
   emulation,
   onResetEmulation,
   errors,
+  errorsOpen,
+  prompting,
   focusRequested,
   onFocused
 }: {
@@ -26,20 +28,51 @@ export function AddressBar({
   onResetEmulation: () => void
   /** New errors on a shared tab's page, shown as a badge that sends them to agents; 0 for none. */
   errors: number
+  /** The errors popover is open (the badge looks pressed). */
+  errorsOpen: boolean
+  /** A question hangs from the leading icon (a site's permission request…): it's highlighted. */
+  prompting: boolean
   /** Take the keyboard now (Ctrl+L, a new tab); call onFocused once done. */
   focusRequested: boolean
   onFocused: () => void
 }): React.JSX.Element {
   const inputRef = useRef<HTMLInputElement>(null)
+  const iconRef = useRef<HTMLSpanElement>(null)
   const [draft, setDraft] = useState(url)
   const [editing, setEditing] = useState(false)
   // Set on Enter so the blur that follows keeps the typed text until the page navigates.
   const submittedRef = useRef(false)
+  // Set when the keyboard went to another view while editing (a menu over the window, the
+  // page): the text stays as typed, and the field doesn't select it all when focus comes back.
+  const awayRef = useRef(false)
 
   // Follow navigations, but never clobber what the user is typing.
   useEffect(() => {
-    if (document.activeElement !== inputRef.current) setDraft(url)
+    if (document.activeElement !== inputRef.current || !document.hasFocus()) setDraft(url)
   }, [url])
+
+  // Questions for the user hang from the leading icon: tell main where it is.
+  useEffect(() => {
+    const icon = iconRef.current
+    const field = icon?.closest('label')
+    if (!icon || !field) return
+    const report = (): void => {
+      const left = icon.getBoundingClientRect().left
+      const bottom = field.getBoundingClientRect().bottom
+      window.browser.setPromptAnchor(
+        Math.max(0, Math.round(left - 12)),
+        Math.max(0, Math.round(bottom))
+      )
+    }
+    report()
+    const observer = new ResizeObserver(report)
+    observer.observe(field)
+    window.addEventListener('resize', report)
+    return () => {
+      observer.disconnect()
+      window.removeEventListener('resize', report)
+    }
+  }, [])
 
   useEffect(() => {
     if (!focusRequested) return
@@ -70,12 +103,13 @@ export function AddressBar({
   return (
     <form onSubmit={submit} className="app-no-drag min-w-0 flex-1">
       <label className="glass-edge group relative flex h-8 items-center gap-2 rounded-lg bg-field px-3 ring-1 ring-transparent transition-[background-color,box-shadow] hover:bg-field-hover focus-within:bg-field focus-within:ring-accent/70">
-        <span className="shrink-0 text-ink-faint group-focus-within:text-accent">
-          {isSecure && !editing ? (
-            <LockIcon width={13} height={13} />
-          ) : (
-            <SearchIcon width={13} height={13} />
-          )}
+        <span
+          ref={iconRef}
+          className={`-mx-1 grid size-[21px] shrink-0 place-items-center rounded-md transition-colors group-focus-within:text-accent ${
+            prompting ? 'bg-accent/15 text-accent' : 'text-ink-faint'
+          }`}
+        >
+          {isSecure && !editing ? <LockIcon size={14} /> : <SearchIcon size={14} />}
         </span>
         <input
           ref={inputRef}
@@ -83,10 +117,17 @@ export function AddressBar({
           onChange={(e) => setDraft(e.target.value)}
           onFocus={(e) => {
             setEditing(true)
-            e.target.select()
+            if (!awayRef.current) e.target.select()
+            awayRef.current = false
           }}
+          onPointerDown={() => (awayRef.current = false)}
           onBlur={() => {
             setEditing(false)
+            // The window's other views took the keyboard; it may come straight back (a menu).
+            if (!document.hasFocus() && !submittedRef.current) {
+              awayRef.current = true
+              return
+            }
             if (!submittedRef.current) setDraft(url)
             submittedRef.current = false
           }}
@@ -117,21 +158,29 @@ export function AddressBar({
             className="group/emu flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 text-[11px] whitespace-nowrap text-accent ring-1 ring-accent/50 transition-colors hover:bg-field-hover focus-visible:outline-2 focus-visible:outline-accent"
           >
             {emulation}
-            <CloseIcon width={10} height={10} className="opacity-60 group-hover/emu:opacity-100" />
+            <CloseIcon size={12} className="opacity-60 group-hover/emu:opacity-100" />
           </button>
         )}
         {errors > 0 && (
           <button
             type="button"
-            title="New errors on this page. Click to send them to the agent."
-            aria-label={`${errors} new error${errors === 1 ? '' : 's'} on this page. Send to agent`}
+            title="New errors on this page. Click to see them and send them to the agent."
+            aria-label={`${errors} new error${errors === 1 ? '' : 's'} on this page`}
+            aria-expanded={errorsOpen}
+            aria-haspopup="dialog"
             onClick={(event) => {
               const rect = event.currentTarget.getBoundingClientRect()
-              window.browser.showErrorsMenu(Math.round(rect.left), Math.round(rect.bottom) + 4)
+              // The popover's right edge lines up with the badge's, a little to its right.
+              window.browser.toggleErrors(
+                Math.min(Math.round(rect.right) + 4, window.innerWidth),
+                Math.round(rect.bottom)
+              )
             }}
-            className="flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 text-[11px] whitespace-nowrap text-accent tabular-nums ring-1 ring-accent/50 transition-colors hover:bg-field-hover focus-visible:outline-2 focus-visible:outline-accent"
+            className={`flex h-[22px] shrink-0 items-center gap-1 rounded-full bg-danger/12 px-2 text-[12px] font-semibold whitespace-nowrap text-danger tabular-nums transition-colors hover:bg-danger/20 focus-visible:outline-2 focus-visible:outline-accent ${
+              errorsOpen ? 'ring-[1.5px] ring-danger' : ''
+            }`}
           >
-            <ErrorIcon width={11} height={11} />
+            <ErrorIcon size={12} />
             {errors > 99 ? '99+' : errors}
           </button>
         )}
@@ -146,7 +195,7 @@ export function AddressBar({
               isBookmarked ? 'text-accent' : 'text-ink-faint hover:text-ink'
             }`}
           >
-            <StarIcon width={15} height={15} fill={isBookmarked ? 'currentColor' : 'none'} />
+            <StarIcon size={16} fill={isBookmarked ? 'currentColor' : 'none'} />
           </button>
         )}
       </label>

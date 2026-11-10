@@ -1,3 +1,4 @@
+import '@fontsource-variable/fira-code/wght.css'
 import '@xterm/xterm/css/xterm.css'
 import '../assets/main.css'
 import './terminal.css'
@@ -19,7 +20,11 @@ const container = document.getElementById('terminals')!
 const views = new Map<number, SessionView>()
 let activeId: number | null = null
 
-const FONT_FAMILY = "'Cascadia Mono', 'Cascadia Code', Consolas, 'SF Mono', Menlo, monospace"
+// Fira Code, bundled. No ligatures: xterm's ligature addon reads font files from disk, which a
+// sandboxed view can't.
+const FONT_FAMILY =
+  "'Fira Code Variable', 'Cascadia Mono', 'Cascadia Code', Consolas, 'SF Mono', Menlo, monospace"
+const FONT_SIZE = 13
 
 // ANSI colours readable on the console colour; light backgrounds need darker ones.
 const DARK_ANSI = {
@@ -112,8 +117,8 @@ function createView(id: number): SessionView {
   container.append(element)
   const term = new Terminal({
     fontFamily: FONT_FAMILY,
-    fontSize: 13,
-    lineHeight: 1.15,
+    fontSize: FONT_SIZE,
+    lineHeight: 1.25,
     cursorBlink: true,
     scrollback: 5000,
     macOptionIsMeta: true,
@@ -169,4 +174,9 @@ new ResizeObserver(() => {
   if (view && activeId !== null) fitAndReport(activeId, view)
 }).observe(container)
 
-api.ready()
+// xterm measures its cell size once, when a session's view opens: load the font before main sends
+// any sessions, or the cells are sized for the fallback font.
+void document.fonts
+  .load(`${FONT_SIZE}px 'Fira Code Variable'`)
+  .catch(() => undefined)
+  .then(() => api.ready())

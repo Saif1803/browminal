@@ -9,6 +9,8 @@ import type { Adblock } from './adblock'
 import type { Agent } from './agent'
 import type { Bookmarks } from './bookmarks'
 import type { Downloads } from './downloads'
+import { confirmOpenExternal } from './external-links'
+import { Overlay } from './overlay'
 import type { Settings } from './settings'
 import type { JsonStore } from './store'
 import { TabManager } from './tab-manager'
@@ -27,6 +29,8 @@ export interface MainWindow {
   adblock: Adblock
   agent: Agent
   terminals: Terminals
+  /** Popovers over the page: the agent sheet, the errors popover, questions for the user. */
+  overlay: Overlay
   getState(): BrowserState
   /** Puts the keyboard in the active tab's address bar. */
   focusAddressBar(): void
@@ -93,6 +97,9 @@ export function createMainWindow(
 
   const tabs = new TabManager(window)
   const terminals = new Terminals(window, tabs, settings, agent, userData)
+  // After the terminal, so it's placed (and kept) above the terminal view.
+  const overlay = new Overlay(window, tabs, agent)
+  tabs.onOpenExternal((tab, url) => void confirmOpenExternal(overlay, tab.id, tab.url, url))
 
   // The OS switched between light and dark: the UI and pages follow through CSS; the native
   // window controls and the window background are ours to repaint.
@@ -104,7 +111,10 @@ export function createMainWindow(
   })
 
   const layout = (): void => tabs.layout()
-  window.on('resize', layout)
+  window.on('resize', () => {
+    overlay.windowResized()
+    layout()
+  })
   // Maximize/restore/fullscreen can change the content size without a matching resize on some platforms.
   window.on('maximize', layout)
   window.on('unmaximize', layout)
@@ -129,7 +139,8 @@ export function createMainWindow(
       bookmarks: [...bookmarks.all],
       bookmarksBarVisible: bookmarks.barVisible,
       agent: agent.getState(),
-      terminal: terminals.getState()
+      terminal: terminals.getState(),
+      overlay: overlay.kind
     }
   }
 
@@ -150,6 +161,7 @@ export function createMainWindow(
       window.setProgressBar(bar)
     }
     if (!ui.isDestroyed()) ui.send(IpcChannel.State, state)
+    overlay.refresh()
   }
   const schedulePush = (): void => {
     if (pushScheduled) return
@@ -162,6 +174,7 @@ export function createMainWindow(
   const stopWatchingAdblock = adblock.onChange(schedulePush)
   const stopWatchingAgent = agent.onChange(schedulePush)
   terminals.onChange(schedulePush)
+  overlay.onChange(schedulePush)
   tabs.onTabCreated((tab) => {
     adblock.attach(tab.webContents)
     agent.watchTab(tab)
@@ -176,6 +189,7 @@ export function createMainWindow(
     stopWatchingAdblock()
     stopWatchingAgent()
     stopWatchingTheme()
+    overlay.dispose()
     terminals.dispose()
     tabs.dispose()
   })
@@ -205,6 +219,7 @@ export function createMainWindow(
     adblock,
     agent,
     terminals,
+    overlay,
     getState,
     focusAddressBar,
     newTab

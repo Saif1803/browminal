@@ -1,28 +1,21 @@
-import {
-  clipboard,
-  Menu,
-  type ContextMenuParams,
-  type MenuItemConstructorOptions,
-  type WebContents
-} from 'electron'
+import { clipboard, type ContextMenuParams, type WebContents } from 'electron'
 import { SEARCH_URL, isHttpUrl } from '../shared/url'
 import { canInspect } from './agent-policy'
+import type { MenuEntry } from './menu-model'
 import type { Tab } from './tabs'
 import type { MainWindow } from './window'
 
 const SEARCH_LABEL_LENGTH = 32
 
 /** Menu sections, joined with separators; empty sections are dropped. */
-function joinSections(
-  sections: MenuItemConstructorOptions[][]
-): MenuItemConstructorOptions[] | null {
+function joinSections(sections: MenuEntry[][]): MenuEntry[] | null {
   const items = sections
     .filter((section) => section.length > 0)
     .flatMap((section, i) => (i === 0 ? section : [{ type: 'separator' as const }, ...section]))
   return items.length > 0 ? items : null
 }
 
-function spellingItems(wc: WebContents, params: ContextMenuParams): MenuItemConstructorOptions[] {
+function spellingItems(wc: WebContents, params: ContextMenuParams): MenuEntry[] {
   if (!params.misspelledWord) return []
   if (params.dictionarySuggestions.length === 0) {
     return [{ label: 'No spelling suggestions', enabled: false }]
@@ -33,7 +26,7 @@ function spellingItems(wc: WebContents, params: ContextMenuParams): MenuItemCons
   }))
 }
 
-function editItems(wc: WebContents, params: ContextMenuParams): MenuItemConstructorOptions[] {
+function editItems(wc: WebContents, params: ContextMenuParams): MenuEntry[] {
   const flags = params.editFlags
   const copy = { label: 'Copy', enabled: flags.canCopy, click: () => wc.copy() }
   if (params.isEditable) {
@@ -52,13 +45,13 @@ function pageMenu(
   { tabs, agent }: MainWindow,
   tab: Tab,
   params: ContextMenuParams
-): MenuItemConstructorOptions[] | null {
+): MenuEntry[] | null {
   const wc = tab.webContents
   const openInNewTab = (url: string, background: boolean): void => {
     tabs.create({ url, background, openerId: tab.id })
   }
 
-  const link: MenuItemConstructorOptions[] = []
+  const link: MenuEntry[] = []
   if (params.linkURL) {
     if (isHttpUrl(params.linkURL)) {
       link.push({
@@ -69,7 +62,7 @@ function pageMenu(
     link.push({ label: 'Copy link address', click: () => clipboard.writeText(params.linkURL) })
   }
 
-  const image: MenuItemConstructorOptions[] = []
+  const image: MenuEntry[] = []
   if (params.mediaType === 'image' && params.srcURL) {
     if (isHttpUrl(params.srcURL)) {
       image.push({
@@ -86,7 +79,7 @@ function pageMenu(
   const text = params.selectionText.trim().replace(/\s+/g, ' ')
   const shortText =
     text.length > SEARCH_LABEL_LENGTH ? `${text.slice(0, SEARCH_LABEL_LENGTH)}…` : text
-  const search: MenuItemConstructorOptions[] = text
+  const search: MenuEntry[] = text
     ? [
         {
           label: `Search Google for “${shortText}”`,
@@ -98,7 +91,7 @@ function pageMenu(
   // Back/Forward/Reload only when clicking the page itself, like other browsers.
   const isPlainPage = !params.linkURL && !image.length && !params.isEditable && !text
   const history = wc.navigationHistory
-  const navigation: MenuItemConstructorOptions[] = isPlainPage
+  const navigation: MenuEntry[] = isPlainPage
     ? [
         { label: 'Back', enabled: history.canGoBack(), click: () => tab.back() },
         { label: 'Forward', enabled: history.canGoForward(), click: () => tab.forward() },
@@ -106,7 +99,7 @@ function pageMenu(
       ]
     : []
 
-  const inspect: MenuItemConstructorOptions[] = [
+  const inspect: MenuEntry[] = [
     { label: 'Inspect', click: () => tab.inspectElement(params.x, params.y) }
   ]
   if (canInspect(wc.getURL())) {
@@ -130,20 +123,33 @@ function pageMenu(
 }
 
 /**
- * Native context menus: the full menu in pages, and cut/copy/paste in the UI's text fields
- * (the address bar and find bar). Everything else in the UI gets no menu.
+ * Right-click menus (overlay menus at the pointer): the full menu in pages, and cut/copy/paste in
+ * the UI's text fields (the address bar and find bar). Everything else in the UI gets no menu.
  */
 export function registerContextMenus(main: MainWindow): void {
-  const { window, tabs } = main
+  const { window, tabs, overlay } = main
   const ui = window.webContents
-  const popup = (template: MenuItemConstructorOptions[] | null): void => {
-    if (template && !window.isDestroyed()) Menu.buildFromTemplate(template).popup({ window })
+  /** `params` are in `source`'s coordinates; `at` is where that view sits in the window. */
+  const popup = (
+    template: MenuEntry[] | null,
+    params: ContextMenuParams,
+    source: WebContents,
+    at: { x: number; y: number }
+  ): void => {
+    if (!template || window.isDestroyed()) return
+    overlay.showMenu(template, at.x + params.x, at.y + params.y, {
+      at: 'pointer',
+      returnTo: source
+    })
   }
 
   ui.on('context-menu', (_event, params) => {
-    popup(joinSections([spellingItems(ui, params), editItems(ui, params)]))
+    const template = joinSections([spellingItems(ui, params), editItems(ui, params)])
+    popup(template, params, ui, { x: 0, y: 0 })
   })
   tabs.onTabCreated((tab) => {
-    tab.webContents.on('context-menu', (_event, params) => popup(pageMenu(main, tab, params)))
+    tab.webContents.on('context-menu', (_event, params) =>
+      popup(pageMenu(main, tab, params), params, tab.webContents, tab.bounds)
+    )
   })
 }

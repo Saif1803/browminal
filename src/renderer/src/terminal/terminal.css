@@ -8,10 +8,11 @@
   inset: 0;
 }
 
-/* One per session; only the shown one is displayed. Padding keeps text off the rounded edge. */
+/* One per session; only the shown one is displayed. Padding keeps text off the rounded edge and
+   lines its left edge up with the header's. */
 .session {
   position: absolute;
-  inset: 6px 6px 6px 12px;
+  inset: 4px 10px 10px 16px;
   display: none;
 }
 

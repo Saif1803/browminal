@@ -7,14 +7,20 @@ export const INITIAL_CHROME_HEIGHT = TAB_STRIP_HEIGHT + 40
 /** setChromeHeight rejects anything taller. */
 export const MAX_CHROME_HEIGHT = 400
 
-/** Gap between the page and the window's left, right and bottom edges; the glass shows through. */
+/** Gap between the page and the window's left and right edges (and the panel); the glass shows through. */
 export const PAGE_INSET = 8
+/** Gap between the page (or the bottom panel) and the window's bottom edge. */
+export const PAGE_INSET_BOTTOM = 4
 
 /** Corner radius of the page. */
 export const PAGE_RADIUS = 10
 
 /** The terminal panel's header row (drawn by the UI), above the terminal view. */
-export const TERMINAL_HEADER_HEIGHT = 34
+export const TERMINAL_HEADER_HEIGHT = 42
+/** On the right the header is narrow: which tab the terminal works on gets a row of its own. */
+export const TERMINAL_TAB_ROW_HEIGHT = 26
+/** Under an exited shell: "Process exited with code 1" · Close · Restart (drawn by the UI). */
+export const TERMINAL_EXIT_BAR_HEIGHT = 44
 export const TERMINAL_DEFAULT_HEIGHT = 300
 export const TERMINAL_MIN_HEIGHT = 120
 export const TERMINAL_DEFAULT_WIDTH = 520
@@ -46,6 +52,10 @@ export function panelPlacement(panel: {
   return { dock: panel.dock, size: panel.dock === 'bottom' ? panel.height : panel.width }
 }
 
+/** The UI's rows above the terminal view: the header, and on the right the tab row under it. */
+export const terminalHeaderHeight = (dock: PanelDock): number =>
+  dock === 'right' ? TERMINAL_HEADER_HEIGHT + TERMINAL_TAB_ROW_HEIGHT : TERMINAL_HEADER_HEIGHT
+
 export interface Rect {
   x: number
   y: number
@@ -66,7 +76,10 @@ export function clampPanelSize(
 ): number {
   const [min, max] =
     dock === 'bottom'
-      ? [TERMINAL_MIN_HEIGHT, windowHeight - chromeHeight - MIN_PAGE_HEIGHT - 2 * PAGE_INSET]
+      ? [
+          TERMINAL_MIN_HEIGHT,
+          windowHeight - chromeHeight - MIN_PAGE_HEIGHT - PAGE_INSET - PAGE_INSET_BOTTOM
+        ]
       : [TERMINAL_MIN_WIDTH, windowWidth - MIN_PAGE_WIDTH - 3 * PAGE_INSET]
   return Math.round(Math.min(Math.max(px, min), Math.max(min, max)))
 }
@@ -74,7 +87,7 @@ export function clampPanelSize(
 /**
  * Where things go in the window's content area: the page below the UI, and with the terminal
  * panel open (`panel` not null) the panel under it or to its right, inset like the page. The
- * panel's top TERMINAL_HEADER_HEIGHT px is the UI's header row; the terminal view fills the rest.
+ * panel's top terminalHeaderHeight(dock) px are the UI's header; the terminal view fills the rest.
  */
 export function windowLayout(
   width: number,
@@ -83,7 +96,7 @@ export function windowLayout(
   placement: PanelPlacement | null
 ): { page: Rect; panel: Rect | null; terminal: Rect | null } {
   const innerWidth = Math.max(0, width - 2 * PAGE_INSET)
-  const innerHeight = Math.max(0, height - chromeHeight - PAGE_INSET)
+  const innerHeight = Math.max(0, height - chromeHeight - PAGE_INSET_BOTTOM)
   if (placement === null) {
     const page = { x: PAGE_INSET, y: chromeHeight, width: innerWidth, height: innerHeight }
     return { page, panel: null, terminal: null }
@@ -92,7 +105,7 @@ export function windowLayout(
   let page: Rect
   let panel: Rect
   if (placement.dock === 'bottom') {
-    panel = { x: PAGE_INSET, y: height - PAGE_INSET - size, width: innerWidth, height: size }
+    panel = { x: PAGE_INSET, y: height - PAGE_INSET_BOTTOM - size, width: innerWidth, height: size }
     page = {
       x: PAGE_INSET,
       y: chromeHeight,
@@ -108,11 +121,12 @@ export function windowLayout(
       height: innerHeight
     }
   }
+  const header = terminalHeaderHeight(placement.dock)
   const terminal = {
     x: panel.x,
-    y: panel.y + TERMINAL_HEADER_HEIGHT,
+    y: panel.y + header,
     width: panel.width,
-    height: Math.max(0, panel.height - TERMINAL_HEADER_HEIGHT)
+    height: Math.max(0, panel.height - header)
   }
   return { page, panel, terminal }
 }

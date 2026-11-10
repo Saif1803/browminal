@@ -8,28 +8,41 @@ import {
   type DesktopCapturerSource,
   type WebContents
 } from 'electron'
+import { permissionIcon } from './overlay-content'
 import {
   PermissionMemory,
   checkFor,
-  describeRequest,
+  describeWants,
   permissionOrigin,
-  policyFor
+  policyFor,
+  type PermissionKind
 } from './permission-policy'
 import type { MainWindow } from './window'
 
-/** Allow / Block for a permission. Enter and Esc both block. */
-async function askAllow(window: BrowserWindow, message: string): Promise<boolean> {
-  const { response } = await dialog.showMessageBox(window, {
-    type: 'question',
-    title: 'Permission request',
-    message,
-    detail: 'Browminal remembers your answer for this site until you close the browser.',
-    buttons: ['Allow', 'Block'],
-    defaultId: 1,
-    cancelId: 1,
-    noLink: true
-  })
-  return response === 0
+/**
+ * Allow / Block for a permission, hanging from the address bar. Esc blocks; null when the
+ * question went away unanswered (the tab left the front).
+ */
+function askAllow(
+  main: MainWindow,
+  tabId: number,
+  site: string,
+  kinds: readonly PermissionKind[]
+): Promise<boolean | null> {
+  return main.overlay.ask(
+    {
+      icon: permissionIcon(kinds),
+      site,
+      message: describeWants(kinds),
+      detail: 'Your answer is remembered until you close Browminal.',
+      code: null,
+      fromAgent: false,
+      confirm: 'Allow',
+      cancel: 'Block',
+      destructive: false
+    },
+    tabId
+  )
 }
 
 /** Which screen to share, or null. Screens only for now; audio is never shared. */
@@ -80,6 +93,13 @@ export function registerPermissions(getMain: () => MainWindow | null): void {
     return main.window
   }
 
+  /** The window and the tab `wc` is, only if it's the tab in front. */
+  const promptTab = (wc: WebContents): { main: MainWindow; tabId: number } | null => {
+    const main = getMain()
+    if (!main || !promptWindow(wc)) return null
+    return { main, tabId: main.tabs.active.id }
+  }
+
   ses.setPermissionRequestHandler((wc, permission, callback, details) => {
     const origin = permissionOrigin(details.requestingUrl)
     const mediaTypes = 'mediaTypes' in details ? (details.mediaTypes ?? []) : []
@@ -89,9 +109,9 @@ export function registerPermissions(getMain: () => MainWindow | null): void {
 
     const known = memory.decide(origin, policy.kinds)
     if (known !== undefined) return callback(known)
-    const window = promptWindow(wc)
+    const target = promptTab(wc)
     // Refused without remembering, so the site can ask again from the front.
-    if (!window) return callback(false)
+    if (!target) return callback(false)
 
     enqueue(async () => {
       const answered = memory.decide(origin, policy.kinds)
@@ -99,10 +119,12 @@ export function registerPermissions(getMain: () => MainWindow | null): void {
       // The tab may have closed or left the site while an earlier dialog was open.
       const stillThere =
         !wc.isDestroyed() && (!details.isMainFrame || permissionOrigin(wc.getURL()) === origin)
-      if (window.isDestroyed() || !stillThere) return callback(false)
+      if (target.main.window.isDestroyed() || !stillThere) return callback(false)
 
       const kinds = memory.unanswered(origin, policy.kinds)
-      const allowed = await askAllow(window, describeRequest(new URL(origin).host, kinds))
+      const allowed = await askAllow(target.main, target.tabId, new URL(origin).host, kinds)
+      // Unanswered (the tab left the front): refused this time, asked again next time.
+      if (allowed === null) return callback(false)
       memory.remember(origin, kinds, allowed)
       callback(allowed)
     })

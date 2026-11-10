@@ -1,0 +1,85 @@
+/* The overlay view: clear everywhere but the surface, which carries its own shadow. */
+body.overlay-page {
+  background: transparent;
+  font-size: 13px;
+}
+
+.pop-surface {
+  /* Its own stacking context, so the backdrop (z-index -1) sits over its fill, under its content. */
+  isolation: isolate;
+  --pop-shadow: 0 10px 28px rgb(0 0 0 / 0.45), 0 0 0 1px rgb(255 255 255 / 0.09);
+  box-shadow: var(--pop-shadow);
+  animation: pop-in 140ms cubic-bezier(0.2, 0.8, 0.3, 1);
+}
+
+@media (prefers-color-scheme: light) {
+  .pop-surface {
+    --pop-shadow: 0 10px 28px rgb(31 30 27 / 0.16), 0 0 0 1px rgb(31 30 27 / 0.09);
+  }
+}
+
+.pop-surface[data-kind='agent'] {
+  animation-name: sheet-in;
+}
+
+@keyframes pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+  }
+}
+
+@keyframes sheet-in {
+  from {
+    opacity: 0;
+    transform: translateX(12px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pop-surface {
+    animation: none;
+  }
+}
+
+/*
+ * Frosted glass: a view can't blur the page under it, so main sends small captures of what's
+ * there, laid out where they belong; they're blurred here and tinted with the popover's colour.
+ * Until they arrive (or with reduced transparency) the surface stays solid.
+ */
+.pop-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+}
+
+.pop-backdrop-images {
+  position: absolute;
+  inset: 0;
+  filter: blur(24px) saturate(1.6);
+}
+
+.pop-backdrop-images img {
+  position: absolute;
+  max-width: none;
+}
+
+.pop-backdrop::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--color-pop-frost);
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .pop-backdrop {
+    display: none;
+  }
+}
+
+/* A raised button on a popover: white (light) or a lift (dark), with a hairline. */
+.pop-button {
+  background: var(--color-raised);
+  box-shadow: inset 0 0 0 1px var(--color-line);
+}

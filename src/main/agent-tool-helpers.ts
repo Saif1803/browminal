@@ -11,6 +11,17 @@ const LOAD_TIMEOUT_MS = 30_000
 /** The isolated world agent tools read pages in (the page's own scripts can't interfere). */
 export const AGENT_WORLD_ID = 2003
 
+/** A yes/no question an agent's tool puts to the user (clear_site_data). */
+export interface AgentQuestion {
+  /** "An agent wants to clear the data of http://localhost:3000" */
+  message: string
+  detail: string
+  /** The confirm button, written out: "Clear site data". */
+  action: string
+  /** The action deletes something: its button is drawn in the danger colour. */
+  destructive: boolean
+}
+
 /** What the tools need from the app (Agent implements it). */
 export interface AgentContext {
   listTabs(): AgentTab[]
@@ -19,8 +30,8 @@ export interface AgentContext {
   cdp(tab: Tab): CdpSession
   /** The tab's debugger with its console and network logs and emulation. */
   debug(tab: Tab): TabDebug
-  /** Asks the user in a native dialog; resolves true when they agree. */
-  confirm(message: string, detail: string, action: string): Promise<boolean>
+  /** Asks the user (a question over the page); resolves true when they agree. */
+  confirm(question: AgentQuestion): Promise<boolean>
   /** Runs one tool's work on `tab`, showing the user that an agent is at work there. */
   run<T>(tab: Tab, work: () => Promise<T>): Promise<T>
   /** Opens a shared tab the agent may close again (recorded from its first request). */

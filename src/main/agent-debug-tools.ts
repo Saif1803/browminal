@@ -475,12 +475,14 @@ export function registerDebugTools(mcp: McpServer, context: AgentContext): void 
       return context.run(tab, async () => {
         const origin = new URL(tab.webContents.getURL()).origin
         if (origin === 'null') throw new Error('This page has no site to clear')
-        const agreed = await context.confirm(
-          `An agent wants to clear the data of ${origin}`,
-          'Its cookies, local and session storage, IndexedDB, cache storage and service ' +
-            'workers are deleted: you are signed out of it. Other sites are not touched.',
-          'Clear'
-        )
+        const agreed = await context.confirm({
+          message: `An agent wants to clear the data of ${new URL(origin).host}`,
+          detail:
+            'Its cookies, storage, cache and service workers are deleted, so you’ll be signed ' +
+            'out of it. Other sites keep theirs.',
+          action: 'Clear site data',
+          destructive: true
+        })
         if (!agreed) return text(`The user said no: nothing was cleared on ${origin}.`)
         await cdp.send('Storage.clearDataForOrigin', { origin, storageTypes: 'all' })
         return text(

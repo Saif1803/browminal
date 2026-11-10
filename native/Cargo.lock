@@ -69,6 +69,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "browminal-native"
+version = "0.1.0"
+dependencies = [
+ "adblock",
+ "napi",
+ "napi-build",
+ "napi-derive",
+]
+
+[[package]]
 name = "cfg-if"
 version = "1.0.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -472,16 +482,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d153beb7d5c973f4b9395be8a83054a28968b61188f1dd1a2cc2321af22daea2"
 dependencies = [
  "libloading",
-]
-
-[[package]]
-name = "browminal-native"
-version = "0.1.0"
-dependencies = [
- "adblock",
- "napi",
- "napi-build",
- "napi-derive",
 ]
 
 [[package]]

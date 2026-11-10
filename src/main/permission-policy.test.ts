@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test'
 import {
   PermissionMemory,
   checkFor,
-  describeRequest,
+  describeWants,
   permissionOrigin,
   policyFor
 } from './permission-policy'
@@ -77,16 +77,13 @@ describe('permissionOrigin', () => {
   })
 })
 
-describe('describeRequest', () => {
-  test('reads like a sentence', () => {
-    expect(describeRequest('chatgpt.com', ['microphone'])).toBe(
-      'chatgpt.com wants to use your microphone'
-    )
-    expect(describeRequest('meet.google.com', ['camera', 'microphone'])).toBe(
-      'meet.google.com wants to use your camera and microphone'
-    )
-    expect(describeRequest('maps.example', ['location'])).toBe(
-      'maps.example wants to know your location'
+describe('describeWants', () => {
+  test('reads like a sentence after the site’s name', () => {
+    expect(describeWants(['microphone'])).toBe('wants to use your microphone')
+    expect(describeWants(['camera', 'microphone'])).toBe('wants to use your camera and microphone')
+    expect(describeWants(['location'])).toBe('wants to know your location')
+    expect(describeWants(['notifications', 'clipboard-read'])).toBe(
+      'wants to show notifications and see text and images copied to the clipboard'
     )
   })
 })

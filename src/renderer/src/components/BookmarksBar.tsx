@@ -49,7 +49,7 @@ function BookmarkChip({
       {bookmark.favicon ? (
         <img src={bookmark.favicon} alt="" className="size-4 shrink-0" />
       ) : (
-        <GlobeIcon width={14} height={14} className="shrink-0 text-ink-faint" />
+        <GlobeIcon size={14} className="shrink-0 text-ink-faint" />
       )}
       <span className="truncate">{bookmark.title}</span>
     </button>
@@ -123,7 +123,7 @@ export function BookmarksBar({ bookmarks }: { bookmarks: Bookmark[] }): React.JS
           onClick={showOverflow}
           className="grid size-6 shrink-0 place-items-center rounded-md text-ink-muted transition-colors hover:bg-field-hover hover:text-ink focus-visible:outline-2 focus-visible:outline-accent"
         >
-          <ChevronsRightIcon width={14} height={14} />
+          <ChevronsRightIcon size={14} />
         </button>
       )}
     </div>

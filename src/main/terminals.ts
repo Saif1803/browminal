@@ -4,7 +4,14 @@ import { homedir } from 'os'
 import { join } from 'path'
 import { is } from '@electron-toolkit/utils'
 import { spawn, type IPty } from '@lydell/node-pty'
-import { PAGE_RADIUS, panelPlacement, type PanelDock, type Rect } from '../shared/layout'
+import {
+  PAGE_RADIUS,
+  panelPlacement,
+  TERMINAL_EXIT_BAR_HEIGHT,
+  type PanelDock,
+  type Rect
+} from '../shared/layout'
+import { agentBrand } from '../shared/agents'
 import { TerminalViewChannel } from '../shared/terminal-view'
 import type { TerminalPanelState, TerminalSession } from '../shared/types'
 import { isHttpUrl } from '../shared/url'
@@ -15,8 +22,14 @@ import type { JsonStore } from './store'
 import type { TabManager } from './tab-manager'
 import {
   agentCommandLine,
+  agentShell,
+  agentSuggestions,
+  agentTitle,
   appendOutput,
   defaultShell,
+  folderName,
+  MCP_CONFIG_ENV,
+  rememberAgentCommand,
   sessionTitle,
   siteKey,
   type Shell
@@ -24,16 +37,18 @@ import {
 import { onThemeChange, themeColors } from './theme'
 
 const MAX_SESSIONS = 10
-const EXITED_NOTICE =
-  '\r\n\x1b[2m[The shell has exited. Close this terminal or open a new one.]\x1b[0m\r\n'
+// Written into a restarted terminal, between the old shell's output and the new one's.
+const RESTARTED_NOTICE = '\r\n\x1b[2m[Restarted]\x1b[0m\r\n'
 
-interface Session extends TerminalSession {
+interface Session extends Omit<TerminalSession, 'agent' | 'brand' | 'folder'> {
+  /** The folder the shell started in. */
+  cwd: string
   pty: IPty
   shell: Shell
   /** Output so far, replayed if the terminal view reloads. */
   buffer: string
-  /** The MCP config written for an agent started here, deleted with the session. */
-  configPath: string | null
+  /** For an agent session: what it runs, its own token and its MCP config (both end with it). */
+  agent: { command: string; token: string | null; configPath: string | null } | null
 }
 
 /** The terminal view's page: served by the dev server, or the built file. */
@@ -47,12 +62,20 @@ export function terminalPageUrl(): string | null {
  * sandboxed WebContentsView with xterm and a preload of a few terminal functions. Every session
  * works on a tab: the agent started in it acts on that tab when it names none. Sessions keep
  * running while the panel is hidden; they end when closed or when the window closes.
+ *
+ * With no session shown, the UI draws the start page in the panel: a project folder and an agent
+ * command (claude, codex, any other) to start an agent session on the active tab.
  */
 export class Terminals {
   readonly view: WebContentsView
   private sessions: Session[] = []
+  /** The session shown; null: the start page. */
   private activeId: number | null = null
+  /** The folder chosen on a tab without a site (the start page), for this run only. */
+  private looseFolder: string | null = null
   private isOpen = false
+  /** Where the layout last put the terminal view (null: off screen). */
+  private bounds: Rect | null = null
   private viewReady = false
   private disposed = false
   private readonly listeners = new Set<() => void>()
@@ -114,20 +137,27 @@ export class Terminals {
   }
 
   getState(): TerminalPanelState {
-    const { dock, height, width } = this.settings.get().terminal
+    const { dock, height, width, agentCommands } = this.settings.get().terminal
+    const folder = this.folderFor(this.tabs.active.url)
     return {
       open: this.isOpen,
       dock,
       height,
       width,
-      sessions: this.sessions.map(({ id, title, tabId, cwd, exited }) => ({
+      sessions: this.sessions.map(({ id, title, tabId, cwd, exited, exitCode, agent }) => ({
         id,
         title,
         tabId,
-        cwd,
-        exited
+        folder: folderName(cwd),
+        exited,
+        exitCode,
+        agent: agent !== null,
+        brand: agent === null ? null : agentBrand(agent.command)
       })),
-      activeId: this.activeId
+      activeId: this.activeId,
+      folder: folder === null ? null : folderName(folder),
+      site: siteKey(this.tabs.active.url),
+      agentCommands: agentSuggestions(agentCommands)
     }
   }
 
@@ -140,58 +170,104 @@ export class Terminals {
     return this.get(id)?.tabId ?? null
   }
 
-  /** Ctrl+`: shows the panel (opening a terminal if there is none) and focuses it, or hides it. */
+  /** Ctrl+`: shows the panel (the start page if no session runs) and focuses it, or hides it. */
   toggle(): void {
     if (this.isOpen) this.hide()
-    else if (this.sessions.length === 0) this.create()
     else this.show()
   }
 
-  /** A new shell working on the active tab, in `cwd` or the folder remembered for its site. */
-  create(cwd?: string): void {
-    if (this.sessions.length >= MAX_SESSIONS) throw new Error('Too many terminals')
-    const tab = this.tabs.active
-    const shell = defaultShell(process.platform, process.env)
-    const folder = cwd ?? this.folderFor(tab.url)
-    const pty = spawn(shell.file, shell.args, {
-      name: 'xterm-256color',
-      cols: 80,
-      rows: 24,
-      cwd: folder,
-      env: shellEnvironment()
-    })
-    const session: Session = {
-      id: nextId(),
-      title: sessionTitle(
-        shell.name,
-        this.sessions.map((other) => other.title)
-      ),
-      tabId: tab.id,
-      cwd: folder,
-      exited: false,
-      pty,
-      shell,
-      buffer: '',
-      configPath: null
-    }
-    pty.onData((data) => {
-      session.buffer = appendOutput(session.buffer, data)
-      this.send(TerminalViewChannel.Output, session.id, data)
-    })
-    pty.onExit(() => {
-      if (this.disposed || !this.get(session.id)) return
-      session.exited = true
-      session.buffer = appendOutput(session.buffer, EXITED_NOTICE)
-      this.send(TerminalViewChannel.Output, session.id, EXITED_NOTICE)
-      this.sendSessions()
-      this.changed()
-    })
-    this.sessions.push(session)
-    this.activeId = session.id
+  /** The panel's agent button: the start page, the sessions staying in the header. */
+  showStartPage(): void {
+    this.activeId = null
     this.sendSessions()
+    this.placeView()
     this.show()
   }
 
+  /**
+   * A new shell working on the active tab, in `cwd`, the folder chosen for its site, or home.
+   * Returns its id.
+   */
+  create(cwd?: string): number {
+    this.checkRoom()
+    const tab = this.tabs.active
+    const shell = defaultShell(process.platform, process.env)
+    const folder = cwd ?? this.folderFor(tab.url) ?? homedir()
+    return this.add({
+      id: nextId(),
+      title: shell.name,
+      tabId: tab.id,
+      cwd: folder,
+      shell,
+      pty: this.spawnShell(shell, folder),
+      agent: null
+    })
+  }
+
+  /**
+   * "Start session" on the start page: a new terminal running only `command` (an agent: claude,
+   * codex, any other), connected to Browminal, in the folder chosen for the active tab's site
+   * (asked for first if there is none). It works on that tab and shares it. The agent is
+   * remembered for next time.
+   */
+  async startAgent(command: string): Promise<void> {
+    this.checkRoom()
+    const tab = this.tabs.active
+    const folder = this.folderFor(tab.url) ?? (await this.chooseFolder())
+    if (folder === null || this.disposed) return
+    const settings = this.settings.get()
+    const agentCommands = rememberAgentCommand(settings.terminal.agentCommands, command)
+    this.settings.set({ ...settings, terminal: { ...settings.terminal, agentCommands } })
+
+    this.agent.share(tab.id)
+    const port = await this.agent.whenListening()
+    if (this.disposed) return
+    this.checkRoom()
+    const id = nextId()
+    const shell = defaultShell(process.platform, process.env)
+    const agent = { command, token: null, configPath: null }
+    this.add({
+      id,
+      title: agentTitle(command),
+      tabId: this.tabs.get(tab.id) ? tab.id : null,
+      cwd: folder,
+      shell,
+      pty: this.spawnAgent(id, agent, shell, folder, port),
+      agent
+    })
+  }
+
+  /**
+   * "Restart" under an exited terminal: the same shell, or the same agent (with a fresh token and
+   * config: the port may have changed), in the same folder, working on the same tab.
+   */
+  async restart(id: number): Promise<void> {
+    const session = this.get(id)
+    if (!session || !session.exited) return
+    const cwd = existsSync(session.cwd) ? session.cwd : homedir()
+    if (session.agent) {
+      if (session.tabId !== null) this.agent.share(session.tabId)
+      const port = await this.agent.whenListening()
+      // Closed, or restarted by another click, meanwhile.
+      if (this.disposed || this.get(id) !== session || !session.exited) return
+      this.endAgent(session)
+      session.pty = this.spawnAgent(id, session.agent, session.shell, cwd, port)
+    } else {
+      session.pty = this.spawnShell(session.shell, cwd)
+    }
+    session.exited = false
+    session.exitCode = null
+    session.buffer = appendOutput(session.buffer, RESTARTED_NOTICE)
+    this.send(TerminalViewChannel.Output, session.id, RESTARTED_NOTICE)
+    this.watch(session)
+    this.activeId = id
+    this.sendSessions()
+    this.placeView()
+    this.focus()
+    this.changed()
+  }
+
+  /** Ends a shell and takes its terminal away. The panel stays open, empty, after the last one. */
   close(id: number): void {
     const session = this.get(id)
     if (!session) return
@@ -199,14 +275,18 @@ export class Terminals {
     this.sessions = this.sessions.filter((other) => other !== session)
     if (this.activeId === id) this.activeId = this.sessions.at(-1)?.id ?? null
     this.sendSessions()
-    if (this.sessions.length === 0) this.hide()
-    else this.changed()
+    this.placeView()
+    if (this.sessions.length === 0 && !this.window.isDestroyed()) {
+      this.tabs.active.webContents.focus()
+    }
+    this.changed()
   }
 
   select(id: number): void {
     if (!this.get(id)) return
     this.activeId = id
     this.sendSessions()
+    this.placeView()
     this.focus()
     this.changed()
   }
@@ -240,34 +320,13 @@ export class Terminals {
   }
 
   /**
-   * The panel's Claude button: shares the terminal's tab, writes an MCP config for this terminal
-   * (port, token, and which terminal it is) and types the agent command into the shell.
-   */
-  async startAgent(id: number): Promise<void> {
-    const session = this.get(id)
-    if (!session || session.exited) return
-    if (session.tabId === null || !this.tabs.get(session.tabId)) session.tabId = this.tabs.active.id
-    this.agent.share(session.tabId)
-    const port = await this.agent.whenListening()
-    if (this.disposed || session.exited || !this.get(id)) return
-
-    mkdirSync(this.configFolder, { recursive: true })
-    const configPath = join(this.configFolder, `terminal-${id}.json`)
-    writeFileSync(configPath, `${mcpConfigJson(port, this.agent.token, id)}\n`, { mode: 0o600 })
-    session.configPath = configPath
-    const { agentCommand } = this.settings.get().terminal
-    session.pty.write(`${agentCommandLine(agentCommand, configPath, session.shell.kind)}\r`)
-    this.select(id)
-  }
-
-  /**
-   * Types `text` into the prompt of the agent started with the Claude button in a terminal that
+   * Types `text` into the prompt of an agent started from the start page in a terminal that
    * works on tab `tabId` (the active one if several), without sending it, and shows that
    * terminal. False when no such agent runs.
    */
   typeForAgent(tabId: number, text: string): boolean {
     const agents = this.sessions.filter(
-      (session) => session.tabId === tabId && session.configPath !== null && !session.exited
+      (session) => session.tabId === tabId && session.agent !== null && !session.exited
     )
     const session = agents.find((other) => other.id === this.activeId) ?? agents.at(-1)
     if (!session) return false
@@ -278,21 +337,27 @@ export class Terminals {
     return true
   }
 
-  /** Asks for a project folder, remembers it for the active tab's site, opens a terminal there. */
-  async chooseFolder(): Promise<void> {
+  /**
+   * Asks for the project folder agents work in and remembers it for the active tab's site (for
+   * this run only on a tab without one). Returns it, or null if the user cancelled.
+   */
+  async chooseFolder(): Promise<string | null> {
     const site = siteKey(this.tabs.active.url)
     const result = await dialog.showOpenDialog(this.window, {
-      title: site ? `Project folder for ${site}` : 'Open a terminal in…',
+      title: site ? `Project folder for ${site}` : 'Project folder',
       properties: ['openDirectory']
     })
     const folder = result.filePaths[0]
-    if (result.canceled || !folder || this.disposed) return
+    if (result.canceled || !folder || this.disposed) return null
     if (site) {
       const settings = this.settings.get()
       const folders = { ...settings.terminal.folders, [site]: folder }
       this.settings.set({ ...settings, terminal: { ...settings.terminal, folders } })
+    } else {
+      this.looseFolder = folder
     }
-    this.create(folder)
+    this.changed()
+    return folder
   }
 
   // From the terminal view (checked in ipc.ts).
@@ -342,7 +407,10 @@ export class Terminals {
   }
 
   focus(): void {
-    if (!this.isOpen || this.view.webContents.isDestroyed()) return
+    if (!this.isOpen || this.window.isDestroyed()) return
+    // The start page is the UI's: the keyboard goes there.
+    if (this.activeId === null) return this.window.webContents.focus()
+    if (!this.bounds || this.view.webContents.isDestroyed()) return
     this.view.webContents.focus()
     this.send(TerminalViewChannel.Focus)
   }
@@ -376,23 +444,109 @@ export class Terminals {
     if (this.isOpen) this.tabs.setPanel(panelPlacement(this.settings.get().terminal))
   }
 
-  /** Puts the view where the layout says, or takes it off screen (panel hidden, fullscreen page). */
+  /** The layout says where the terminal view goes (null: off screen). */
   private place(bounds: Rect | null): void {
+    this.bounds = bounds
+    this.placeView()
+  }
+
+  /**
+   * Puts the view where the layout says, or takes it off screen (panel hidden, fullscreen page,
+   * no session shown: the UI draws the start page). Under an exited shell the UI's exit bar takes
+   * the bottom of the panel.
+   */
+  private placeView(): void {
     if (this.window.isDestroyed() || this.view.webContents.isDestroyed()) return
     const content = this.window.contentView
     const attached = content.children.includes(this.view)
-    if (!bounds || !this.isOpen) {
+    const bounds = this.bounds
+    if (!bounds || !this.isOpen || this.activeId === null) {
       if (attached) content.removeChildView(this.view)
       return
     }
-    this.view.setBounds(bounds)
+    const exited = this.get(this.activeId ?? -1)?.exited ?? false
+    const bar = exited ? Math.min(TERMINAL_EXIT_BAR_HEIGHT, bounds.height) : 0
+    this.view.setBounds({ ...bounds, height: bounds.height - bar })
     if (!attached) content.addChildView(this.view)
   }
 
-  private folderFor(url: string): string {
+  private checkRoom(): void {
+    if (this.sessions.length >= MAX_SESSIONS) throw new Error('Too many terminals')
+  }
+
+  /** Adds a just-spawned terminal, shows it and returns its id. */
+  private add(fields: Omit<Session, 'exited' | 'exitCode' | 'buffer'>): number {
+    const session: Session = {
+      ...fields,
+      title: sessionTitle(
+        fields.title,
+        this.sessions.map((other) => other.title)
+      ),
+      exited: false,
+      exitCode: null,
+      buffer: ''
+    }
+    this.watch(session)
+    this.sessions.push(session)
+    this.activeId = session.id
+    this.sendSessions()
+    this.show()
+    return session.id
+  }
+
+  /**
+   * Starts terminal `id`'s agent, connected with a token of its own (it acts as this terminal, so
+   * on its tab) and an MCP config file with that token, readable by the user only.
+   */
+  private spawnAgent(
+    id: number,
+    agent: NonNullable<Session['agent']>,
+    shell: Shell,
+    cwd: string,
+    port: number
+  ): IPty {
+    agent.token = this.agent.sessionToken(id)
+    mkdirSync(this.configFolder, { recursive: true })
+    agent.configPath = join(this.configFolder, `terminal-${id}.json`)
+    writeFileSync(agent.configPath, `${mcpConfigJson(port, agent.token)}\n`, { mode: 0o600 })
+    const connection = { port, token: agent.token, configPath: agent.configPath }
+    const line = agentCommandLine(agent.command, connection, shell.kind)
+    return this.spawnShell(agentShell(shell, line), cwd, { [MCP_CONFIG_ENV]: agent.configPath })
+  }
+
+  private spawnShell(shell: Shell, cwd: string, env: Record<string, string> = {}): IPty {
+    return spawn(shell.file, shell.args, {
+      name: 'xterm-256color',
+      cols: 80,
+      rows: 24,
+      cwd,
+      env: { ...shellEnvironment(), ...env }
+    })
+  }
+
+  /** Relays a session's shell output, and notices when the shell exits. */
+  private watch(session: Session): void {
+    const { pty } = session
+    pty.onData((data) => {
+      if (session.pty !== pty) return
+      session.buffer = appendOutput(session.buffer, data)
+      this.send(TerminalViewChannel.Output, session.id, data)
+    })
+    pty.onExit(({ exitCode }) => {
+      if (this.disposed || !this.get(session.id) || session.pty !== pty) return
+      session.exited = true
+      session.exitCode = Number.isInteger(exitCode) ? exitCode : null
+      this.sendSessions()
+      this.placeView()
+      this.changed()
+    })
+  }
+
+  /** The project folder chosen for `url`'s site (or, without a site, this run's), if it's there. */
+  private folderFor(url: string): string | null {
     const site = siteKey(url)
-    const folder = site ? this.settings.get().terminal.folders[site] : undefined
-    return folder && existsSync(folder) ? folder : homedir()
+    const folder = site ? this.settings.get().terminal.folders[site] : this.looseFolder
+    return folder && existsSync(folder) ? folder : null
   }
 
   private end(session: Session): void {
@@ -401,7 +555,16 @@ export class Terminals {
     } catch {
       // Already gone.
     }
-    if (session.configPath) rmSync(session.configPath, { force: true })
+    this.endAgent(session)
+  }
+
+  /** The agent's token stops working and its config file goes. */
+  private endAgent({ agent }: Session): void {
+    if (!agent) return
+    if (agent.token) this.agent.dropSessionToken(agent.token)
+    if (agent.configPath) rmSync(agent.configPath, { force: true })
+    agent.token = null
+    agent.configPath = null
   }
 
   private sendSessions(): void {

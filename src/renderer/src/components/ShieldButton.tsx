@@ -42,7 +42,7 @@ export function ShieldButton({ shield }: { shield: ShieldState }): React.JSX.Ele
         showCount ? 'text-accent' : 'text-ink-faint'
       }`}
     >
-      {isOn ? <ShieldIcon width={14} height={14} /> : <ShieldOffIcon width={14} height={14} />}
+      {isOn ? <ShieldIcon size={14} /> : <ShieldOffIcon size={14} />}
       {showCount && (
         <span className="text-[11px] font-medium tabular-nums">
           {blocked > 999 ? '999+' : blocked}

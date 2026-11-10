@@ -18,9 +18,8 @@ const stop = (event: MouseEvent): void => event.stopPropagation()
 function TabIcon({ tab }: { tab: TabSummary }): React.JSX.Element {
   if (tab.isLoading) return <span aria-hidden="true" className="tab-spinner size-3.5 shrink-0" />
   if (tab.favicon) return <img src={tab.favicon} alt="" className="size-4 shrink-0" />
-  if (isHomeUrl(tab.url))
-    return <HomeIcon width={14} height={14} className="shrink-0 text-accent" />
-  return <GlobeIcon width={14} height={14} className="shrink-0 text-ink-faint" />
+  if (isHomeUrl(tab.url)) return <HomeIcon size={14} className="shrink-0 text-accent" />
+  return <GlobeIcon size={14} className="shrink-0 text-ink-faint" />
 }
 
 function Tab({ tab, isActive }: { tab: TabSummary; isActive: boolean }): React.JSX.Element {
@@ -59,7 +58,7 @@ function Tab({ tab, isActive }: { tab: TabSummary; isActive: boolean }): React.J
       <span className="min-w-0 flex-1 truncate">{tab.title || 'Untitled'}</span>
       {tab.agentShared && (
         <span role="img" aria-label="Shared with agents" title="Shared with agents">
-          <AgentIcon width={13} height={13} className="shrink-0 text-accent" />
+          <AgentIcon size={14} className="shrink-0 text-accent" />
         </span>
       )}
       {showAudio && (
@@ -71,11 +70,7 @@ function Tab({ tab, isActive }: { tab: TabSummary; isActive: boolean }): React.J
           onClick={() => browser.toggleMute(tab.id)}
           className="grid size-5 shrink-0 place-items-center rounded text-ink-muted hover:bg-field-hover hover:text-ink focus-visible:outline-2 focus-visible:outline-accent"
         >
-          {tab.isMuted ? (
-            <MutedIcon width={13} height={13} />
-          ) : (
-            <SpeakerIcon width={13} height={13} />
-          )}
+          {tab.isMuted ? <MutedIcon size={14} /> : <SpeakerIcon size={14} />}
         </button>
       )}
       <button
@@ -89,7 +84,7 @@ function Tab({ tab, isActive }: { tab: TabSummary; isActive: boolean }): React.J
           isActive ? '' : 'opacity-0 group-hover:opacity-100'
         }`}
       >
-        <CloseIcon width={12} height={12} />
+        <CloseIcon size={12} />
       </button>
     </div>
   )
@@ -129,7 +124,7 @@ export function TabStrip({
         onClick={() => window.browser.newTab()}
         className="app-no-drag grid size-7 shrink-0 place-items-center rounded-lg text-ink-muted transition-colors hover:bg-field-hover hover:text-ink focus-visible:outline-2 focus-visible:outline-accent"
       >
-        <PlusIcon width={15} height={15} />
+        <PlusIcon size={16} />
       </button>
     </div>
   )

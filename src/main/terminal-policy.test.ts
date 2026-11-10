@@ -1,12 +1,17 @@
 import { describe, expect, test } from 'bun:test'
 import {
   agentCommandLine,
+  agentShell,
+  agentSuggestions,
+  agentTitle,
   appendOutput,
   defaultShell,
+  folderName,
   isAgentCommand,
   isFolderPath,
   isTerminalSize,
   quoteArg,
+  rememberAgentCommand,
   sessionTitle,
   siteKey
 } from './terminal-policy'
@@ -41,10 +46,72 @@ describe('quoting', () => {
     expect(quoteArg("/home/a b/$HOME/it's.json", 'posix')).toBe(`'/home/a b/$HOME/it'\\''s.json'`)
   })
 
-  test('builds the agent command line', () => {
-    expect(agentCommandLine('claude', String.raw`C:\a\1.json`, 'powershell')).toBe(
-      String.raw`claude --mcp-config 'C:\a\1.json'`
+  const connection = { port: 9340, token: 'tok', configPath: String.raw`C:\a b\1.json` }
+
+  test('connects Claude Code with its config file', () => {
+    expect(agentCommandLine('claude', connection, 'powershell')).toBe(
+      String.raw`claude --mcp-config 'C:\a b\1.json'`
     )
+    expect(agentCommandLine('claude --model opus', connection, 'powershell')).toBe(
+      String.raw`claude --model opus --mcp-config 'C:\a b\1.json'`
+    )
+  })
+
+  test('connects Codex with -c settings, in TOML literal strings', () => {
+    expect(agentCommandLine('codex', connection, 'powershell')).toBe(
+      "codex -c 'mcp_servers.browminal.url=''http://127.0.0.1:9340/mcp''' " +
+        "-c 'mcp_servers.browminal.http_headers={Authorization=''Bearer tok''}'"
+    )
+    expect(agentCommandLine('codex', connection, 'posix')).toBe(
+      `codex -c 'mcp_servers.browminal.url='\\''http://127.0.0.1:9340/mcp'\\''' ` +
+        `-c 'mcp_servers.browminal.http_headers={Authorization='\\''Bearer tok'\\''}'`
+    )
+  })
+
+  test('gives any other agent the config path where it asks for it', () => {
+    expect(agentCommandLine('aider --yes', connection, 'powershell')).toBe('aider --yes')
+    expect(
+      agentCommandLine('copilot --additional-mcp-config @{mcp-config}', connection, 'powershell')
+    ).toBe(String.raw`copilot --additional-mcp-config '@C:\a b\1.json'`)
+    expect(agentCommandLine('my-agent  --mcp={mcp-config}', connection, 'posix')).toBe(
+      String.raw`my-agent  '--mcp=C:\a b\1.json'`
+    )
+  })
+
+  test('runs the agent as the shell command, typing nothing', () => {
+    const powershell = defaultShell('win32', {})
+    const ps = agentShell(powershell, String.raw`claude --mcp-config 'C:\a b\1.json'`)
+    expect(ps.args.slice(0, 2)).toEqual(['-NoLogo', '-EncodedCommand'])
+    expect(Buffer.from(ps.args[2]!, 'base64').toString('utf16le')).toBe(
+      String.raw`claude --mcp-config 'C:\a b\1.json'; exit $LASTEXITCODE`
+    )
+    expect(ps.file).toBe('powershell.exe')
+
+    const zsh = defaultShell('darwin', { SHELL: '/bin/zsh' })
+    expect(agentShell(zsh, "claude --mcp-config '/u/1.json'").args).toEqual([
+      '-l',
+      '-i',
+      '-c',
+      "exec claude --mcp-config '/u/1.json'"
+    ])
+  })
+
+  test('names the session after the program a command runs', () => {
+    expect(agentTitle('codex --model o3')).toBe('Codex')
+    expect(agentTitle('claude')).toBe('Claude')
+    expect(agentTitle('npx aider')).toBe('npx')
+  })
+
+  test('remembers agent commands newest first, and suggests the known ones', () => {
+    expect(rememberAgentCommand(['claude', 'codex'], 'codex')).toEqual(['codex', 'claude'])
+    expect(rememberAgentCommand(['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'], 'i')).toHaveLength(8)
+    expect(agentSuggestions(['aider'])).toEqual(['aider', 'claude', 'codex'])
+    expect(agentSuggestions(['claude --model opus'])).toEqual(['claude --model opus', 'codex'])
+  })
+
+  test('shows a folder by its name only', () => {
+    expect(folderName('/home/me/projects/shop')).toBe('shop')
+    expect(folderName('/')).toBe('/')
   })
 
   test('agent commands are one printable line', () => {

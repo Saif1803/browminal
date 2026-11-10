@@ -9,13 +9,28 @@ import {
 
 const PORT = 9339
 const TOKEN = newAgentToken()
+const TOKENS = [TOKEN]
 const ok = { host: `127.0.0.1:${PORT}`, authorization: `Bearer ${TOKEN}` }
+/** The result alone. */
+const check = (headers: Parameters<typeof checkAgentRequest>[0], tokens = TOKENS): string =>
+  checkAgentRequest(headers, PORT, tokens).result
 
 describe('checkAgentRequest', () => {
   test('lets in a request with the token, addressed to loopback on our port', () => {
-    expect(checkAgentRequest(ok, PORT, TOKEN)).toBe('ok')
-    expect(checkAgentRequest({ ...ok, host: `localhost:${PORT}` }, PORT, TOKEN)).toBe('ok')
-    expect(checkAgentRequest({ ...ok, host: `LOCALHOST:${PORT}` }, PORT, TOKEN)).toBe('ok')
+    expect(checkAgentRequest(ok, PORT, TOKENS)).toEqual({ result: 'ok', token: TOKEN })
+    expect(check({ ...ok, host: `localhost:${PORT}` })).toBe('ok')
+    expect(check({ ...ok, host: `LOCALHOST:${PORT}` })).toBe('ok')
+  })
+
+  test('says which of the tokens the request carried', () => {
+    const session = newAgentToken()
+    const withSession = { ...ok, authorization: `Bearer ${session}` }
+    expect(checkAgentRequest(withSession, PORT, [TOKEN, session])).toEqual({
+      result: 'ok',
+      token: session
+    })
+    expect(check(withSession)).toBe('unauthorized')
+    expect(check(ok, [])).toBe('unauthorized')
   })
 
   test('refuses other host names, so DNS rebinding gets nowhere', () => {
@@ -29,32 +44,27 @@ describe('checkAgentRequest', () => {
       `127.0.0.1.nip.io:${PORT}`,
       `[::1]:${PORT}`
     ]) {
-      expect(checkAgentRequest({ ...ok, host }, PORT, TOKEN)).toBe('bad-host')
+      expect(check({ ...ok, host })).toBe('bad-host')
     }
   })
 
   test('refuses anything a browser sent, even with the right token', () => {
-    expect(checkAgentRequest({ ...ok, origin: 'https://evil.example' }, PORT, TOKEN)).toBe(
-      'from-browser'
-    )
-    expect(checkAgentRequest({ ...ok, origin: 'null' }, PORT, TOKEN)).toBe('from-browser')
-    expect(checkAgentRequest({ ...ok, origin: '' }, PORT, TOKEN)).toBe('from-browser')
-    expect(checkAgentRequest({ ...ok, secFetchSite: 'cross-site' }, PORT, TOKEN)).toBe(
-      'from-browser'
-    )
+    expect(check({ ...ok, origin: 'https://evil.example' })).toBe('from-browser')
+    expect(check({ ...ok, origin: 'null' })).toBe('from-browser')
+    expect(check({ ...ok, origin: '' })).toBe('from-browser')
+    expect(check({ ...ok, secFetchSite: 'cross-site' })).toBe('from-browser')
   })
 
   test('refuses a missing or wrong token', () => {
-    const check = (authorization: string | undefined): string =>
-      checkAgentRequest({ ...ok, authorization }, PORT, TOKEN)
-    expect(check(undefined)).toBe('unauthorized')
-    expect(check('')).toBe('unauthorized')
-    expect(check(TOKEN)).toBe('unauthorized')
-    expect(check(`Basic ${TOKEN}`)).toBe('unauthorized')
-    expect(check(`Bearer ${newAgentToken()}`)).toBe('unauthorized')
-    expect(check(`Bearer ${TOKEN.slice(0, -1)}`)).toBe('unauthorized')
-    expect(check(`Bearer ${TOKEN}x`)).toBe('unauthorized')
-    expect(check(`Bearer ${TOKEN} extra`)).toBe('unauthorized')
+    const withAuth = (authorization: string | undefined): string => check({ ...ok, authorization })
+    expect(withAuth(undefined)).toBe('unauthorized')
+    expect(withAuth('')).toBe('unauthorized')
+    expect(withAuth(TOKEN)).toBe('unauthorized')
+    expect(withAuth(`Basic ${TOKEN}`)).toBe('unauthorized')
+    expect(withAuth(`Bearer ${newAgentToken()}`)).toBe('unauthorized')
+    expect(withAuth(`Bearer ${TOKEN.slice(0, -1)}`)).toBe('unauthorized')
+    expect(withAuth(`Bearer ${TOKEN}x`)).toBe('unauthorized')
+    expect(withAuth(`Bearer ${TOKEN} extra`)).toBe('unauthorized')
   })
 })
 

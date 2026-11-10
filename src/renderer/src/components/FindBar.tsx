@@ -64,7 +64,7 @@ export function FindBar({ find }: { find: FindState }): React.JSX.Element {
   return (
     <div className="flex h-10 items-center gap-2 border-t border-line bg-bar px-3">
       <label className="flex h-7 w-72 max-w-full min-w-0 items-center gap-2 rounded-md bg-field px-2.5 ring-1 ring-transparent focus-within:ring-accent/70">
-        <SearchIcon width={13} height={13} className="shrink-0 text-ink-faint" />
+        <SearchIcon size={14} className="shrink-0 text-ink-faint" />
         <input
           ref={inputRef}
           value={query}
@@ -88,17 +88,17 @@ export function FindBar({ find }: { find: FindState }): React.JSX.Element {
         disabled={!hasMatches}
         onClick={() => browser.findNext(false)}
       >
-        <ChevronUpIcon width={15} height={15} />
+        <ChevronUpIcon size={16} />
       </FindButton>
       <FindButton
         label="Next match (Enter)"
         disabled={!hasMatches}
         onClick={() => browser.findNext(true)}
       >
-        <ChevronDownIcon width={15} height={15} />
+        <ChevronDownIcon size={16} />
       </FindButton>
       <FindButton label="Close find bar (Esc)" onClick={() => browser.closeFind()}>
-        <CloseIcon width={12} height={12} />
+        <CloseIcon size={12} />
       </FindButton>
     </div>
   )

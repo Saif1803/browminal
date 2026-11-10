@@ -70,13 +70,13 @@ const PHRASES: Record<PermissionKind, string> = {
   'clipboard-read': 'see text and images copied to the clipboard'
 }
 
-/** "chatgpt.com wants to use your camera and microphone" */
-export function describeRequest(site: string, kinds: readonly PermissionKind[]): string {
+/** "wants to use your camera and microphone": what a site asks for, after its name. */
+export function describeWants(kinds: readonly PermissionKind[]): string {
   const wants =
     kinds.includes('camera') && kinds.includes('microphone')
       ? 'use your camera and microphone'
       : kinds.map((kind) => PHRASES[kind]).join(' and ')
-  return `${site} wants to ${wants}`
+  return `wants to ${wants}`
 }
 
 /** Decisions per site, kept in memory only: they last until the browser closes. */

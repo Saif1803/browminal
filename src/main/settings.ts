@@ -9,9 +9,10 @@ import {
   type PanelDock
 } from '../shared/layout'
 import {
-  DEFAULT_AGENT_COMMAND,
+  DEFAULT_AGENT_COMMANDS,
   isAgentCommand,
   isFolderPath,
+  MAX_AGENT_COMMANDS,
   MAX_REMEMBERED_FOLDERS,
   siteKey
 } from './terminal-policy'
@@ -41,8 +42,8 @@ export interface TerminalSettings {
   width: number
   /** Project folders by site (origin): new terminals for that site start there. */
   folders: Record<string, string>
-  /** What the panel's Claude button runs (with --mcp-config added). */
-  agentCommand: string
+  /** Agent commands the start page offers (claude, codex, any other), the last one used first. */
+  agentCommands: string[]
 }
 
 /** Saved in settings.json. */
@@ -62,7 +63,7 @@ export const DEFAULT_SETTINGS: Settings = {
     height: TERMINAL_DEFAULT_HEIGHT,
     width: TERMINAL_DEFAULT_WIDTH,
     folders: {},
-    agentCommand: DEFAULT_AGENT_COMMAND
+    agentCommands: [...DEFAULT_AGENT_COMMANDS]
   }
 }
 
@@ -98,6 +99,15 @@ const sizeOr = (value: unknown, min: number, fallback: number): number =>
     ? value
     : fallback
 
+/** The saved agent commands; an older file's single `agentCommand` becomes the list. */
+function parseAgentCommands(input: Record<string, unknown>): string[] {
+  const saved: unknown[] = Array.isArray(input.agentCommands)
+    ? input.agentCommands
+    : [input.agentCommand]
+  const commands = [...new Set(saved.filter(isAgentCommand))].slice(0, MAX_AGENT_COMMANDS)
+  return commands.length ? commands : [...DEFAULT_AGENT_COMMANDS]
+}
+
 function parseTerminal(raw: unknown): TerminalSettings {
   const input = asRecord(raw)
   const defaults = DEFAULT_SETTINGS.terminal
@@ -109,7 +119,7 @@ function parseTerminal(raw: unknown): TerminalSettings {
     height: sizeOr(input.height, TERMINAL_MIN_HEIGHT, defaults.height),
     width: sizeOr(input.width, TERMINAL_MIN_WIDTH, defaults.width),
     folders: Object.fromEntries(folders) as Record<string, string>,
-    agentCommand: isAgentCommand(input.agentCommand) ? input.agentCommand : defaults.agentCommand
+    agentCommands: parseAgentCommands(input)
   }
 }
 

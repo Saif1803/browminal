@@ -1,4 +1,6 @@
 import type { PanelDock } from './layout'
+import type { AgentBrand } from './agents'
+import type { OverlayKind } from './overlay'
 
 /** One entry in the tab strip. */
 export interface TabSummary {
@@ -125,15 +127,26 @@ export interface PickNotice {
 /** One shell in the terminal panel. */
 export interface TerminalSession {
   id: number
-  /** The shell's name ("PowerShell", "zsh"), numbered when there are several. */
+  /** The shell's or agent's name ("PowerShell", "Claude", "Codex"), numbered when there are several. */
   title: string
   /** The browser tab this terminal works on (its agent's tab); null once that tab closed. */
   tabId: number | null
-  /** The folder the shell started in. */
-  cwd: string
-  /** The shell has exited; the session stays until it's closed. */
+  /** The name of the folder the shell started in (never its path). */
+  folder: string
+  /** The shell has exited; the session stays until it's closed or restarted. */
   exited: boolean
+  /** Its exit code once it has exited (null while it runs, or if the OS didn't say). */
+  exitCode: number | null
+  /** It runs an agent (claude, codex, any other), started from the start page. */
+  agent: boolean
+  /** That agent is Claude Code or Codex (drawn with its own mark); null for any other. */
+  brand: AgentBrand | null
 }
+
+/** An agent command (the start page's field) is at most this long. */
+export const MAX_AGENT_COMMAND = 200
+/** In an agent command, replaced by the path of the MCP config file Browminal wrote for it. */
+export const MCP_CONFIG_PLACEHOLDER = '{mcp-config}'
 
 /** The terminal panel under the page or beside it, like an IDE's. */
 export interface TerminalPanelState {
@@ -145,7 +158,14 @@ export interface TerminalPanelState {
   /** Width in px on the right. */
   width: number
   sessions: TerminalSession[]
+  /** The session shown; null: the start page (a folder and an agent to start a session with). */
   activeId: number | null
+  /** The name (never the path) of the project folder chosen for the active tab's site, or null. */
+  folder: string | null
+  /** The active tab's site that folder is remembered for ("http://localhost:5173"), or null. */
+  site: string | null
+  /** Agent commands the start page offers: the ones used before (last first), then claude, codex. */
+  agentCommands: string[]
 }
 
 /** Everything the UI shows, pushed from main at most once per tick whenever it changes. */
@@ -160,6 +180,8 @@ export interface BrowserState {
   bookmarksBarVisible: boolean
   agent: AgentState
   terminal: TerminalPanelState
+  /** What hangs over the page (main's overlay view), so its button can look pressed. */
+  overlay: OverlayKind | null
 }
 
 /** Command-line switch main gives the UI renderer when the window has a glass background. */
@@ -204,23 +226,38 @@ export interface BrowserApi {
   showBookmarksOverflow(from: number, x: number, y: number): Promise<void>
   /** The shield: the ad blocker's menu for the active tab, at (x, y). */
   showAdblockMenu(x: number, y: number): Promise<void>
-  /** The agent button: sharing the active tab, the bridge on/off, how to connect, at (x, y). */
-  showAgentMenu(x: number, y: number): Promise<void>
+  /** The agent button: opens the agent sheet over the page (or closes it). */
+  toggleAgentSheet(): Promise<void>
   /** "Stop" while an agent works on tab `id`: it stops being shared. */
   stopAgent(id: number): Promise<void>
   /** The emulation badge: tab `id` goes back to its own size, colours and network. */
   resetEmulation(id: number): Promise<void>
   /** Stops picking an element (Esc does too). */
   cancelPick(): Promise<void>
-  /** The errors badge: send the active tab's new errors to the agent, or dismiss them, at (x, y). */
-  showErrorsMenu(x: number, y: number): Promise<void>
+  /**
+   * The errors badge: the popover with the active tab's new errors (send them to the agent, or
+   * dismiss them), its top-right corner at (x, y). Or closes it.
+   */
+  toggleErrors(x: number, y: number): Promise<void>
+  /** Where questions for the user hang from: the address bar's leading icon, (x, y) its bottom-left. */
+  setPromptAnchor(x: number, y: number): Promise<void>
 
   // The terminal panel.
-  /** Ctrl+`: opens the panel (with a terminal for the active tab if there is none), or closes it. */
+  /** Ctrl+`: opens the panel (the start page if no session runs), or closes it. */
   toggleTerminal(): Promise<void>
-  /** A new terminal working on the active tab. */
+  /** A new plain terminal working on the active tab. */
   newTerminal(): Promise<void>
   closeTerminal(id: number): Promise<void>
+  /** Starts an exited terminal's shell (or agent) again, in the same folder, on the same tab. */
+  restartTerminal(id: number): Promise<void>
+  /** The panel's agent button: shows the start page. */
+  showTerminalStartPage(): Promise<void>
+  /**
+   * "Start session": a new terminal for the active tab running only the agent `command` (claude,
+   * codex, any other), connected to Browminal, in the folder chosen for its site (asked for first
+   * if there is none).
+   */
+  startAgentSession(command: string): Promise<void>
   selectTerminal(id: number): Promise<void>
   /** Resizing the panel (its height at the bottom, its width on the right); main clamps it. */
   setTerminalSize(px: number): Promise<void>
@@ -228,9 +265,7 @@ export interface BrowserApi {
   setTerminalDock(dock: PanelDock): Promise<void>
   /** Points terminal `id` (and its agent) at the active tab. */
   attachTerminal(id: number): Promise<void>
-  /** Shares the terminal's tab and starts the agent command (claude) in it, connected to Browminal. */
-  startAgentInTerminal(id: number): Promise<void>
-  /** Asks for a folder, remembers it for the active tab's site and opens a terminal there. */
+  /** Asks for the project folder agents work in and remembers it for the active tab's site. */
   chooseTerminalFolder(): Promise<void>
 
   /** The UI's height in px; main places tabs directly below it. */
@@ -271,20 +306,23 @@ export const IpcChannel = {
   ShowBookmarkMenu: 'bookmarks:show-menu',
   ShowBookmarksOverflow: 'bookmarks:show-overflow',
   ShowAdblockMenu: 'adblock:show-menu',
-  ShowAgentMenu: 'agent:show-menu',
+  ToggleAgentSheet: 'agent:toggle-sheet',
   StopAgent: 'agent:stop',
   ResetEmulation: 'agent:reset-emulation',
   CancelPick: 'agent:cancel-pick',
-  ShowErrorsMenu: 'agent:show-errors-menu',
+  ToggleErrors: 'agent:toggle-errors',
+  SetPromptAnchor: 'ui:set-prompt-anchor',
   SetChromeHeight: 'ui:set-chrome-height',
   ToggleTerminal: 'terminal:toggle',
   NewTerminal: 'terminal:new',
   CloseTerminal: 'terminal:close',
+  RestartTerminal: 'terminal:restart',
+  ShowTerminalStartPage: 'terminal:start-page',
+  StartAgentSession: 'terminal:start-agent',
   SelectTerminal: 'terminal:select',
   SetTerminalSize: 'terminal:set-size',
   SetTerminalDock: 'terminal:set-dock',
   AttachTerminal: 'terminal:attach',
-  StartAgentInTerminal: 'terminal:start-agent',
   ChooseTerminalFolder: 'terminal:choose-folder',
   GetState: 'browser:get-state',
   State: 'browser:state',

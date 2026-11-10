@@ -41,7 +41,18 @@ const EMPTY_STATE: BrowserState = {
     picking: null,
     pick: null
   },
-  terminal: { open: false, dock: 'bottom', height: 0, width: 0, sessions: [], activeId: null }
+  terminal: {
+    open: false,
+    dock: 'bottom',
+    height: 0,
+    width: 0,
+    sessions: [],
+    activeId: null,
+    folder: null,
+    site: null,
+    agentCommands: []
+  },
+  overlay: null
 }
 
 /** Reports the header's height to main, which places tabs directly below it; returns it too. */
@@ -115,13 +126,19 @@ function App(): React.JSX.Element {
             emulation={tab.emulation}
             onResetEmulation={() => window.browser.resetEmulation(tab.id)}
             errors={tab.errors}
+            errorsOpen={state.overlay === 'errors'}
+            prompting={state.overlay === 'prompt'}
             focusRequested={focusTabId === tab.id}
             onFocused={() => setFocusTabId(null)}
           />
           {agent.picking !== null ? (
             <AgentPicking />
           ) : (
-            agent.pick && <PickSent notice={agent.pick} />
+            // The errors popover says itself where its errors went.
+            agent.pick &&
+            !(agent.pick.kind === 'errors' && state.overlay === 'errors') && (
+              <PickSent notice={agent.pick} />
+            )
           )}
           {workingTab && (
             <AgentWorking
@@ -130,8 +147,10 @@ function App(): React.JSX.Element {
             />
           )}
           <DownloadsButton downloads={state.downloads} />
-          <TerminalButton open={terminal.open} />
-          <AgentButton agent={agent} shared={activeShared} />
+          <div className="flex shrink-0 items-center gap-0.5">
+            <TerminalButton open={terminal.open} />
+            <AgentButton agent={agent} shared={activeShared} open={state.overlay === 'agent'} />
+          </div>
           {tab.isLoading && (
             <div
               role="progressbar"

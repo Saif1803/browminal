@@ -7,7 +7,6 @@ import {
   formatValue,
   isAgentPort,
   mcpConfigJson,
-  parseTerminalHeader,
   scaledSize,
   truncate,
   type AgentTab
@@ -112,19 +111,7 @@ test('isAgentPort accepts unprivileged ports only', () => {
   expect(isAgentPort('9339')).toBe(false)
 })
 
-test('parseTerminalHeader accepts positive ids only', () => {
-  expect(parseTerminalHeader('3')).toBe(3)
-  expect(parseTerminalHeader(undefined)).toBe(null)
-  for (const bad of ['', '0', '-1', '1.5', ' 3', '3,4', '12345678901']) {
-    expect(parseTerminalHeader(bad)).toBe(null)
-  }
-})
-
 test('connection instructions carry the port and token', () => {
-  expect(JSON.parse(mcpConfigJson(9340, 'abc', 7)).mcpServers.browminal.headers).toEqual({
-    Authorization: 'Bearer abc',
-    'x-browminal-terminal': '7'
-  })
   expect(claudeAddCommand(9340, 'abc')).toBe(
     'claude mcp add --scope user --transport http browminal http://127.0.0.1:9340/mcp ' +
       '--header "Authorization: Bearer abc"'

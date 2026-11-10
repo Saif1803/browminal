@@ -1,15 +1,16 @@
-import { clipboard, Menu, type BrowserWindow, type MenuItemConstructorOptions } from 'electron'
+import { clipboard } from 'electron'
 import { existsSync } from 'fs'
 import { describeStatus, isActive, shortenMiddle } from '../shared/downloads'
 import type { DownloadEntry, Downloads } from './downloads'
-import { menuText } from './menu-text'
+import type { MenuEntry } from './menu-model'
+import type { MainWindow } from './window'
 
 const MAX_SHOWN = 15
 const NAME_LENGTH = 48
 
-function entryActions(downloads: Downloads, entry: DownloadEntry): MenuItemConstructorOptions[] {
+function entryActions(downloads: Downloads, entry: DownloadEntry): MenuEntry[] {
   const { id } = entry
-  const items: MenuItemConstructorOptions[] = []
+  const items: MenuEntry[] = []
   switch (entry.status) {
     case 'progressing':
       items.push({ label: 'Pause', click: () => downloads.pause(id) })
@@ -43,27 +44,23 @@ function entryActions(downloads: Downloads, entry: DownloadEntry): MenuItemConst
 }
 
 /**
- * The downloads list as a native menu: one submenu of actions per download, then the folder
+ * The downloads list as an overlay menu: one submenu of actions per download, then the folder
  * and "Clear list". A placeholder until the design pass brings a real panel.
  */
-export function showDownloadsMenu(
-  window: BrowserWindow,
-  downloads: Downloads,
-  x: number,
-  y: number
-): void {
+export function showDownloadsMenu(main: MainWindow, x: number, y: number): void {
+  const { window, downloads, overlay } = main
   const entries = downloads.all
   const shown = entries.slice(0, MAX_SHOWN)
-  const template: MenuItemConstructorOptions[] = shown.map((entry) => {
+  const template: MenuEntry[] = shown.map((entry) => {
     const missing = entry.status === 'completed' && !existsSync(entry.path)
     const status = missing ? 'Deleted' : describeStatus(entry)
     return {
-      label: menuText(`${shortenMiddle(entry.filename, NAME_LENGTH)} — ${status}`),
+      label: `${shortenMiddle(entry.filename, NAME_LENGTH)} — ${status}`,
       submenu: entryActions(downloads, entry)
     }
   })
   if (entries.length > MAX_SHOWN) {
-    template.push({ label: `${entries.length - MAX_SHOWN} older downloads`, enabled: false })
+    template.push({ label: `${entries.length - MAX_SHOWN} older downloads` })
   }
   if (template.length > 0) template.push({ type: 'separator' })
   template.push(
@@ -74,5 +71,11 @@ export function showDownloadsMenu(
       click: () => downloads.clearFinished()
     }
   )
-  if (!window.isDestroyed()) Menu.buildFromTemplate(template).popup({ window, x, y })
+  if (window.isDestroyed()) return
+  overlay.showMenu(template, x, y, {
+    at: 'anchor',
+    width: 360,
+    returnTo: window.webContents,
+    toggle: 'downloads'
+  })
 }

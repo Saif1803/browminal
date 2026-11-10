@@ -19,10 +19,15 @@ describe('parseSettings', () => {
         height: 420,
         width: 640,
         folders: { 'http://localhost:5173': process.platform === 'win32' ? 'C:\\shop' : '/shop' },
-        agentCommand: 'claude --model opus'
+        agentCommands: ['codex', 'claude --model opus']
       }
     }
     expect(parseSettings(saved)).toEqual(saved)
+  })
+
+  test('turns an older single agent command into the list', () => {
+    const { terminal } = parseSettings({ terminal: { agentCommand: 'claude --model opus' } })
+    expect(terminal.agentCommands).toEqual(['claude --model opus'])
   })
 
   test('replaces wrong values with defaults and drops unknown ones', () => {
@@ -73,13 +78,17 @@ describe('parseSettings', () => {
           'browminal://home': folder,
           'https://example.com': 'relative/dir'
         },
-        agentCommand: 'claude\nrm -rf /'
+        agentCommands: ['claude\nrm -rf /', 42, 'codex', 'codex']
       }
     })
     expect(terminal).toEqual({
       ...DEFAULT_SETTINGS.terminal,
-      folders: { 'http://localhost:5173': folder }
+      folders: { 'http://localhost:5173': folder },
+      agentCommands: ['codex']
     })
+    expect(parseSettings({ terminal: { agentCommands: [''] } }).terminal.agentCommands).toEqual([
+      'claude'
+    ])
   })
 
   test('checks the agent settings one by one', () => {

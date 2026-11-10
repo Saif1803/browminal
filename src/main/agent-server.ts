@@ -2,7 +2,7 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js'
 import { checkAgentRequest } from './agent-auth'
-import { AGENT_PORT_ATTEMPTS, parseTerminalHeader, TERMINAL_HEADER } from './agent-policy'
+import { AGENT_PORT_ATTEMPTS } from './agent-policy'
 
 const HOST = '127.0.0.1'
 const PATH = '/mcp'
@@ -17,13 +17,13 @@ export interface AgentServer {
 interface Options {
   /** Tried first; then the next ports up to AGENT_PORT_ATTEMPTS. */
   port: number
-  /** Read on every request, so a new token takes effect at once. */
-  token: () => string
+  /** The tokens let in, read on every request, so a new one takes effect at once. */
+  tokens: () => readonly string[]
   /**
    * One MCP server per request: the server is stateless, every call stands on its own.
-   * `terminalId`: the Browminal terminal the agent runs in, when it says so (TERMINAL_HEADER).
+   * `token`: the one the request carried, which says who is calling.
    */
-  createMcp: (terminalId: number | null) => McpServer
+  createMcp: (token: string) => McpServer
 }
 
 function reply(res: ServerResponse, status: number, message: string): void {
@@ -64,7 +64,7 @@ const header = (req: IncomingMessage, name: string): string | undefined => {
  * The MCP server agents connect to: Streamable HTTP on 127.0.0.1 only. Every request is checked
  * by checkAgentRequest (host, not from a browser, token) before the MCP SDK sees it.
  */
-export async function startAgentServer({ port, token, createMcp }: Options): Promise<AgentServer> {
+export async function startAgentServer({ port, tokens, createMcp }: Options): Promise<AgentServer> {
   let listeningPort = port
 
   const handle = async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
@@ -76,10 +76,12 @@ export async function startAgentServer({ port, token, createMcp }: Options): Pro
         secFetchSite: header(req, 'sec-fetch-site')
       },
       listeningPort,
-      token()
+      tokens()
     )
-    if (check === 'unauthorized') return reply(res, 401, 'Missing or wrong Browminal agent token')
-    if (check !== 'ok') return reply(res, 403, 'Forbidden')
+    if (check.result === 'unauthorized') {
+      return reply(res, 401, 'Missing or wrong Browminal agent token')
+    }
+    if (check.result !== 'ok') return reply(res, 403, 'Forbidden')
     if ((req.url ?? '').split('?')[0] !== PATH) return reply(res, 404, 'Not found')
     if (req.method !== 'POST') {
       res.setHeader('allow', 'POST')
@@ -94,7 +96,7 @@ export async function startAgentServer({ port, token, createMcp }: Options): Pro
       return reply(res, tooLarge ? 413 : 400, tooLarge ? 'Request too large' : 'Expected JSON')
     }
 
-    const mcp = createMcp(parseTerminalHeader(header(req, TERMINAL_HEADER)))
+    const mcp = createMcp(check.token)
     const transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: undefined,
       enableJsonResponse: true

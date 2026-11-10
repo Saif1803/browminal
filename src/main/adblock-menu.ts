@@ -1,6 +1,5 @@
-import { Menu, type MenuItemConstructorOptions } from 'electron'
 import type { ShieldState } from '../shared/types'
-import { menuText } from './menu-text'
+import type { MenuEntry } from './menu-model'
 import type { MainWindow } from './window'
 
 function describe({ status, site, blocked }: ShieldState): string {
@@ -20,21 +19,20 @@ function describe({ status, site, blocked }: ShieldState): string {
 }
 
 /**
- * The shield's menu for the active tab: pause on this site, turn off everywhere. The page reloads
- * after either, so it shows the change. A placeholder until the design pass brings a panel.
+ * The shield's menu for the active tab (an overlay menu): pause on this site, turn off everywhere.
+ * The page reloads after either, so it shows the change.
  */
 export function showAdblockMenu(main: MainWindow, x: number, y: number): void {
-  const { window, tabs, adblock } = main
+  const { window, tabs, adblock, overlay } = main
   const tab = tabs.active
   const shield = adblock.shieldFor(tab.url, tab.webContents)
   if (!shield || window.isDestroyed()) return
 
-  const template: MenuItemConstructorOptions[] = [
-    { label: menuText(describe(shield)), enabled: false },
+  const template: MenuEntry[] = [
+    { label: describe(shield) },
     { type: 'separator' },
     {
-      label: menuText(`Block ads on ${shield.site}`),
-      type: 'checkbox',
+      label: `Block ads on ${shield.site}`,
       checked: shield.status !== 'paused',
       enabled: adblock.enabled,
       click: () => {
@@ -44,7 +42,6 @@ export function showAdblockMenu(main: MainWindow, x: number, y: number): void {
     },
     {
       label: 'Block ads and trackers everywhere',
-      type: 'checkbox',
       checked: adblock.enabled,
       click: () => {
         adblock.setEnabled(!adblock.enabled)
@@ -55,5 +52,10 @@ export function showAdblockMenu(main: MainWindow, x: number, y: number): void {
   if (shield.status === 'unavailable') {
     template.push({ type: 'separator' }, { label: 'Try again', click: () => adblock.retry() })
   }
-  Menu.buildFromTemplate(template).popup({ window, x, y })
+  overlay.showMenu(template, x, y, {
+    at: 'anchor',
+    width: 300,
+    returnTo: window.webContents,
+    toggle: 'shield'
+  })
 }

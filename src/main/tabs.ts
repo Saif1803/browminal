@@ -20,7 +20,7 @@ import { loadFavicon, pickFaviconUrl } from './favicons'
 import { decideNavigation } from './navigation-policy'
 import { parsePageColor } from './page-color'
 import { styleScrollbars } from './scrollbars'
-import { GLASS_MATERIAL, themeColors } from './theme'
+import { themeColors } from './theme'
 import { nextZoomFactor } from './zoom-levels'
 
 const PAGE_BACKGROUND = '#ffffff'
@@ -50,11 +50,6 @@ const TAB_WEB_PREFERENCES: WebPreferences = {
   // Deliberately no preload: web pages must never see our API.
   webSecurity: true,
   webviewTag: false
-}
-
-/** The view's background behind a browminal:// page: the theme's page colour, or clear on glass. */
-function internalPageBackground(): string {
-  return GLASS_MATERIAL ? '#00000000' : themeColors().internalPage
 }
 
 /** Pages may only open new tabs on http(s), blob: URLs they made, or blank ones they fill in themselves (OAuth popups). */
@@ -178,9 +173,8 @@ export class Tab {
     wc.on('did-start-navigation', (details) => {
       if (details.isMainFrame && !details.isSameDocument) {
         const internal = details.url.startsWith(`${INTERNAL_SCHEME}:`)
-        // Internal pages don't flash white while loading in the dark theme; on a glass window
-        // they're see-through, like the UI around them.
-        this.view.setBackgroundColor(internal ? internalPageBackground() : PAGE_BACKGROUND)
+        // Internal pages don't flash white while loading in the dark theme.
+        this.view.setBackgroundColor(internal ? themeColors().internalPage : PAGE_BACKGROUND)
         this.themedBackground = internal
       }
     })
@@ -281,13 +275,9 @@ export class Tab {
     return this.themedBackground
   }
 
-  /**
-   * The colour to cover this tab with while its next page loads: its current page's. Null for a
-   * see-through page (a glass browminal:// page): a solid veil would flash over it.
-   */
-  get coverColor(): string | null {
-    if (this.pageColor) return this.pageColor
-    return GLASS_MATERIAL ? null : themeColors().internalPage
+  /** The colour to cover this tab with while its next page loads: its current page's. */
+  get coverColor(): string {
+    return this.pageColor ?? themeColors().internalPage
   }
 
   get bounds(): Rectangle {
@@ -501,10 +491,6 @@ export class Tab {
   /** Remembers the page's background colour (see coverColor). */
   private readPageColor(): void {
     const internal = this.webContents.getURL().startsWith(`${INTERNAL_SCHEME}:`)
-    if (internal && GLASS_MATERIAL) {
-      this.pageColor = null
-      return
-    }
     this.webContents
       .executeJavaScriptInIsolatedWorld(PAGE_WORLD_ID, [{ code: READ_PAGE_COLOR }])
       .then((value) => {

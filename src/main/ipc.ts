@@ -4,13 +4,13 @@ import { pathToFileURL } from 'url'
 import { is } from '@electron-toolkit/utils'
 import { clampPanelSize, isPanelDock, MAX_CHROME_HEIGHT } from '../shared/layout'
 import { IpcChannel, type Bookmark, type OpenDisposition } from '../shared/types'
+import { MAX_OVERLAY_HEIGHT, OverlayChannel } from '../shared/overlay'
 import { TerminalViewChannel } from '../shared/terminal-view'
 import { showAdblockMenu } from './adblock-menu'
-import { showAgentMenu, showErrorsMenu } from './agent-menu'
 import { openBookmark } from './bookmarks'
 import { showBookmarkMenu, showBookmarksOverflow } from './bookmarks-menu'
 import { showDownloadsMenu } from './downloads-menu'
-import { isTerminalSize, MAX_TERMINAL_INPUT } from './terminal-policy'
+import { isAgentCommand, isTerminalSize, MAX_TERMINAL_INPUT } from './terminal-policy'
 import type { MainWindow } from './window'
 
 const MAX_INPUT_LENGTH = 8192
@@ -23,12 +23,12 @@ const MAX_LINK_LENGTH = 8192
 const MAX_COPY_LENGTH = 1024 * 1024
 const MAX_TERMINAL_SIZE_INPUT = 10_000
 
-type RendererPage = 'index.html' | 'terminal.html'
+type RendererPage = 'index.html' | 'terminal.html' | 'overlay.html'
 
 /**
  * The URL a renderer of ours is served from: the UI is index.html, the terminal view
- * terminal.html. Every IPC message must come from a top-level frame showing that page on the dev
- * server's origin, or that exact file (packaged).
+ * terminal.html, the overlay overlay.html. Every IPC message must come from a top-level frame
+ * showing that page on the dev server's origin, or that exact file (packaged).
  */
 function isTrustedRendererUrl(url: string, page: RendererPage): boolean {
   const devUrl = process.env['ELECTRON_RENDERER_URL']
@@ -150,7 +150,7 @@ export function registerIpc(getMain: () => MainWindow | null): void {
   ipcMain.handle(IpcChannel.ShowDownloadsMenu, (event, x: unknown, y: unknown) => {
     const main = assertTrustedSender(event)
     const point = assertPoint(main, x, y)
-    showDownloadsMenu(main.window, main.downloads, point.x, point.y)
+    showDownloadsMenu(main, point.x, point.y)
   })
 
   ipcMain.handle(IpcChannel.ToggleBookmark, (event) => {
@@ -188,10 +188,8 @@ export function registerIpc(getMain: () => MainWindow | null): void {
     showAdblockMenu(main, point.x, point.y)
   })
 
-  ipcMain.handle(IpcChannel.ShowAgentMenu, (event, x: unknown, y: unknown) => {
-    const main = assertTrustedSender(event)
-    const point = assertPoint(main, x, y)
-    showAgentMenu(main, point.x, point.y)
+  ipcMain.handle(IpcChannel.ToggleAgentSheet, (event) => {
+    assertTrustedSender(event).overlay.toggleAgentSheet()
   })
   ipcMain.handle(IpcChannel.StopAgent, (event, id: unknown) => {
     const main = assertTrustedSender(event)
@@ -204,10 +202,15 @@ export function registerIpc(getMain: () => MainWindow | null): void {
   ipcMain.handle(IpcChannel.CancelPick, (event) => {
     assertTrustedSender(event).agent.cancelPicking()
   })
-  ipcMain.handle(IpcChannel.ShowErrorsMenu, (event, x: unknown, y: unknown) => {
+  ipcMain.handle(IpcChannel.ToggleErrors, (event, x: unknown, y: unknown) => {
     const main = assertTrustedSender(event)
     const point = assertPoint(main, x, y)
-    showErrorsMenu(main, point.x, point.y)
+    main.overlay.toggleErrors(point.x, point.y)
+  })
+  ipcMain.handle(IpcChannel.SetPromptAnchor, (event, x: unknown, y: unknown) => {
+    const main = assertTrustedSender(event)
+    const point = assertPoint(main, x, y)
+    main.overlay.setPromptAnchor(point.x, point.y)
   })
 
   /** Throws unless `id` is the id of a terminal in the panel. */
@@ -219,10 +222,24 @@ export function registerIpc(getMain: () => MainWindow | null): void {
   ipcMain.handle(IpcChannel.ToggleTerminal, (event) =>
     assertTrustedSender(event).terminals.toggle()
   )
-  ipcMain.handle(IpcChannel.NewTerminal, (event) => assertTrustedSender(event).terminals.create())
+  ipcMain.handle(IpcChannel.NewTerminal, (event) => {
+    assertTrustedSender(event).terminals.create()
+  })
   ipcMain.handle(IpcChannel.CloseTerminal, (event, id: unknown) => {
     const main = assertTrustedSender(event)
     main.terminals.close(assertTerminalId(main, id))
+  })
+  ipcMain.handle(IpcChannel.RestartTerminal, async (event, id: unknown) => {
+    const main = assertTrustedSender(event)
+    await main.terminals.restart(assertTerminalId(main, id))
+  })
+  ipcMain.handle(IpcChannel.ShowTerminalStartPage, (event) => {
+    assertTrustedSender(event).terminals.showStartPage()
+  })
+  ipcMain.handle(IpcChannel.StartAgentSession, async (event, command: unknown) => {
+    const main = assertTrustedSender(event)
+    if (!isAgentCommand(command)) throw new Error('startAgentSession: expected a command line')
+    await main.terminals.startAgent(command.trim())
   })
   ipcMain.handle(IpcChannel.SelectTerminal, (event, id: unknown) => {
     const main = assertTrustedSender(event)
@@ -245,10 +262,6 @@ export function registerIpc(getMain: () => MainWindow | null): void {
   ipcMain.handle(IpcChannel.AttachTerminal, (event, id: unknown) => {
     const main = assertTrustedSender(event)
     main.terminals.attach(assertTerminalId(main, id))
-  })
-  ipcMain.handle(IpcChannel.StartAgentInTerminal, async (event, id: unknown) => {
-    const main = assertTrustedSender(event)
-    await main.terminals.startAgent(assertTerminalId(main, id))
   })
   ipcMain.handle(IpcChannel.ChooseTerminalFolder, async (event) => {
     await assertTrustedSender(event).terminals.chooseFolder()
@@ -300,6 +313,79 @@ export function registerIpc(getMain: () => MainWindow | null): void {
     }
   })
   ipcMain.on(TerminalViewChannel.Ready, (event) => terminalSender(event)?.terminals.viewLoaded())
+
+  /**
+   * The overlay view's messages (sent, not invoked): null unless they came from the main
+   * window's overlay, top frame, on its trusted URL. Never throws, like terminalSender.
+   */
+  const overlaySender = (event: IpcMainEvent): MainWindow | null => {
+    const main = getMain()
+    const frame = event.senderFrame
+    if (
+      !main ||
+      main.window.isDestroyed() ||
+      event.sender !== main.overlay.view.webContents ||
+      !frame ||
+      frame.parent !== null ||
+      !isTrustedRendererUrl(frame.url, 'overlay.html')
+    ) {
+      console.error(`Rejected overlay IPC from untrusted sender: ${frame?.url ?? 'unknown'}`)
+      return null
+    }
+    return main
+  }
+  /** An overlay message with no arguments. */
+  const onOverlay = (channel: string, act: (main: MainWindow) => void): void => {
+    ipcMain.on(channel, (event) => {
+      const main = overlaySender(event)
+      if (main) act(main)
+    })
+  }
+  /** An overlay message carrying one boolean. */
+  const onOverlayFlag = (channel: string, act: (main: MainWindow, on: boolean) => void): void => {
+    ipcMain.on(channel, (event, on: unknown) => {
+      const main = overlaySender(event)
+      if (main && typeof on === 'boolean') act(main, on)
+    })
+  }
+
+  onOverlay(OverlayChannel.Ready, (main) => main.overlay.viewLoaded())
+  ipcMain.on(OverlayChannel.SetHeight, (event, px: unknown) => {
+    const main = overlaySender(event)
+    if (
+      main &&
+      typeof px === 'number' &&
+      Number.isFinite(px) &&
+      px >= 0 &&
+      px <= MAX_OVERLAY_HEIGHT
+    ) {
+      main.overlay.setHeight(px)
+    }
+  })
+  onOverlay(OverlayChannel.Close, (main) => main.overlay.close())
+  onOverlayFlag(OverlayChannel.SetAgentsEnabled, (main, on) => main.agent.setEnabled(on))
+  onOverlayFlag(OverlayChannel.SetTabShared, (main, on) => main.overlay.setTabShared(on))
+  onOverlayFlag(OverlayChannel.SetShareAll, (main, on) => main.agent.setShareAll(on))
+  onOverlay(OverlayChannel.PickElement, (main) => main.overlay.pickElement())
+  ipcMain.on(OverlayChannel.CopyConnect, (event, what: unknown) => {
+    const main = overlaySender(event)
+    if (main && (what === 'command' || what === 'config')) main.overlay.copyConnect(what)
+  })
+  onOverlay(OverlayChannel.RenewToken, (main) => main.agent.renewToken())
+  onOverlay(OverlayChannel.RetryBridge, (main) => main.agent.retry())
+  onOverlay(OverlayChannel.StopAgent, (main) => main.overlay.stopAgent())
+  onOverlay(OverlayChannel.SendErrors, (main) => void main.overlay.sendErrors())
+  onOverlay(OverlayChannel.DismissErrors, (main) => main.overlay.dismissErrors())
+  ipcMain.on(OverlayChannel.Answer, (event, id: unknown, confirmed: unknown) => {
+    const main = overlaySender(event)
+    if (main && isId(id) && typeof confirmed === 'boolean') main.overlay.answer(id, confirmed)
+  })
+  ipcMain.on(OverlayChannel.Choose, (event, id: unknown, ctrl: unknown, shift: unknown) => {
+    const main = overlaySender(event)
+    if (main && isId(id) && typeof ctrl === 'boolean' && typeof shift === 'boolean') {
+      main.overlay.choose(id, { ctrl, shift })
+    }
+  })
 
   ipcMain.handle(IpcChannel.SetChromeHeight, (event, px: unknown) => {
     const { tabs } = assertTrustedSender(event)

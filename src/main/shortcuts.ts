@@ -92,7 +92,7 @@ export function registerShortcuts(main: MainWindow): void {
       case 'toggleTerminal':
         return main.terminals.toggle()
       case 'newTerminal':
-        return main.terminals.create()
+        return void main.terminals.create()
     }
   }
 
@@ -118,7 +118,8 @@ export function registerShortcuts(main: MainWindow): void {
         event.preventDefault()
         return main.agent.cancelPicking()
       }
-      if (from === ui) return
+      // In the overlay Esc closes the popover (its own page handles it).
+      if (from === ui || from === main.overlay.view.webContents) return
       if (tabs.exitPageFullscreen()) return void event.preventDefault()
       if (!tabs.active.webContents.isLoading()) return
     }
@@ -133,6 +134,7 @@ export function registerShortcuts(main: MainWindow): void {
   }
   attach(ui)
   attach(main.terminals.view.webContents)
+  attach(main.overlay.view.webContents)
   tabs.onTabCreated((tab) => attach(tab.webContents))
 
   // Mouse buttons 4/5.

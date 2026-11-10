@@ -1,11 +1,15 @@
-import { app, dialog } from 'electron'
+import { app } from 'electron'
 import { join } from 'path'
+import type { ErrorRow } from '../shared/overlay'
 import type { AgentState, PickNotice } from '../shared/types'
 import { newAgentToken, parseAgentFile, toAgentFile, type AgentFile } from './agent-auth'
 import { captureElementPick, captureErrorsPick } from './agent-picks'
 import { canInspect, defaultAgentTab, type AgentTab } from './agent-policy'
 import { startAgentServer, type AgentServer } from './agent-server'
+import type { AgentQuestion } from './agent-tool-helpers'
 import { createAgentMcp, type AgentContext } from './agent-tools'
+import { positionsOf } from './console-log'
+import { errorRows } from './overlay-content'
 import type { Settings } from './settings'
 import { PickList, pickPrompt, type NewPick } from './picks'
 import { JsonStore } from './store'
@@ -33,6 +37,8 @@ type Client = number | null
  */
 export class Agent {
   private readonly tokens: JsonStore<AgentFile>
+  /** Tokens of agents started in Browminal terminals, each with its terminal's id. */
+  private readonly sessionTokens = new Map<string, number>()
   private server: AgentServer | null = null
   private starting = false
   private error: string | null = null
@@ -222,19 +228,50 @@ export class Agent {
     return this.isShared(tabId) ? (this.debuggers.get(tabId)?.newErrors.length ?? 0) : 0
   }
 
-  /** The errors badge's "Send to agent": the page's new errors become a pick. */
-  async sendErrors(tabId: number): Promise<void> {
+  /** The errors popover's list: the newest of tab `tabId`'s new errors, in original files. */
+  async errorRows(tabId: number): Promise<ErrorRow[]> {
+    const debug = this.debuggers.get(tabId)
+    if (!debug || !this.isShared(tabId)) return []
+    const entries = debug.newErrors.slice(-3)
+    const lookup = await debug.sourceMaps.resolveAll(positionsOf(entries)).catch(() => () => null)
+    return errorRows(entries, lookup)
+  }
+
+  /** The errors popover's "Send to agent": the page's new errors become a pick. */
+  async sendErrors(tabId: number): Promise<PickNotice | null> {
     const tab = this.getMain()?.tabs.get(tabId)
     const debug = this.debuggers.get(tabId)
-    if (!tab || !debug || !this.isShared(tabId)) return
+    if (!tab || !debug || !this.isShared(tabId)) return null
     const capture = captureErrorsPick(tab, debug)
     debug.markErrorsSeen()
-    await this.addPick(capture, 'errors')
+    return this.addPick(capture, 'errors')
   }
 
   /** The errors badge's "Dismiss". */
   dismissErrors(tabId: number): void {
     this.debuggers.get(tabId)?.markErrorsSeen()
+  }
+
+  /** "Try again" after the server couldn't start. */
+  retry(): void {
+    if (!this.enabled || this.server || this.starting) return
+    this.error = null
+    this.startServer()
+    this.changed()
+  }
+
+  /**
+   * A token of its own for the agent started in terminal `terminalId`: it lets that agent in, as
+   * that terminal (so tools that name no tab act on its tab), until it's dropped with the session.
+   */
+  sessionToken(terminalId: number): string {
+    const token = newAgentToken()
+    this.sessionTokens.set(token, terminalId)
+    return token
+  }
+
+  dropSessionToken(token: string): void {
+    this.sessionTokens.delete(token)
   }
 
   /** A new token: agents set up with the old one are refused from the next request on. */
@@ -301,7 +338,7 @@ export class Agent {
       tab: (tabId) => this.tab(tabId, client),
       cdp: (tab) => this.debugOf(tab).cdp,
       debug: (tab) => this.debugOf(tab),
-      confirm: (message, detail, action) => this.confirm(message, detail, action),
+      confirm: (question) => this.confirm(question),
       run: (tab, work) => this.run(tab, work, client),
       openTab: (url, background) => this.openTab(url, background, client),
       closeTab: (tabId) => this.closeTab(tabId),
@@ -363,19 +400,28 @@ export class Agent {
     void this.addPick(captureElementPick(tab, debug, ref), 'element')
   }
 
-  /** Keeps a pick and hands it to the agent in the tab's Browminal terminal, if one runs there. */
-  private async addPick(capture: Promise<NewPick | null>, kind: PickNotice['kind']): Promise<void> {
+  /**
+   * Keeps a pick and hands it to the agent in the tab's Browminal terminal, if one runs there.
+   * Returns what became of it (null: nothing to pick).
+   */
+  private async addPick(
+    capture: Promise<NewPick | null>,
+    kind: PickNotice['kind']
+  ): Promise<PickNotice | null> {
     let pick
     try {
       const captured = await capture
-      if (!captured) return
+      if (!captured) return null
       pick = this.picks.add(captured)
     } catch (error) {
-      this.notify({ id: null, kind, typed: false, error: (error as Error).message })
-      return
+      const notice = { id: null, kind, typed: false, error: (error as Error).message }
+      this.notify(notice)
+      return notice
     }
     const typed = this.getMain()?.terminals.typeForAgent(pick.tabId, pickPrompt(pick)) ?? false
-    this.notify({ id: pick.id, kind, typed, error: null })
+    const notice = { id: pick.id, kind, typed, error: null }
+    this.notify(notice)
+    return notice
   }
 
   /** Shows what became of a pick in the toolbar for a few seconds. */
@@ -395,24 +441,29 @@ export class Agent {
     if (tab && this.isShared(tabId)) this.debugOf(tab)
   }
 
-  private async confirm(message: string, detail: string, action: string): Promise<boolean> {
-    const window = this.getMain()?.window
-    if (!window || window.isDestroyed()) return false
-    // One question at a time, so an agent can't stack up dialogs.
+  /** Asks the user on an agent's behalf (marked as an agent's request). */
+  private async confirm(question: AgentQuestion): Promise<boolean> {
+    const main = this.getMain()
+    if (!main || main.window.isDestroyed()) return false
+    // One question at a time, so an agent can't stack up questions.
     if (this.asking) throw new Error('The user is already being asked something: try again later')
     this.asking = true
     try {
-      const { response } = await dialog.showMessageBox(window, {
-        type: 'question',
-        title: 'Agent',
-        message,
-        detail,
-        buttons: [action, 'Cancel'],
-        defaultId: 1,
-        cancelId: 1,
-        noLink: true
-      })
-      return response === 0
+      const answer = await main.overlay.ask(
+        {
+          icon: 'agent',
+          site: '',
+          message: question.message,
+          detail: question.detail,
+          code: null,
+          fromAgent: true,
+          confirm: question.action,
+          cancel: 'Cancel',
+          destructive: question.destructive
+        },
+        null
+      )
+      return answer === true
     } finally {
       this.asking = false
     }
@@ -496,8 +547,9 @@ export class Agent {
     this.starting = true
     startAgentServer({
       port: this.settings.get().agent.port,
-      token: () => this.token,
-      createMcp: (terminalId) => createAgentMcp(this.contextFor(terminalId), app.getVersion())
+      tokens: () => [this.token, ...this.sessionTokens.keys()],
+      createMcp: (token) =>
+        createAgentMcp(this.contextFor(this.sessionTokens.get(token) ?? null), app.getVersion())
     }).then(
       (server) => {
         this.starting = false
