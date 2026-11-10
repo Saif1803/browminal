@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "nebula",
+      "name": "browminal",
       "dependencies": {
         "@electron-toolkit/utils": "^4.0.0",
         "@jridgewell/trace-mapping": "^0.3.31",

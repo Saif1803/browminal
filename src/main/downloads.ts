@@ -144,7 +144,9 @@ export class Downloads {
           ? 'A download is still in progress'
           : `${running} downloads are still in progress`,
       detail:
-        running === 1 ? 'Quitting Nebula now cancels it.' : 'Quitting Nebula now cancels them.',
+        running === 1
+          ? 'Quitting Browminal now cancels it.'
+          : 'Quitting Browminal now cancels them.',
       buttons: ['Quit and cancel', 'Keep downloading'],
       defaultId: 1,
       cancelId: 1,

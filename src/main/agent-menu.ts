@@ -71,7 +71,7 @@ export function showAgentMenu(main: MainWindow, x: number, y: number): void {
   ]
   if (!canInspect(tab.webContents.getURL()) && !agent.isShared(tab.id)) {
     template.splice(2, 0, {
-      label: 'Agents can open pages here, but not read Nebula’s own pages',
+      label: 'Agents can open pages here, but not read Browminal’s own pages',
       enabled: false
     })
   }

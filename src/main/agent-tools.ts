@@ -25,10 +25,10 @@ const DEFAULT_SCREENSHOT_WIDTH = 1280
 const MAX_FULL_PAGE_HEIGHT = 16_384
 const JPEG_QUALITY = 80
 
-const INSTRUCTIONS = `Nebula is the user's own web browser. These tools act on its tabs.
+const INSTRUCTIONS = `Browminal is the user's own web browser. These tools act on its tabs.
 - You only see tabs the user shared with agents, and tabs you opened with new_tab.
 - Tools take an optional tabId (from list_tabs); without one they act on the tab you used last,
-  the tab of the Nebula terminal you run in, or the active shared tab.
+  the tab of the Browminal terminal you run in, or the active shared tab.
 - To act on a page: read_page (or find) gives each element a ref; pass it to click, type, fill,
   select_option, press_key, hover or scroll. Refs go stale when the page changes: read again.
 - get_page_text is the cheapest way to read a page; screenshot shows its layout.
@@ -103,7 +103,7 @@ interface EvaluateResult {
 }
 
 // Objects evaluate keeps alive in the page until its reply is sent.
-const OBJECT_GROUP = 'nebula-agent'
+const OBJECT_GROUP = 'browminal-agent'
 // Shown by their description: as JSON they'd be {} or lose what matters.
 const DESCRIBED_SUBTYPES = new Set(['node', 'error', 'regexp', 'date', 'proxy', 'promise'])
 
@@ -155,7 +155,7 @@ async function evaluateInPage(cdp: CdpSession, expression: string): Promise<stri
 
 /** One MCP server with every tool, for one request (the agent server is stateless). */
 export function createAgentMcp(context: AgentContext, version: string): McpServer {
-  const mcp = new McpServer({ name: 'nebula', version }, { instructions: INSTRUCTIONS })
+  const mcp = new McpServer({ name: 'browminal', version }, { instructions: INSTRUCTIONS })
 
   mcp.registerTool(
     'list_tabs',

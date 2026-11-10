@@ -68,7 +68,7 @@ describe('keyEvents', () => {
   })
 })
 
-test('browserCommandFor names Nebula shortcuts, but leaves Escape to the page', () => {
+test('browserCommandFor names Browminal shortcuts, but leaves Escape to the page', () => {
   expect(browserCommandFor(win('Control+w'), 'win32')).toBe('closeTab')
   expect(browserCommandFor(win('F5'), 'win32')).toBe('reload')
   expect(browserCommandFor(parseKeyCombo('Meta+w', 'darwin'), 'darwin')).toBe('closeTab')

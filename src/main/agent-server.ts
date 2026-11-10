@@ -21,7 +21,7 @@ interface Options {
   token: () => string
   /**
    * One MCP server per request: the server is stateless, every call stands on its own.
-   * `terminalId`: the Nebula terminal the agent runs in, when it says so (TERMINAL_HEADER).
+   * `terminalId`: the Browminal terminal the agent runs in, when it says so (TERMINAL_HEADER).
    */
   createMcp: (terminalId: number | null) => McpServer
 }
@@ -78,7 +78,7 @@ export async function startAgentServer({ port, token, createMcp }: Options): Pro
       listeningPort,
       token()
     )
-    if (check === 'unauthorized') return reply(res, 401, 'Missing or wrong Nebula agent token')
+    if (check === 'unauthorized') return reply(res, 401, 'Missing or wrong Browminal agent token')
     if (check !== 'ok') return reply(res, 403, 'Forbidden')
     if ((req.url ?? '').split('?')[0] !== PATH) return reply(res, 404, 'Not found')
     if (req.method !== 'POST') {

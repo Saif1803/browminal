@@ -29,7 +29,7 @@ export default defineConfig(
     }
   },
   {
-    // Internal pages (nebula://) are plain browser JS, not TypeScript.
+    // Internal pages (browminal://) are plain browser JS, not TypeScript.
     files: ['resources/pages/**/*.js'],
     rules: {
       '@typescript-eslint/explicit-function-return-type': 'off'

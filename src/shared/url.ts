@@ -1,7 +1,7 @@
 export const SEARCH_URL = 'https://www.google.com/search?q='
 
 /** Scheme for the browser's own pages, served from resources/ by src/main/protocol.ts. */
-export const INTERNAL_SCHEME = 'nebula'
+export const INTERNAL_SCHEME = 'browminal'
 export const HOME_URL = `${INTERNAL_SCHEME}://home/`
 
 export const ERROR_URL = `${INTERNAL_SCHEME}://error/`

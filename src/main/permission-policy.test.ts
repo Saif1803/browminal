@@ -71,7 +71,7 @@ describe('permissionOrigin', () => {
   test('only web pages can hold permissions', () => {
     expect(permissionOrigin('https://chatgpt.com/c/123?x=1')).toBe('https://chatgpt.com')
     expect(permissionOrigin('http://localhost:3000/')).toBe('http://localhost:3000')
-    expect(permissionOrigin('nebula://home/')).toBeNull()
+    expect(permissionOrigin('browminal://home/')).toBeNull()
     expect(permissionOrigin('file:///C:/x.html')).toBeNull()
     expect(permissionOrigin('')).toBeNull()
   })

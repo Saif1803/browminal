@@ -160,7 +160,7 @@ function event(
 }
 
 /**
- * The Nebula command a combination would run (CDP keys reach the browser's shortcuts, so an
+ * The Browminal command a combination would run (CDP keys reach the browser's shortcuts, so an
  * agent pressing Ctrl+W would close the tab), or null. Escape is the page's.
  */
 export function browserCommandFor({ modifiers, key }: KeyCombo, platform: string): string | null {

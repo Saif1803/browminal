@@ -80,11 +80,11 @@ export class PickList {
   }
 }
 
-/** What's typed into the agent's prompt in the Nebula terminal (not sent: the user finishes it). */
+/** What's typed into the agent's prompt in the Browminal terminal (not sent: the user finishes it). */
 export function pickPrompt(pick: Pick): string {
   return pick.kind === 'element'
-    ? `Look at the element I picked in Nebula (pick ${pick.id}): `
-    : `Look at the errors I sent from Nebula (pick ${pick.id}): `
+    ? `Look at the element I picked in Browminal (pick ${pick.id}): `
+    : `Look at the errors I sent from Browminal (pick ${pick.id}): `
 }
 
 const page = (pick: Pick): string =>

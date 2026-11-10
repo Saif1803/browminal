@@ -180,7 +180,7 @@ export function registerPickTools(mcp: McpServer, context: AgentContext): void {
     'get_picks',
     {
       description:
-        'What the user picked in Nebula to show you. An element (picked with Ctrl+Shift+X, or ' +
+        'What the user picked in Browminal to show you. An element (picked with Ctrl+Shift+X, or ' +
         'right-click → "Send to agent"): its ref, a selector, HTML, box, styles, the file and ' +
         'line it is written at (React, Vue and Svelte dev builds) and a screenshot of it. Or a ' +
         'page’s errors (from the errors badge), mapped to the source files. When the user ' +
@@ -196,7 +196,7 @@ export function registerPickTools(mcp: McpServer, context: AgentContext): void {
       const pick = id === undefined ? picks.latest : picks.get(id)
       if (!pick) {
         if (id !== undefined && id <= picks.lastId) {
-          throw new Error(`Pick ${id} is gone: Nebula keeps the newest ${picks.all.length}.`)
+          throw new Error(`Pick ${id} is gone: Browminal keeps the newest ${picks.all.length}.`)
         }
         return text(
           id === undefined

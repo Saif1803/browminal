@@ -475,7 +475,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "nebula-native"
+name = "browminal-native"
 version = "0.1.0"
 dependencies = [
  "adblock",

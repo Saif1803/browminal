@@ -57,8 +57,8 @@ describe('formatting', () => {
   const sent = list.add(errors)
 
   test('the prompt typed into the agent', () => {
-    expect(pickPrompt(picked)).toBe('Look at the element I picked in Nebula (pick 1): ')
-    expect(pickPrompt(sent)).toBe('Look at the errors I sent from Nebula (pick 2): ')
+    expect(pickPrompt(picked)).toBe('Look at the element I picked in Browminal (pick 1): ')
+    expect(pickPrompt(sent)).toBe('Look at the errors I sent from Browminal (pick 2): ')
   })
 
   test('one line per pick', () => {

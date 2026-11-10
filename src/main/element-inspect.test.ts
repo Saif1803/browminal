@@ -158,7 +158,7 @@ describe('formatMatchedStyles', () => {
         '  color: blue; /* overridden */',
         '  padding: 8px; /* overridden */',
         '}',
-        '(1 browser default or Nebula rule not shown)'
+        '(1 browser default or Browminal rule not shown)'
       ].join('\n')
     )
   })

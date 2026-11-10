@@ -1,4 +1,4 @@
-# Plan: Nebula for coding agents
+# Plan: Browminal for coding agents
 
 **Status:** approved 2026-11-02 with the recommended answers (sharing per tab, creator plan
 parked, terminal panel in this round). Phases 1–2 first, then use it for real before Phase 3 on.
@@ -31,7 +31,7 @@ minified frames (the stack shows the minified name with the original file and li
 **Phase 5 done** 2026-11-02, moved ahead of Phases 2–4 at your request ("a literal terminal in the
 browser"). Differences from the text below: the panel docks at the bottom or on the right; the
 UI draws its header row and main lays the page out with `windowLayout` (no `setChromeInsets`);
-the terminal's agent finds its tab through an `x-nebula-terminal` header in its MCP config
+the terminal's agent finds its tab through an `x-browminal-terminal` header in its MCP config
 instead of environment variables; picks (Phase 4) don't exist yet, so nothing is typed into the
 agent's prompt.
 **Phase 6 done** 2026-11-02: `docs/agents.md` (connecting from the panel or your own terminal,
@@ -40,12 +40,12 @@ to date. The plan is complete; what's not built is listed in the phases above an
 
 **Positioning:** a **developer's browser for localhost work**, the one you open next to your
 terminal while building a web app, not an everyday browser. Chrome plus chrome-devtools-mcp
-already covers "an agent can see the page"; Nebula has to win on page ↔ code (Phase 4), the
+already covers "an agent can see the page"; Browminal has to win on page ↔ code (Phase 4), the
 terminal next to the page (Phase 5), any agent, and per-tab consent.
 
 ## Context
-Nebula's main use from now on: **a coding agent running in a terminal (Claude Code, or any
-agent that speaks MCP) can see, drive and debug the pages open in Nebula**, the way it reads and
+Browminal's main use from now on: **a coding agent running in a terminal (Claude Code, or any
+agent that speaks MCP) can see, drive and debug the pages open in Browminal**, the way it reads and
 edits code in an IDE. In an IDE the agent works on files; here the page is the thing it works on,
 and for a local dev server (`localhost:5173`) the page and the code are the same project: the
 agent looks at the page, finds the bug, edits the source, the page reloads, and it checks again.
@@ -54,23 +54,23 @@ This replaces the creator-browser plan as the next round ([creator-browser.md](c
 is parked; three of its pieces are reused here: the debugger on tabs, a side panel that narrows the
 page, and full-page screenshots).
 
-**How an agent reaches Nebula:** Nebula runs a small **MCP server inside main**, on loopback only,
+**How an agent reaches Browminal:** Browminal runs a small **MCP server inside main**, on loopback only,
 behind a token. The agent adds it once:
 ```bash
-claude mcp add --transport http nebula http://127.0.0.1:9339/mcp --header "Authorization: Bearer <token>"
+claude mcp add --transport http browminal http://127.0.0.1:9339/mcp --header "Authorization: Bearer <token>"
 ```
-Nebula's "Connect an agent" dialog shows that line ready to copy (and the same as JSON for other
+Browminal's "Connect an agent" dialog shows that line ready to copy (and the same as JSON for other
 agents: Codex, Cursor, Gemini CLI, anything with HTTP MCP). Every tool runs in main through
 `webContents.debugger` (the Chrome DevTools Protocol, attached by main) on the tab, so the agent
 gets DevTools-level access to the pages it is allowed to touch and nothing else.
 
 **Why not just `--remote-debugging-port`** (what chrome-devtools-mcp and Playwright connect to):
 it has no authentication, any local program can attach, and it exposes **every** webContents,
-including Nebula's own UI, whose preload can call every IPC handler. That breaks the security
+including Browminal's own UI, whose preload can call every IPC handler. That breaks the security
 rules. Our own server exposes only tools we wrote, only for shared tabs.
 
 **Not in this round:** a raw CDP endpoint for Playwright/Puppeteer, performance traces, editing
-files from inside Nebula (the agent edits files itself, that's its job), recording, profiles,
+files from inside Browminal (the agent edits files itself, that's its job), recording, profiles,
 history/suggestions, session restore. The UI stays plain: new menus are native placeholders until
 the design pass.
 
@@ -78,10 +78,10 @@ All rules in `CLAUDE.md` still apply. **Four rules change and need your OK via t
 1. **Main runs a local server** (Phase 1): `127.0.0.1` only, off until you switch it on, every
    request needs the token, and requests from web pages are refused (see Phase 1).
 2. **Main attaches the debugger to a tab** while an agent works on it (every phase). Only tabs you
-   shared, never the UI or a `nebula://` page.
+   shared, never the UI or a `browminal://` page.
 3. **An agent can act in a shared tab** like a user would: click, type, navigate, run script in
    the page. While it does, the tab is marked and one click stops it.
-4. **Nebula can run a terminal** (Phase 5): a shell in a panel next to the page, in its own view
+4. **Browminal can run a terminal** (Phase 5): a shell in a panel next to the page, in its own view
    with its own two-function preload. The main UI's preload does not change.
 
 ## What gets built
@@ -176,13 +176,13 @@ So the agent can live next to the page with no setup.
   preload exposing only `write(data)`, `resize(cols, rows)` and `onData`. Its IPC is checked like
   the UI's (`assertTrustedSender`, but for the terminal view).
 - **"Start agent"** runs your agent command (default `claude`) with the bridge already
-  configured: `NEBULA_MCP_URL` and `NEBULA_MCP_TOKEN` in the environment, and for Claude Code
+  configured: `BROWMINAL_MCP_URL` and `BROWMINAL_MCP_TOKEN` in the environment, and for Claude Code
   `--mcp-config <userData/agent-mcp.json>` (written with the current port and token). The active
   tab is shared automatically when you start it from the panel.
 - **Picks go straight in:** with the panel open, a pick types "Look at the element I picked in
-  Nebula (pick 3): " into the agent's prompt (not sent; you finish the sentence).
+  Browminal (pick 3): " into the agent's prompt (not sent; you finish the sentence).
 - **Links:** `http://localhost:…` in terminal output is clickable and opens in a new tab (other
-  URLs open in a tab too; nothing ever opens outside Nebula).
+  URLs open in a tab too; nothing ever opens outside Browminal).
 
 ### Phase 6: Docs
 Update `CLAUDE.md`: new modules in the table, the four rule changes above, the bridge's checks,

@@ -70,7 +70,7 @@ describe('parseSettings', () => {
         folders: {
           'http://localhost:5173': folder,
           'http://localhost:5173/path': folder,
-          'nebula://home': folder,
+          'browminal://home': folder,
           'https://example.com': 'relative/dir'
         },
         agentCommand: 'claude\nrm -rf /'

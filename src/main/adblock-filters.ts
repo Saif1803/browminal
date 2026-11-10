@@ -1,4 +1,4 @@
-import type { AdblockEngine } from '../../native/nebula_native.node'
+import type { AdblockEngine } from '../../native/browminal_native.node'
 import type { DomTokens } from './adblock-policy'
 import native from './native'
 

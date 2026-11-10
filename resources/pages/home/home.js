@@ -1,6 +1,6 @@
-// Home page for nebula://home/. Runs in a sandboxed tab with no preload and no Node access.
+// Home page for browminal://home/. Runs in a sandboxed tab with no preload and no Node access.
 
-const STORAGE_KEY = 'nebula.assistant'
+const STORAGE_KEY = 'browminal.assistant'
 
 const ASK_HINT = 'Press Enter to ask, Shift+Enter for a new line'
 

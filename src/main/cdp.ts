@@ -174,6 +174,6 @@ function dialogError({ type, message }: DialogInfo): Error {
     type === 'beforeunload' ? 'a "Leave this page?" dialog' : `${type}(${JSON.stringify(message)})`
   return new Error(
     `The page is showing ${what} and waits for an answer. Answer it with handle_dialog ` +
-      '(or the user answers it in Nebula).'
+      '(or the user answers it in Browminal).'
   )
 }

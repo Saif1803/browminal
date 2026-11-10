@@ -20,7 +20,7 @@ const START_TIMEOUT_MS = 10_000
 // How long the toolbar says what became of a pick.
 const PICK_NOTICE_MS = 6000
 
-/** Who's calling: the id of the Nebula terminal an agent runs in, or null for any other agent. */
+/** Who's calling: the id of the Browminal terminal an agent runs in, or null for any other agent. */
 type Client = number | null
 
 /**
@@ -292,7 +292,7 @@ export class Agent {
   }
 
   /**
-   * What the tools of one request use. An agent in a Nebula terminal works on that terminal's
+   * What the tools of one request use. An agent in a Browminal terminal works on that terminal's
    * tab when it names none; each client keeps its own "tab used last".
    */
   contextFor(client: Client): AgentContext {
@@ -327,7 +327,7 @@ export class Agent {
 
   private tab(tabId: number | undefined, client: Client): Tab {
     const main = this.getMain()
-    if (!main) throw new Error('No Nebula window is open')
+    if (!main) throw new Error('No Browminal window is open')
     const terminalTab = client === null ? null : main.terminals.tabOf(client)
     const id =
       tabId ?? defaultAgentTab(this.listTabs(), this.lastTabs.get(client) ?? null, terminalTab)
@@ -340,7 +340,7 @@ export class Agent {
     if (!tab || !this.isShared(id)) {
       throw new Error(
         `Tab ${id} isn’t shared with agents (or isn’t open). The user shares a tab with the ` +
-          'agent button in Nebula’s toolbar.'
+          'agent button in Browminal’s toolbar.'
       )
     }
     return tab
@@ -363,7 +363,7 @@ export class Agent {
     void this.addPick(captureElementPick(tab, debug, ref), 'element')
   }
 
-  /** Keeps a pick and hands it to the agent in the tab's Nebula terminal, if one runs there. */
+  /** Keeps a pick and hands it to the agent in the tab's Browminal terminal, if one runs there. */
   private async addPick(capture: Promise<NewPick | null>, kind: PickNotice['kind']): Promise<void> {
     let pick
     try {
@@ -443,7 +443,7 @@ export class Agent {
 
   private async openTab(url: string, background: boolean, client: Client): Promise<Tab> {
     const main = this.getMain()
-    if (!main) throw new Error('No Nebula window is open')
+    if (!main) throw new Error('No Browminal window is open')
     // Blank first: the logs start before the page's first request.
     const tab = main.tabs.create({ url: 'about:blank', background, openerId: null })
     this.shared.add(tab.id)

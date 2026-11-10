@@ -67,7 +67,7 @@ function setAppMenu(): void {
 }
 
 app.whenReady().then(() => {
-  electronApp.setAppUserModelId('com.nebula.browser')
+  electronApp.setAppUserModelId('com.browminal.browser')
   setAppMenu()
   handleInternalProtocol()
   registerPermissions(() => main)

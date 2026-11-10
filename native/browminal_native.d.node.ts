@@ -1,4 +1,4 @@
-// Types for nebula_native.node, built from the Rust crate in this folder (bun run build:native).
+// Types for browminal_native.node, built from the Rust crate in this folder (bun run build:native).
 // napi-rs names things in camelCase; keep this in step with src/*.rs.
 
 export interface DomTokens {

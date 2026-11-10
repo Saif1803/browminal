@@ -56,21 +56,21 @@ describe('search and home', () => {
   })
 
   test('home URL is the internal page', () => {
-    expect(HOME_URL).toBe('nebula://home/')
-    expect(isHomeUrl('nebula://home/')).toBe(true)
-    expect(isHomeUrl('nebula://home/#x')).toBe(true)
-    expect(isHomeUrl('https://nebula.home/')).toBe(false)
+    expect(HOME_URL).toBe('browminal://home/')
+    expect(isHomeUrl('browminal://home/')).toBe(true)
+    expect(isHomeUrl('browminal://home/#x')).toBe(true)
+    expect(isHomeUrl('https://browminal.home/')).toBe(false)
   })
 
   test('typing the internal scheme does not load it', () => {
-    expect(resolveInput('nebula://home/')).toBe(search('nebula://home/'))
+    expect(resolveInput('browminal://home/')).toBe(search('browminal://home/'))
   })
 })
 
 describe('error pages', () => {
   test('round-trips the code and failed URL', () => {
     const url = errorPageUrl('ERR_NAME_NOT_RESOLVED', 'https://a.example/x?y=1&z=2#frag')
-    expect(url.startsWith('nebula://error/?')).toBe(true)
+    expect(url.startsWith('browminal://error/?')).toBe(true)
     expect(parseErrorPageUrl(url)).toEqual({
       code: 'ERR_NAME_NOT_RESOLVED',
       url: 'https://a.example/x?y=1&z=2#frag'
@@ -86,15 +86,15 @@ describe('error pages', () => {
 
   test('only http(s) failed URLs are accepted', () => {
     expect(parseErrorPageUrl(errorPageUrl('X', 'javascript:alert(1)'))).toBeNull()
-    expect(parseErrorPageUrl(errorPageUrl('X', 'nebula://home/'))).toBeNull()
-    expect(parseErrorPageUrl('nebula://error/?code=X')).toBeNull()
-    expect(displayUrl('nebula://error/?url=file:///etc/passwd')).toBe(
-      'nebula://error/?url=file:///etc/passwd'
+    expect(parseErrorPageUrl(errorPageUrl('X', 'browminal://home/'))).toBeNull()
+    expect(parseErrorPageUrl('browminal://error/?code=X')).toBeNull()
+    expect(displayUrl('browminal://error/?url=file:///etc/passwd')).toBe(
+      'browminal://error/?url=file:///etc/passwd'
     )
   })
 
   test('other pages are not error pages', () => {
     expect(parseErrorPageUrl('https://example.com/?url=https://a.example/')).toBeNull()
-    expect(parseErrorPageUrl('nebula://errorx/?url=https://a.example/')).toBeNull()
+    expect(parseErrorPageUrl('browminal://errorx/?url=https://a.example/')).toBeNull()
   })
 })

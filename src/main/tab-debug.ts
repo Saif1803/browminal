@@ -42,7 +42,7 @@ export type PickEnd = (backendNodeId: number | null) => void
  * The debugger on one shared tab and what's recorded through it: the console and network logs
  * and the scripts' source maps (from the moment it's attached, which is when the tab is shared
  * or an agent first uses it), what an agent emulates there, and picking an element for an
- * agent. Nothing is recorded while the tab shows a nebula:// page. Detaching the debugger ends
+ * agent. Nothing is recorded while the tab shows a browminal:// page. Detaching the debugger ends
  * all of it, emulation included.
  */
 export class TabDebug {

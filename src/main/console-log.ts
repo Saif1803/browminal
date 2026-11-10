@@ -18,7 +18,7 @@ const MAX_ENTRY_TEXT = 4000
 const MAX_STACK_FRAMES = 10
 
 export type ConsoleLevel = 'error' | 'warning' | 'info' | 'debug'
-/** Where an entry came from: the page's console, an uncaught exception, the browser, Nebula. */
+/** Where an entry came from: the page's console, an uncaught exception, the browser, Browminal. */
 export type ConsoleSource = 'console' | 'exception' | 'browser' | 'navigation'
 
 export interface StackFrame {
@@ -282,7 +282,7 @@ export class ConsoleLog {
   }
 
   add(entry: NewConsoleEntry): void {
-    // Electron's own warnings in unpackaged builds: about Nebula, not the page.
+    // Electron's own warnings in unpackaged builds: about Browminal, not the page.
     if (entry.frames[0]?.url.startsWith('node:electron/')) return
     const last = this.entries[this.entries.length - 1]
     if (last && sameEntry(last, entry)) {

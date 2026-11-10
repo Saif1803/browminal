@@ -38,7 +38,7 @@ export function quoteArg(arg: string, kind: ShellKind): string {
   return `'${arg.replace(/'/g, `'\\''`)}'`
 }
 
-/** The line typed into a terminal to start the agent connected to Nebula. */
+/** The line typed into a terminal to start the agent connected to Browminal. */
 export function agentCommandLine(command: string, configPath: string, kind: ShellKind): string {
   return `${command} --mcp-config ${quoteArg(configPath, kind)}`
 }

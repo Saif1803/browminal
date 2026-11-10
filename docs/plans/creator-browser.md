@@ -1,10 +1,10 @@
-# Plan: Nebula for content creators
+# Plan: Browminal for content creators
 
 **Status:** draft 2026-09-25, waiting for your OK. Nothing here is built yet.
 
 ## Context
 Browser essentials are done (tabs, page essentials, permissions, downloads, bookmarks, ad blocker;
-see [browser-essentials.md](browser-essentials.md)). This round makes Nebula a browser for
+see [browser-essentials.md](browser-essentials.md)). This round makes Browminal a browser for
 **content creators**: the place where material is **captured, previewed and handed off** while
 making content. It does not try to replace the platforms' own studios (YouTube Studio, TikTok,
 Instagram) for posting or analytics.
@@ -20,7 +20,7 @@ restore.
 All rules in `CLAUDE.md` still apply. **Three rules change and need your OK via this plan:**
 1. **The UI may record one tab** (Phase 2). Today the UI always gets "no" for every permission.
    After this change, main grants the UI's `getDisplayMedia` request once, only right after the
-   user pressed Record in Nebula's own controls, and only for the active tab's frame (never a
+   user pressed Record in Browminal's own controls, and only for the active tab's frame (never a
    screen or another app).
 2. **Main attaches the Chromium debugger to a tab** for a moment (Phase 2 full-page screenshots,
    Phase 4 touch emulation), only from a user command, never from anything a page does.
@@ -55,8 +55,8 @@ Fix that first, before new features add more of the same.
     area, detaches the tab view and tells the UI (state `capture: {mode: 'region', image}`); the UI
     fills the window with the still image and lets the user drag a rectangle; main crops it
     (`nativeImage.crop`) and re-attaches the tab. Esc cancels.
-- Results are copied to the clipboard **and** saved as PNG in `Pictures/Nebula/`
-  (`app.getPath('pictures')`) as `Nebula 2026-09-25 14.03.12.png`, cleaned and numbered with
+- Results are copied to the clipboard **and** saved as PNG in `Pictures/Browminal/`
+  (`app.getPath('pictures')`) as `Browminal 2026-09-25 14.03.12.png`, cleaned and numbered with
   `download-names.ts`. A short "Saved: Show in folder" notice appears in the toolbar.
 - **Pure, tested:** `capture-names.ts` (file names from a date), `capture-region.ts` (clamp and
   scale a UI-drawn rectangle to image pixels, device pixel ratio included).
@@ -68,7 +68,7 @@ Fix that first, before new features add more of the same.
   with the tab's own audio, nothing else on screen). Any other request from the UI is still denied.
 - The UI encodes with `MediaRecorder` and sends chunks to main (`capture:recording-chunk`, typed
   `ArrayBuffer`, size-capped per chunk and per recording), which appends them to a file in
-  `Videos/Nebula/`. Stop, closing the tab or switching tabs ends the recording and finishes the file.
+  `Videos/Browminal/`. Stop, closing the tab or switching tabs ends the recording and finishes the file.
 - **Format:** WebM (VP9/Opus) always works. MP4 only if `MediaRecorder.isTypeSupported('video/mp4')`
   says so in Electron's Chromium (to check; Electron may lack the H.264 encoder). No ffmpeg. GIF is
   left out of this round.
@@ -182,7 +182,7 @@ the roadmap.
    you than capture.
 3. **Recording format:** WebM only is fine for now? MP4 would mean bundling ffmpeg (~80 MB) if
    Electron can't encode H.264 itself.
-4. **Where captures go:** `Pictures/Nebula` and `Videos/Nebula`, or everything in `Downloads`.
+4. **Where captures go:** `Pictures/Browminal` and `Videos/Browminal`, or everything in `Downloads`.
 
 ## Verification
 - Each phase ends with `bun run typecheck`, `bun test` (every new pure module gets tests) and

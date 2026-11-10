@@ -27,8 +27,8 @@ describe('canInspect', () => {
     expect(canInspect('https://example.com/')).toBe(true)
     expect(canInspect('http://localhost:5173/')).toBe(true)
     expect(canInspect('about:blank')).toBe(true)
-    expect(canInspect('nebula://home/')).toBe(false)
-    expect(canInspect('nebula://error/?code=X&url=https%3A%2F%2Fexample.com')).toBe(false)
+    expect(canInspect('browminal://home/')).toBe(false)
+    expect(canInspect('browminal://error/?code=X&url=https%3A%2F%2Fexample.com')).toBe(false)
     expect(canInspect('file:///C:/secret.txt')).toBe(false)
     expect(canInspect('')).toBe(false)
   })
@@ -121,17 +121,17 @@ test('parseTerminalHeader accepts positive ids only', () => {
 })
 
 test('connection instructions carry the port and token', () => {
-  expect(JSON.parse(mcpConfigJson(9340, 'abc', 7)).mcpServers.nebula.headers).toEqual({
+  expect(JSON.parse(mcpConfigJson(9340, 'abc', 7)).mcpServers.browminal.headers).toEqual({
     Authorization: 'Bearer abc',
-    'x-nebula-terminal': '7'
+    'x-browminal-terminal': '7'
   })
   expect(claudeAddCommand(9340, 'abc')).toBe(
-    'claude mcp add --scope user --transport http nebula http://127.0.0.1:9340/mcp ' +
+    'claude mcp add --scope user --transport http browminal http://127.0.0.1:9340/mcp ' +
       '--header "Authorization: Bearer abc"'
   )
   expect(JSON.parse(mcpConfigJson(9340, 'abc'))).toEqual({
     mcpServers: {
-      nebula: {
+      browminal: {
         type: 'http',
         url: 'http://127.0.0.1:9340/mcp',
         headers: { Authorization: 'Bearer abc' }

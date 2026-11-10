@@ -30,7 +30,7 @@ describe('siteOf', () => {
   })
 
   test('is null for pages that are not on the web', () => {
-    expect(siteOf('nebula://home/')).toBeNull()
+    expect(siteOf('browminal://home/')).toBeNull()
     expect(siteOf('file:///C:/x.html')).toBeNull()
     expect(siteOf('about:blank')).toBeNull()
     expect(siteOf('')).toBeNull()

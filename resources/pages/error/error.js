@@ -1,4 +1,4 @@
-// Error page for nebula://error/?code=<net error name>&url=<failed URL>.
+// Error page for browminal://error/?code=<net error name>&url=<failed URL>.
 // Runs in a sandboxed tab with no preload and no Node access; main loads it when a page fails.
 
 const params = new URLSearchParams(location.search)
@@ -37,7 +37,7 @@ function describe(site) {
   if (code.startsWith('ERR_CERT_')) {
     return [
       "Your connection isn't private",
-      `${site}'s security certificate isn't trusted, so Nebula didn't open the page. Someone may be trying to intercept your connection.`
+      `${site}'s security certificate isn't trusted, so Browminal didn't open the page. Someone may be trying to intercept your connection.`
     ]
   }
   if (code.startsWith('ERR_SSL_')) {
@@ -47,7 +47,7 @@ function describe(site) {
     return ["This page isn't working", `${site} redirected you too many times.`]
   }
   if (code === 'ERR_BLOCKED_BY_CLIENT') {
-    return ['This page was blocked', 'Nebula blocked this page.']
+    return ['This page was blocked', 'Browminal blocked this page.']
   }
   return ["This page couldn't be loaded", `${site} couldn't be loaded.`]
 }

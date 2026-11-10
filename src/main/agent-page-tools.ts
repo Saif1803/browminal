@@ -142,7 +142,7 @@ async function pressCombo(cdp: CdpSession, spec: string, times: number): Promise
   const command = browserCommandFor(combo, process.platform)
   if (command) {
     throw new Error(
-      `${spec} is a Nebula shortcut (${command}), not a key for the page. Use the tools instead ` +
+      `${spec} is a Browminal shortcut (${command}), not a key for the page. Use the tools instead ` +
         '(navigate, new_tab…).'
     )
   }
@@ -416,7 +416,7 @@ export function registerPageTools(mcp: McpServer, context: AgentContext): void {
       description:
         'Presses a key or combination where the keyboard is (or on an element, by ref, after ' +
         'focusing it): "Enter", "Escape", "Tab", "ArrowDown", "Control+a", "Shift+Tab", "Mod+z" ' +
-        '(Mod: Cmd on macOS, Ctrl elsewhere). Nebula’s own shortcuts (Ctrl+W…) are refused.',
+        '(Mod: Cmd on macOS, Ctrl elsewhere). Browminal’s own shortcuts (Ctrl+W…) are refused.',
       inputSchema: {
         tabId: tabIdInput,
         keys: z.string().min(1).max(50),

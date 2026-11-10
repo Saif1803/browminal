@@ -18,8 +18,8 @@ describe('decideNavigation', () => {
   })
 
   test('internal pages, files and other apps are blocked', () => {
-    expect(decideNavigation('nebula://error/?url=https://bank.example/')).toBe('block')
-    expect(decideNavigation('nebula://home/')).toBe('block')
+    expect(decideNavigation('browminal://error/?url=https://bank.example/')).toBe('block')
+    expect(decideNavigation('browminal://home/')).toBe('block')
     expect(decideNavigation('file:///C:/Windows/win.ini')).toBe('block')
     expect(decideNavigation('ms-settings:privacy')).toBe('block')
     expect(decideNavigation('slack://open')).toBe('block')

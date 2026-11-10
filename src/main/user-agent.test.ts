@@ -7,22 +7,22 @@ const CHROME =
 describe('cleanUserAgent', () => {
   test('removes the Electron and app tokens', () => {
     const electron =
-      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) nebula/1.0.0 Chrome/142.0.7444.235 Electron/39.8.10 Safari/537.36'
-    expect(cleanUserAgent(electron, 'nebula')).toBe(CHROME)
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) browminal/1.0.0 Chrome/142.0.7444.235 Electron/39.8.10 Safari/537.36'
+    expect(cleanUserAgent(electron, 'browminal')).toBe(CHROME)
   })
 
   test('matches the app name case-insensitively', () => {
-    const electron = CHROME.replace('Chrome/', 'Nebula/1.0.0 Chrome/')
-    expect(cleanUserAgent(electron, 'nebula')).toBe(CHROME)
+    const electron = CHROME.replace('Chrome/', 'Browminal/1.0.0 Chrome/')
+    expect(cleanUserAgent(electron, 'browminal')).toBe(CHROME)
   })
 
   test('leaves a plain Chrome user agent alone', () => {
-    expect(cleanUserAgent(CHROME, 'nebula')).toBe(CHROME)
+    expect(cleanUserAgent(CHROME, 'browminal')).toBe(CHROME)
   })
 
   test('only removes whole tokens', () => {
     const ua = 'Mozilla/5.0 NotElectron/1 Chrome/142.0 Safari/537.36'
-    expect(cleanUserAgent(ua, 'nebula')).toBe(ua)
+    expect(cleanUserAgent(ua, 'browminal')).toBe(ua)
   })
 
   test('app names with regex characters are matched literally', () => {

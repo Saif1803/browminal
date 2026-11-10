@@ -23,7 +23,7 @@ async function askAllow(window: BrowserWindow, message: string): Promise<boolean
     type: 'question',
     title: 'Permission request',
     message,
-    detail: 'Nebula remembers your answer for this site until you close the browser.',
+    detail: 'Browminal remembers your answer for this site until you close the browser.',
     buttons: ['Allow', 'Block'],
     defaultId: 1,
     cancelId: 1,
@@ -57,7 +57,7 @@ async function pickScreen(
 /**
  * Permissions for web pages (Electron grants everything by default). See permission-policy.ts
  * for what's allowed, asked or denied. Only the active tab can ask; answers last for the session.
- * The UI and nebula:// pages never get anything, and pages can't pick USB, HID, serial or
+ * The UI and browminal:// pages never get anything, and pages can't pick USB, HID, serial or
  * Bluetooth devices.
  */
 export function registerPermissions(getMain: () => MainWindow | null): void {

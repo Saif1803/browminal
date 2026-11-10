@@ -27,7 +27,7 @@ export function registerInternalScheme(): void {
   ])
 }
 
-/** Serves nebula:// pages from resources/pages. Call after app 'ready'. */
+/** Serves browminal:// pages from resources/pages. Call after app 'ready'. */
 export function handleInternalProtocol(): void {
   const root = join(app.getAppPath(), 'resources', 'pages')
 

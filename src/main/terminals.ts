@@ -429,7 +429,7 @@ function shellEnvironment(): Record<string, string> {
   for (const [key, value] of Object.entries(process.env)) {
     if (value !== undefined && !key.startsWith('ELECTRON_')) env[key] = value
   }
-  env.TERM_PROGRAM = 'Nebula'
+  env.TERM_PROGRAM = 'Browminal'
   env.COLORTERM = 'truecolor'
   return env
 }

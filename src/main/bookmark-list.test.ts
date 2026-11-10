@@ -33,7 +33,7 @@ describe('isBookmarkableUrl', () => {
   })
 
   test('rejects other schemes and broken URLs', () => {
-    expect(isBookmarkableUrl('nebula://home/')).toBe(false)
+    expect(isBookmarkableUrl('browminal://home/')).toBe(false)
     expect(isBookmarkableUrl('javascript:alert(1)')).toBe(false)
     expect(isBookmarkableUrl('file:///C:/Windows/')).toBe(false)
     expect(isBookmarkableUrl('https://')).toBe(false)
@@ -155,7 +155,7 @@ describe('addBookmark', () => {
     const list = [bookmark(1, page.url)]
     expect(addBookmark(list, page)).toBe(list)
     const empty: Bookmark[] = []
-    expect(addBookmark(empty, { ...page, url: 'nebula://home/' })).toBe(empty)
+    expect(addBookmark(empty, { ...page, url: 'browminal://home/' })).toBe(empty)
   })
 
   test('does nothing when the list is full', () => {

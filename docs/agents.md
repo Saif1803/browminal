@@ -1,14 +1,14 @@
-# Coding agents in Nebula
+# Coding agents in Browminal
 
-Nebula lets a terminal coding agent (Claude Code, or any MCP client) see, drive and debug the
+Browminal lets a terminal coding agent (Claude Code, or any MCP client) see, drive and debug the
 pages you're building, in the browser you already have open. The agent only ever sees the tabs
 you share with it.
 
 ## Connect an agent
 
-### From Nebula's terminal panel (easiest)
+### From Browminal's terminal panel (easiest)
 1. Open the panel (header button, or Ctrl+`) and pick the project folder.
-2. Click **Claude**. Nebula types `claude --mcp-config <file>` into the shell. That config already
+2. Click **Claude**. Browminal types `claude --mcp-config <file>` into the shell. That config already
    holds the token and says which tab this terminal works on, so tools that name no tab act on it.
 
 The command comes from `terminal.agentCommand` in `settings.json` (default `claude`). Any agent
@@ -18,11 +18,11 @@ that accepts `--mcp-config <file>` with an `mcpServers` JSON file works the same
 1. Agent button → **Let agents connect** (sharing a tab switches it on too).
 2. Agent button → **Copy command for Claude Code**, and run it once:
    ```bash
-   claude mcp add --scope user --transport http nebula http://127.0.0.1:9339/mcp --header "Authorization: Bearer <token>"
+   claude mcp add --scope user --transport http browminal http://127.0.0.1:9339/mcp --header "Authorization: Bearer <token>"
    ```
    For other agents, **Copy MCP config (JSON)** gives an `mcpServers` entry:
    ```json
-   { "mcpServers": { "nebula": { "type": "http", "url": "http://127.0.0.1:9339/mcp",
+   { "mcpServers": { "browminal": { "type": "http", "url": "http://127.0.0.1:9339/mcp",
        "headers": { "Authorization": "Bearer <token>" } } } }
    ```
 3. Share the tab you want it to work on (below).
@@ -39,7 +39,7 @@ command again afterwards.
 - While an agent works on a tab it is marked, the page gets an accent ring and an
   **Agent working · Stop** bar. **Stop** unshares the tab (and turns "Share every tab" off).
 
-Nebula's own pages (`nebula://home`, error pages) are never read or scripted, even when shared.
+Browminal's own pages (`browminal://home`, error pages) are never read or scripted, even when shared.
 
 ## Show the agent something
 - **Pick an element:** Ctrl+Shift+X (or the agent button, or right-click → **Send to agent**),
@@ -49,12 +49,12 @@ Nebula's own pages (`nebula://home`, error pages) are never read or scripted, ev
 
 The agent reads picks with `get_picks`: the element's HTML, box, styles, a screenshot and the
 file and line it's written at (React, Vue and Svelte dev builds), or the errors mapped to your
-source files. If a Claude started from the terminal panel works on that tab, Nebula types
+source files. If a Claude started from the terminal panel works on that tab, Browminal types
 "Look at … (pick N): " into its prompt for you to finish. It never presses Enter.
 
 ## Tools
 Every tool takes an optional `tabId` (from `list_tabs`). Without one it acts on the tab the agent
-used last, the tab of the Nebula terminal it runs in, or the active shared tab.
+used last, the tab of the Browminal terminal it runs in, or the active shared tab.
 
 | Group | Tool | What it does |
 | --- | --- | --- |
@@ -90,9 +90,9 @@ only what's new. Where the page has source maps (any dev server), stacks and CSS
 files (`src/App.tsx:12:5`), not the bundle.
 
 ## What an agent can't do
-- See or touch tabs you haven't shared, or Nebula's own pages.
+- See or touch tabs you haven't shared, or Browminal's own pages.
 - Load anything but http(s), close your tabs, or open OS windows.
-- Press Nebula's shortcuts (Ctrl+W, Ctrl+T, F5, Ctrl+Shift+X…): those keys are refused.
+- Press Browminal's shortcuts (Ctrl+W, Ctrl+T, F5, Ctrl+Shift+X…): those keys are refused.
 - Pick elements or send errors (only you can).
 - Start a shell: only you start terminals.
 - Read credentials in network logs: `Authorization`, cookies and API-key headers show as `REDACTED`.
@@ -105,11 +105,11 @@ you'd let the agent use.
 
 ## Security
 - The server listens on **127.0.0.1 only** and is off until you turn it on.
-- Every request needs the bearer token from `agent.json` (in Nebula's user-data folder, written
+- Every request needs the bearer token from `agent.json` (in Browminal's user-data folder, written
   owner-only), compared in constant time.
 - Requests must be addressed to `127.0.0.1` / `localhost` on that port and carry no `Origin` or
-  `Sec-Fetch-Site` header, so no web page can reach the server, not even Nebula's own.
-- Nebula never uses `--remote-debugging-port` (it has no auth). The debugger attaches only to
+  `Sec-Fetch-Site` header, so no web page can reach the server, not even Browminal's own.
+- Browminal never uses `--remote-debugging-port` (it has no auth). The debugger attaches only to
   shared tabs and detaches when you Stop or unshare.
 - The token isn't put in your shell's environment; only the terminal's MCP config file (deleted
   with the terminal) holds it.

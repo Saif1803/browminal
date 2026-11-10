@@ -1,4 +1,4 @@
-# Nebula
+# Browminal
 
 A personal desktop web browser built with Electron, React, TypeScript and Tailwind CSS.
 

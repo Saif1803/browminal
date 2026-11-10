@@ -15,7 +15,7 @@ import { TabManager } from './tab-manager'
 import { Terminals } from './terminals'
 import { GLASS_MATERIAL, onThemeChange, themeColors } from './theme'
 
-const APP_NAME = 'Nebula'
+const APP_NAME = 'Browminal'
 // macOS traffic lights are about 14px tall; centre them in the tab strip.
 const TRAFFIC_LIGHT_Y = Math.round((TAB_STRIP_HEIGHT - 14) / 2)
 

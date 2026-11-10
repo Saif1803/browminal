@@ -1,4 +1,4 @@
-# Nebula — desktop web browser (Electron)
+# Browminal — desktop web browser (Electron)
 
 A developer's browser for localhost work: terminal coding agents (Claude Code or any MCP client)
 see, drive and debug the tabs the user shares with them (see **Agent bridge** below). The
@@ -12,12 +12,12 @@ keep it in step when tools or their rules change.
   `bun:test` is allowed in `*.test.ts` files only.
 - `package.json` has `"trustedDependencies": ["electron", "esbuild"]` so their install scripts run under Bun.
 - **Rust** for main-process code where it pays (memory, hot paths): the `native/` crate
-  (napi-rs → `native/nebula_native.node`, Node-API so one build serves Electron and `bun test`).
+  (napi-rs → `native/browminal_native.node`, Node-API so one build serves Electron and `bun test`).
   `bun run build:native` (`scripts/build-native.ts`: `cargo build --release` + copy) runs on install,
   `dev` and `build`; it needs a Rust toolchain. Main loads it through `src/main/native.ts`
   (electron-vite copies the file into `out/main/chunks`, unpacked from the asar); a worker gets its
   path in `workerData` instead of importing `native.ts` (one copy of the file). Its JS types are
-  `native/nebula_native.d.node.ts`, kept in step by hand. `bun test` can't load that import, so
+  `native/browminal_native.d.node.ts`, kept in step by hand. `bun test` can't load that import, so
   `scripts/test-preload.ts` (bunfig.toml) swaps `native.ts` for a plain `require` of the built file.
   Check Rust with `cargo clippy --release -- -D warnings` and `cargo fmt --check` in `native/`.
 - **Tailwind CSS v4** via `@tailwindcss/vite` (theme tokens in `src/renderer/src/assets/main.css`).
@@ -26,10 +26,10 @@ keep it in step when tools or their rules change.
   pages' CSS repeats the palette, and `src/main/theme.ts` holds the few colours main paints itself
   (native window controls, window and loading backgrounds); keep all three in sync.
 - **Glass:** on Windows 11 22H2+ (acrylic) and macOS (vibrancy) the window is see-through
-  (`glass.ts`); main passes `--nebula-glass` to the UI, which sets `data-glass` on `<html>` and paints
+  (`glass.ts`); main passes `--browminal-glass` to the UI, which sets `data-glass` on `<html>` and paints
   the same palette translucent (`strip` tints the window, `bar` is clear, `tab` lifts the active tab;
   `.glass-edge` gives raised surfaces a lit rim). Elsewhere the colours stay solid. The home page
-  links `glass.css`, which `nebula://` serves only on a glass window (empty otherwise), and its tab
+  links `glass.css`, which `browminal://` serves only on a glass window (empty otherwise), and its tab
   view is clear there (`GLASS_MATERIAL` in `theme.ts`), so it sits on the same backdrop.
 
 ## Commands
@@ -65,7 +65,7 @@ rustfmt when `native/` changed).
   main clamps with `clampPanelSize`), and the **terminal view**, a second `WebContentsView` with xterm
   (`src/renderer/terminal.html`, `src/renderer/src/terminal/`), shows the shell below it. Every
   session works on a tab: Claude started from its button gets an MCP config with the
-  `x-nebula-terminal` header, so tools that name no tab act on that tab. Links in the output open in
+  `x-browminal-terminal` header, so tools that name no tab act on that tab. Links in the output open in
   that tab (or a new one next to it). Project folders are remembered per site.
 - **UI ↔ main** only through the typed API in `src/preload/index.ts`, exposed via `contextBridge`
   as `window.browser` (navigation calls act on the active tab; tab calls take a numeric tab id)
@@ -73,7 +73,7 @@ rustfmt when `native/` changed).
   `window.ts` to at most one per tick; `onFocusAddressBar`).
   Pure helpers both sides use live in `src/shared/` (`url.ts`, `downloads.ts`, `layout.ts`). The contract lives in `src/shared/types.ts` (`BrowserApi`, `BrowserState`,
   `IpcChannel`); change it there first.
-- **Error pages:** a failed main-frame load (not `ERR_ABORTED`) loads `nebula://error/?code=…&url=…`
+- **Error pages:** a failed main-frame load (not `ERR_ABORTED`) loads `browminal://error/?code=…&url=…`
   (`errorPageUrl` in `src/shared/url.ts`). The address bar shows the failed URL (`displayUrl`),
   Reload retries it, and the failed entry and the error entry are removed from history.
 - **Storage:** small JSON files in `userData` through `JsonStore` (`src/main/store.ts`): read once
@@ -90,11 +90,11 @@ rustfmt when `native/` changed).
 - Address-bar input is resolved **in main** by `resolveInput` in `src/shared/url.ts`
   (http(s) as-is; bare domains get `https://`; localhost/IPs get `http://`; everything else,
   including other schemes, is a Google search; empty input goes home).
-- **Internal pages** use the privileged `nebula://` scheme (`src/main/protocol.ts`), served only
+- **Internal pages** use the privileged `browminal://` scheme (`src/main/protocol.ts`), served only
   from `resources/pages/<page>/` via the allowlist in `src/main/internal-files.ts`. The start page
-  is `nebula://home/` (`resources/pages/home`): a prompt box that opens ChatGPT or Claude with
+  is `browminal://home/` (`resources/pages/home`): a prompt box that opens ChatGPT or Claude with
   the question pre-filled, plus direct links. Internal pages are static HTML/CSS/JS loaded in a
-  normal sandboxed tab: they get no preload and no IPC, and a strict CSP. Typing `nebula://`
+  normal sandboxed tab: they get no preload and no IPC, and a strict CSP. Typing `browminal://`
   into the address bar never loads it.
 
 ### Main-process modules (`src/main`)
@@ -141,7 +141,7 @@ rustfmt when `native/` changed).
 | `element-inspect.ts` | Pure: inspect's box model, computed styles and matching CSS rules with file and line (source maps, Vite's injected styles) |
 | `emulation.ts` | Pure: device and network presets, emulation state, the address bar badge's label |
 | `ax-tree.ts` | Pure: the accessibility tree as compact text with refs (backend DOM node ids); find |
-| `cdp-keys.ts` | Pure: "Control+a" → CDP key events; refuses keys that are Nebula shortcuts |
+| `cdp-keys.ts` | Pure: "Control+a" → CDP key events; refuses keys that are Browminal shortcuts |
 | `agent-menu.ts` | Native menu for the agent button (placeholder until the design pass) |
 | `terminals.ts` | `Terminals`: pty sessions, the terminal view, panel open/height, Claude button, links |
 | `terminal-policy.ts` | Pure: default shell, quoting, agent command line, output buffer, folder keys |
@@ -159,8 +159,8 @@ rustfmt when `native/` changed).
 | `shortcut-map.ts` | Pure: key input + platform → browser command |
 | `shortcuts.ts` | Runs commands from `before-input-event` on UI and every tab; mouse back/forward, swipe |
 | `context-menu.ts` | Native right-click menus for pages, and cut/copy/paste in the UI's text fields |
-| `protocol.ts` | Registers and serves the `nebula://` scheme |
-| `internal-files.ts` | Pure URL → file mapping for `nebula://` (allowlist, traversal guard) |
+| `protocol.ts` | Registers and serves the `browminal://` scheme |
+| `internal-files.ts` | Pure URL → file mapping for `browminal://` (allowlist, traversal guard) |
 
 Keep new main-process code in focused modules like these rather than growing `index.ts`.
 
@@ -184,14 +184,14 @@ space for the native controls.
   (http(s) or blank only; everything else is denied). A `window.open` page is adopted so
   `window.opener` works, with the same forced `webPreferences` (`overrideBrowserWindowOptions`).
   `<webview>` attachment is blocked.
-- Pages can't navigate any frame (or be redirected) to `nebula://`, `file:` or other apps' schemes
+- Pages can't navigate any frame (or be redirected) to `browminal://`, `file:` or other apps' schemes
   (`will-frame-navigate` / `will-redirect` + `decideNavigation`). `mailto:`/`tel:` open only after
   the user confirms, and only from the active tab. Main's own `loadURL` is not affected.
 - The UI renderer must not navigate away from itself or open windows.
 - **Permissions** (`permissions.ts`): fullscreen and clipboard writes are allowed; camera, microphone,
   location, notifications and clipboard reads ask (Allow/Block, remembered per origin until the
   browser closes); everything else is denied, including `openExternal`. Only the active tab can
-  ask; the UI and `nebula://` pages always get "no". Screen sharing asks every time (screens only,
+  ask; the UI and `browminal://` pages always get "no". Screen sharing asks every time (screens only,
   no audio) and needs a user gesture. USB, HID, serial and Bluetooth pickers are always cancelled.
 - Only http(s) URLs are loaded into tabs from the address bar.
 - **Downloads** (`downloads.ts`): only pages in tabs can download. Files go straight into the OS
@@ -217,16 +217,16 @@ space for the native controls.
   constant time; "New token" replaces it). Never use `--remote-debugging-port`: it has no auth and
   exposes the UI. Agents see and act only on **shared** tabs: shared by the user (Ctrl+Shift+A),
   opened by an agent (`new_tab`), or opened by a shared tab; "Share every tab" shares all. Main
-  attaches the debugger only to shared tabs, and never reads or scripts `nebula://` pages
+  attaches the debugger only to shared tabs, and never reads or scripts `browminal://` pages
   (`canInspect`). Agents load http(s) only, close only tabs they opened, and their actions still go
   through the usual navigation, download and permission rules. Keys an agent presses that are
-  Nebula shortcuts (Ctrl+W, F5…) are refused (`browserCommandFor`), since CDP key events reach
+  Browminal shortcuts (Ctrl+W, F5…) are refused (`browserCommandFor`), since CDP key events reach
   `before-input-event`. A page's alert/confirm/prompt shows Electron's native box as usual; the
   agent is told and may answer it (`handle_dialog`), or the user does. While an agent works the tab is
   marked, the page gets an accent ring and "Agent working · Stop"; Stop unshares the tab (and turns
   "Share every tab" off), detaching the debugger.
   Console and network logs are kept per shared tab from the moment it's shared (nothing while it
-  shows a `nebula://` page); header values with credentials (Authorization, cookies, API keys) are
+  shows a `browminal://` page); header values with credentials (Authorization, cookies, API keys) are
   shown as `REDACTED`. What an agent emulates (device, colour scheme, network) shows as a badge in
   the address bar that resets it, and ends with Stop. `clear_site_data` runs only after the user
   agrees in a dialog (one question at a time).
@@ -250,7 +250,7 @@ space for the native controls.
 ## Roadmap
 - **Milestone 1 (done):** frameless window, back/forward/reload-stop, address bar, title sync,
   Cmd/Ctrl+L and Cmd/Ctrl+R.
-- **Home page (done):** `nebula://home/` with ChatGPT/Claude prompt; Google search.
+- **Home page (done):** `browminal://home/` with ChatGPT/Claude prompt; Google search.
 - **Browser essentials (done):** tabs, page essentials, permissions, downloads, bookmarks, ad
   blocker — [docs/plans/browser-essentials.md](docs/plans/browser-essentials.md).
 - **Agent browser (done; the main purpose from now on):** Phases 1 (agent bridge), 2 (read and

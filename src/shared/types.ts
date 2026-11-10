@@ -116,7 +116,7 @@ export interface PickNotice {
   /** Its number, which agents read it by (get_picks); null when it failed. */
   id: number | null
   kind: 'element' | 'errors'
-  /** It was typed into the prompt of the agent running in a Nebula terminal on that tab. */
+  /** It was typed into the prompt of the agent running in a Browminal terminal on that tab. */
   typed: boolean
   /** Why it failed, or null. */
   error: string | null
@@ -163,7 +163,7 @@ export interface BrowserState {
 }
 
 /** Command-line switch main gives the UI renderer when the window has a glass background. */
-export const GLASS_SWITCH = '--nebula-glass'
+export const GLASS_SWITCH = '--browminal-glass'
 
 /** The only surface the UI renderer has into the main process (window.browser). */
 export interface BrowserApi {
@@ -228,7 +228,7 @@ export interface BrowserApi {
   setTerminalDock(dock: PanelDock): Promise<void>
   /** Points terminal `id` (and its agent) at the active tab. */
   attachTerminal(id: number): Promise<void>
-  /** Shares the terminal's tab and starts the agent command (claude) in it, connected to Nebula. */
+  /** Shares the terminal's tab and starts the agent command (claude) in it, connected to Browminal. */
   startAgentInTerminal(id: number): Promise<void>
   /** Asks for a folder, remembers it for the active tab's site and opens a terminal there. */
   chooseTerminalFolder(): Promise<void>

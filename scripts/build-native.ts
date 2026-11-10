@@ -1,4 +1,4 @@
-// Builds the Rust crate in native/ and puts the library at native/nebula_native.node, where main
+// Builds the Rust crate in native/ and puts the library at native/browminal_native.node, where main
 // imports it. Runs on install, dev and build; needs Rust (https://rustup.rs). Cargo only rebuilds
 // what changed, so it's quick when the crate hasn't.
 import { spawnSync } from 'child_process'
@@ -19,8 +19,8 @@ if (cargo.status !== 0) process.exit(cargo.status ?? 1)
 
 const library =
   process.platform === 'win32'
-    ? 'nebula_native.dll'
+    ? 'browminal_native.dll'
     : process.platform === 'darwin'
-      ? 'libnebula_native.dylib'
-      : 'libnebula_native.so'
-copyFileSync(join(crate, 'target', 'release', library), join(crate, 'nebula_native.node'))
+      ? 'libbrowminal_native.dylib'
+      : 'libbrowminal_native.so'
+copyFileSync(join(crate, 'target', 'release', library), join(crate, 'browminal_native.node'))

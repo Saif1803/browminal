@@ -60,7 +60,7 @@ const LIGHT_ANSI = {
 }
 const darkScheme = window.matchMedia('(prefers-color-scheme: dark)')
 
-/** The xterm colours from the theme tokens, light or dark like the rest of Nebula. */
+/** The xterm colours from the theme tokens, light or dark like the rest of Browminal. */
 function theme(): ITheme {
   const css = getComputedStyle(document.documentElement)
   const token = (name: string): string => css.getPropertyValue(name).trim()
@@ -121,7 +121,7 @@ function createView(id: number): SessionView {
   })
   const fit = new FitAddon()
   term.loadAddon(fit)
-  // http(s) links open in a Nebula tab (main checks the URL again).
+  // http(s) links open in a Browminal tab (main checks the URL again).
   term.loadAddon(
     new WebLinksAddon((event, uri) => {
       event.preventDefault()

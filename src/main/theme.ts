@@ -11,7 +11,7 @@ export interface ThemeColors {
   strip: string
   /** The native window controls' symbols. */
   symbol: string
-  /** --page of nebula:// pages, shown while they load. */
+  /** --page of browminal:// pages, shown while they load. */
   internalPage: string
   /** --color-console: the terminal panel, behind the shell's text. */
   console: string

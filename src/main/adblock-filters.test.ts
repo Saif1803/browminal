@@ -5,7 +5,7 @@ import { join } from 'path'
 import { cosmeticStyles, loadEngine, shouldBlock } from './adblock-filters'
 import native from './native'
 
-const folder = mkdtempSync(join(tmpdir(), 'nebula-adblock-'))
+const folder = mkdtempSync(join(tmpdir(), 'browminal-adblock-'))
 afterAll(() => rmSync(folder, { recursive: true, force: true }))
 
 const LISTS = [

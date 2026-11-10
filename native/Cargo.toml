@@ -1,12 +1,12 @@
 [package]
-name = "nebula-native"
+name = "browminal-native"
 version = "0.1.0"
 edition = "2024"
 publish = false
-description = "Nebula's native module: the main-process code that runs as Rust"
+description = "Browminal's native module: the main-process code that runs as Rust"
 
 [lib]
-name = "nebula_native"
+name = "browminal_native"
 crate-type = ["cdylib"]
 
 [dependencies]

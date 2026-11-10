@@ -8,7 +8,7 @@ export type NavigationDecision = 'allow' | 'external' | 'block'
 
 /**
  * What to do when a page (not main) navigates a frame, is redirected, or opens a window.
- * Pages never reach nebula:// (an error page there could spoof the address bar), file: or
+ * Pages never reach browminal:// (an error page there could spoof the address bar), file: or
  * other apps' schemes; mailto: and tel: may open their app once the user agrees.
  */
 export function decideNavigation(url: string): NavigationDecision {

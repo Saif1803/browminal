@@ -1,5 +1,5 @@
 appId: com.electron.app
-productName: nebula
+productName: browminal
 directories:
   buildResources: build
 files:
@@ -16,7 +16,7 @@ asarUnpack:
   # The native module (electron-vite copies it next to main's code); loaded from a real file.
   - out/main/**/*.node
 win:
-  executableName: nebula
+  executableName: browminal
 nsis:
   artifactName: ${name}-${version}-setup.${ext}
   shortcutName: ${productName}

@@ -79,7 +79,7 @@ test('sessionTitle numbers repeats', () => {
 test('siteKey is the origin of web pages only', () => {
   expect(siteKey('http://localhost:5173/cart?x=1')).toBe('http://localhost:5173')
   expect(siteKey('https://example.com/a')).toBe('https://example.com')
-  expect(siteKey('nebula://home/')).toBe(null)
+  expect(siteKey('browminal://home/')).toBe(null)
   expect(siteKey('about:blank')).toBe(null)
 })
 

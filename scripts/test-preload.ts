@@ -8,5 +8,5 @@ const root = join(import.meta.dirname, '..')
 const require = createRequire(import.meta.url)
 
 mock.module(join(root, 'src', 'main', 'native.ts'), () => ({
-  default: require(join(root, 'native', 'nebula_native.node'))
+  default: require(join(root, 'native', 'browminal_native.node'))
 }))

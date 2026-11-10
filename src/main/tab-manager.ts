@@ -125,7 +125,7 @@ export class TabManager {
   create({ url = HOME_URL, background = false, openerId = null, index }: CreateOptions = {}): Tab {
     const tab = new Tab({ id: nextId(), openerId }, this.hooks)
     this.insert(tab, index ?? insertionIndex(this.tabs, openerId))
-    // Loading first lets activate() see where it's going (a nebula:// page shows no white).
+    // Loading first lets activate() see where it's going (a browminal:// page shows no white).
     tab.load(url)
     if (!background || !this.activeTab) this.activate(tab.id)
     return tab
@@ -263,7 +263,7 @@ export class TabManager {
   private show(tab: Tab): void {
     const request = ++this.showRequest
     const current = this.shownTab
-    // A nebula:// page that hasn't drawn shows the theme's page colour, so it can go up at once.
+    // A browminal:// page that hasn't drawn shows the theme's page colour, so it can go up at once.
     if (!current || current === tab || (!tab.isPainted && tab.hasThemedBackground)) {
       this.reveal(tab)
       return

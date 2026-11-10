@@ -1,6 +1,6 @@
 import { extname, join, normalize, sep } from 'path'
 
-/** Internal pages that may be served, keyed by URL host: nebula://<host>/ */
+/** Internal pages that may be served, keyed by URL host: browminal://<host>/ */
 const PAGES = new Set(['home', 'error'])
 
 const MIME_TYPES: Record<string, string> = {
@@ -17,7 +17,7 @@ export interface InternalFile {
 }
 
 /**
- * Maps a nebula:// URL to a file under `root/<page>/`, or null if it isn't allowed.
+ * Maps a browminal:// URL to a file under `root/<page>/`, or null if it isn't allowed.
  * Only known pages and known file types are served, and paths can't escape the page folder.
  */
 export function resolveInternalFile(root: string, requestUrl: string): InternalFile | null {

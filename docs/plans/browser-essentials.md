@@ -1,4 +1,4 @@
-# Plan: browser essentials for Nebula
+# Plan: browser essentials for Browminal
 
 **Status:** approved 2026-09-25. All phases (1–7) done 2026-09-25.
 
@@ -11,7 +11,7 @@
 **Changes made while building Phase 2:**
 - Ctrl+D and Ctrl+Shift+B are not mapped yet; they arrive with bookmarks in Phase 5.
 - A few standard extras were mapped: Ctrl+PageUp/PageDown and Ctrl+F4 (Windows/Linux), Cmd+[ / Cmd+] and Cmd+Shift+[ / ] (macOS), Shift+F5 / Ctrl+F5 (hard reload), F3 and Ctrl+G (find next), and Shift+F12 in dev for the UI's own DevTools.
-- Pages can no longer navigate to `nebula://` (an error page there would let a site fake the address bar), `file:` or other apps' schemes (`navigation-policy.ts`).
+- Pages can no longer navigate to `browminal://` (an error page there would let a site fake the address bar), `file:` or other apps' schemes (`navigation-policy.ts`).
 - `mailto:`/`tel:` are caught with `will-frame-navigate` and the window-open handler. Phase 3's permission handler should also deny Electron's `openExternal` permission, so nothing else can open other apps.
 - The UI's text fields (address bar, find bar) got a cut/copy/paste context menu.
 - A crashed page shows the error page ("This page crashed") too.
@@ -31,7 +31,7 @@
 - Only pages in tabs can download. A tab that a link opened just to download (`target=_blank`, middle-click) is closed again and its opener comes back to the front.
 - Extras in the menu: Pause/Resume, Resume after a network interruption, Copy download link, Remove from list, Open Downloads folder. Files that were moved or deleted show "Deleted".
 - Download progress shows on the taskbar/Dock icon; macOS bounces the Downloads stack when one finishes.
-- Closing Nebula while downloads run asks first ("Quit and cancel" / "Keep downloading"); quitting cancels them so no partial files are left. On macOS closing the window keeps downloading, and Quit asks.
+- Closing Browminal while downloads run asks first ("Quit and cancel" / "Keep downloading"); quitting cancels them so no partial files are left. On macOS closing the window keeps downloading, and Quit asks.
 - Checked: Chromium adds the Windows mark-of-the-web (`Zone.Identifier`) to downloads, so SmartScreen still checks downloaded programs.
 
 **Changes made while building Phase 5:**
@@ -46,7 +46,7 @@
 - The star removes a bookmark without asking; there's no rename or reorder until the design pass.
 
 **Changes made while building Phase 6:**
-- Confirmed in the package source: `@ghostery/adblocker-electron`'s `enableBlockingInSession` registers a frame preload for every page and `ipcMain` handlers that don't check the sender (and importing it sets `ELECTRON_DISABLE_SECURITY_WARNINGS`). So Nebula depends on the core `@ghostery/adblocker` only.
+- Confirmed in the package source: `@ghostery/adblocker-electron`'s `enableBlockingInSession` registers a frame preload for every page and `ipcMain` handlers that don't check the sender (and importing it sets `ELECTRON_DISABLE_SECURITY_WARNINGS`). So Browminal depends on the core `@ghostery/adblocker` only.
 - The "prebuilt" engines download the raw lists from GitHub and parse them, which takes about 0.8 s. Parsing runs in a worker thread (`adblock-worker.ts`), so main never freezes; the result is cached as `adblock-engine.bin` (~7 MB) and loads in ~10 ms. Updates are checked every 15 minutes: due once the lists are a day old, retried 15 minutes after a failure. Nothing is downloaded while blocking is off.
 - Only network blocking and element hiding. Scriptlets and redirect resources are left out (they run list code in pages; a tampered cache file could inject scripts), so some ads that need them (e.g. YouTube video ads) aren't blocked. Redirect rules simply block.
 - Element hiding: the site's rules and the generic base rules on `dom-ready`, then rules for the class names, ids and links found by a scan in an isolated world, again at the end of loading and on in-page navigation. There's no MutationObserver (that needs a preload), so ad boxes that appear later only match the site and base rules.
@@ -55,7 +55,7 @@
 - The lists exempt `localhost` from element hiding (network blocking still applies there).
 
 ## Context
-Nebula (Electron + electron-vite + React/TS + Tailwind v4, Bun) currently has **one tab**, a top bar (back/forward/reload-stop/home + address bar), a `nebula://home/` page (ChatGPT/Claude prompt), and Google search. You asked for "whatever is a must for a browser". You'll decide the visual design and anything else later, so this round builds **functionality and architecture** and keeps the UI plain, using the existing tokens in `src/renderer/src/assets/main.css`.
+Browminal (Electron + electron-vite + React/TS + Tailwind v4, Bun) currently has **one tab**, a top bar (back/forward/reload-stop/home + address bar), a `browminal://home/` page (ChatGPT/Claude prompt), and Google search. You asked for "whatever is a must for a browser". You'll decide the visual design and anything else later, so this round builds **functionality and architecture** and keeps the UI plain, using the existing tokens in `src/renderer/src/assets/main.css`.
 
 Scope you chose: essentials + **bookmarks** + **ad blocker**. Downloads **auto-save to the Downloads folder**. Not in this round: history/suggestions, session restore.
 
@@ -78,7 +78,7 @@ All existing rules in `CLAUDE.md` still apply: sandboxed tabs with no preload, o
   - Main batches changes so it sends at most one push per tick.
 - **IPC** (`src/main/ipc.ts`, all through the existing `assertTrustedSender`): add `tabs:new/close/activate/reopen/toggle-mute`. Tab ids are type-checked and must exist.
 - **UI**: `TabStrip.tsx` in the top row (drag region, favicons, titles, close ×, "+" button, speaker icon for audible tabs). The existing `NavButtons` / `AddressBar` move to the second row.
-- **User agent**: strip `Electron/x` and `nebula/x` from `app.userAgentFallback`. Otherwise Google sign-in (used by ChatGPT/Claude) blocks "embedded browsers". The cleaning function is in `src/main/user-agent.ts` and tested.
+- **User agent**: strip `Electron/x` and `browminal/x` from `app.userAgentFallback`. Otherwise Google sign-in (used by ChatGPT/Claude) blocks "embedded browsers". The cleaning function is in `src/main/user-agent.ts` and tested.
 
 ### Phase 2: Page essentials
 - **Shortcuts**: `src/main/shortcut-map.ts` (new, pure, tested) maps key input + platform to a command. `shortcuts.ts` runs the commands and is attached to the UI and **every** tab's webContents.
@@ -93,7 +93,7 @@ All existing rules in `CLAUDE.md` still apply: sandboxed tabs with no preload, o
   - Inspect
 - **Find in page**: `FindBar.tsx` row, shown with Ctrl+F. Uses `findInPage` / `stopFindInPage` and the `found-in-page` event for "3 of 12". Enter / Shift+Enter move next / previous; Esc closes. The chrome height grows automatically.
 - **Zoom**: per-site zoom (Chromium default), Ctrl +/−/0 and Ctrl+wheel. The address bar shows a "110%" badge when not at 100%; clicking it resets.
-- **Error pages**: when the main frame fails to load (not for `ERR_ABORTED`), load `nebula://error/?code=…&url=…`.
+- **Error pages**: when the main frame fails to load (not for `ERR_ABORTED`), load `browminal://error/?code=…&url=…`.
   - The page is new: `resources/pages/error/`, and `error` is added to `PAGES` in `src/main/internal-files.ts`.
   - The address bar keeps showing the failed URL, and Reload retries it.
   - The page's "Try again" only follows http(s) URLs.
@@ -108,7 +108,7 @@ Electron **grants every permission by default** today. `src/main/permissions.ts`
 - **Prompt** with a native dialog ("chatgpt.com wants to use your microphone. Allow / Block"): camera, mic, geolocation, notifications, clipboard-read, screen share (via `setDisplayMediaRequestHandler`).
   - Decisions are remembered per site **for this session only**; persisting them would need the storage you postponed.
 - **Deny:** everything else.
-- Requests from the UI renderer and from `nebula://` pages are always denied.
+- Requests from the UI renderer and from `browminal://` pages are always denied.
 
 ### Phase 4: Downloads
 `src/main/downloads.ts`: `will-download` → `setSavePath` into `app.getPath('downloads')`, with unique names like "file (1).zip" from `download-names.ts` (pure, tested). It tracks progress / done / cancelled / failed.

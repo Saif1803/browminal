@@ -270,8 +270,8 @@ export function TerminalPanel({
           aria-label="Start Claude Code here"
           title={
             tab
-              ? `Start Claude Code here, connected to Nebula and working on “${tab.title}”`
-              : 'Start Claude Code here, connected to Nebula and working on this tab'
+              ? `Start Claude Code here, connected to Browminal and working on “${tab.title}”`
+              : 'Start Claude Code here, connected to Browminal and working on this tab'
           }
           className="flex h-6 shrink-0 items-center gap-1.5 rounded-md bg-accent/15 px-2 font-medium text-accent transition-colors hover:bg-accent/25 focus-visible:outline-2 focus-visible:outline-accent disabled:opacity-40"
         >

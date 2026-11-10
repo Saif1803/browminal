@@ -43,7 +43,7 @@ const isHttp = (url: URL): boolean => url.protocol === 'http:' || url.protocol =
 /**
  * The map a script (or stylesheet) at `resourceUrl` points to with `sourceMapUrl` (its
  * sourceMappingURL comment, relative to the resource). Inline data: maps are fine; others must
- * be http(s) on the resource's own origin, so a page can't make Nebula fetch elsewhere.
+ * be http(s) on the resource's own origin, so a page can't make Browminal fetch elsewhere.
  */
 export function mapRefFor(resourceUrl: string, sourceMapUrl: string): MapRef | null {
   if (!sourceMapUrl) return null

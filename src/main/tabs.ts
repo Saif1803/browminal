@@ -52,7 +52,7 @@ const TAB_WEB_PREFERENCES: WebPreferences = {
   webviewTag: false
 }
 
-/** The view's background behind a nebula:// page: the theme's page colour, or clear on glass. */
+/** The view's background behind a browminal:// page: the theme's page colour, or clear on glass. */
 function internalPageBackground(): string {
   return GLASS_MATERIAL ? '#00000000' : themeColors().internalPage
 }
@@ -126,7 +126,7 @@ export class Tab {
   private paintWaiters: (() => void)[] = []
   // The last page's background colour, for the veil that covers it while the next one loads.
   private pageColor: string | null = null
-  // Whether the view's background is the theme's page colour (nebula:// pages), not white.
+  // Whether the view's background is the theme's page colour (browminal:// pages), not white.
   private themedBackground = false
   private placement: { bounds: Rectangle; radius: number } = {
     bounds: { x: 0, y: 0, width: 0, height: 0 },
@@ -199,7 +199,7 @@ export class Tab {
     wc.on('did-navigate', (_event, url) => {
       // Chromium reports a page's favicon URLs only when they differ from the last ones it
       // reported, so a web page starts with those and switches if it reports others.
-      // Pages that aren't on the web (nebula://) show no favicon.
+      // Pages that aren't on the web (browminal://) show no favicon.
       if (isHttpUrl(url)) {
         this.showFavicon(this.faviconCandidates, false)
       } else {
@@ -283,7 +283,7 @@ export class Tab {
 
   /**
    * The colour to cover this tab with while its next page loads: its current page's. Null for a
-   * see-through page (a glass nebula:// page): a solid veil would flash over it.
+   * see-through page (a glass browminal:// page): a solid veil would flash over it.
    */
   get coverColor(): string | null {
     if (this.pageColor) return this.pageColor
@@ -318,7 +318,7 @@ export class Tab {
     return Promise.race([frame, timeout]).finally(() => clearTimeout(timer))
   }
 
-  /** Whether the tab shows nebula://error/ for a page that failed to load. */
+  /** Whether the tab shows browminal://error/ for a page that failed to load. */
   get isErrorPage(): boolean {
     return parseErrorPageUrl(this.webContents.getURL()) !== null
   }
@@ -515,7 +515,7 @@ export class Tab {
       .catch(() => {})
   }
 
-  /** Replaces a failed load with nebula://error/, which shows the failed URL in the address bar. */
+  /** Replaces a failed load with browminal://error/, which shows the failed URL in the address bar. */
   private showError(code: string, url: string): void {
     // Not from inside did-fail-load: let Chromium finish with the failed navigation first.
     setImmediate(() => {

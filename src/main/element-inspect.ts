@@ -225,7 +225,7 @@ function location(
  * The rules that match an element, most specific first like DevTools' Styles pane, each with
  * where it's written (`lookup` gives the original file from a source map). A declaration a later
  * one beats is marked overridden (by name only: shorthand vs longhand isn't worked out, so the
- * computed styles have the last word). Browser defaults and Nebula's own styles are left out,
+ * computed styles have the last word). Browser defaults and Browminal's own styles are left out,
  * and counted.
  */
 export function formatMatchedStyles(
@@ -288,7 +288,7 @@ export function formatMatchedStyles(
     })
     .join('\n')
   const more = hidden
-    ? `\n(${hidden} browser default or Nebula rule${hidden === 1 ? '' : 's'} not shown)`
+    ? `\n(${hidden} browser default or Browminal rule${hidden === 1 ? '' : 's'} not shown)`
     : ''
   return (text || '(no author CSS rules match)') + more
 }

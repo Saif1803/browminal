@@ -21,7 +21,7 @@ export const isAgentPort = (value: unknown): value is number =>
 
 /**
  * Whether the agent may read or act in the page loaded in a tab: web pages and blank pages only.
- * `rawUrl` is the webContents' own URL, so nebula:// pages (home, error pages) are never touched.
+ * `rawUrl` is the webContents' own URL, so browminal:// pages (home, error pages) are never touched.
  */
 export const canInspect = (rawUrl: string): boolean => isHttpUrl(rawUrl) || rawUrl === 'about:blank'
 
@@ -69,7 +69,7 @@ export function describeTabs(tabs: readonly AgentTab[]): string {
   if (hidden > 0) {
     lines.push(
       `${hidden} more tab${hidden === 1 ? ' is' : 's are'} open but not shared. ` +
-        'The user shares a tab with the agent button in Nebula’s toolbar (or Ctrl+Shift+A); ' +
+        'The user shares a tab with the agent button in Browminal’s toolbar (or Ctrl+Shift+A); ' +
         'new_tab opens a shared one.'
     )
   }
@@ -88,13 +88,13 @@ export function scaledSize(
 
 const mcpUrl = (port: number): string => `http://127.0.0.1:${port}/mcp`
 
-/** The line that adds Nebula to Claude Code, for every project. */
+/** The line that adds Browminal to Claude Code, for every project. */
 export const claudeAddCommand = (port: number, token: string): string =>
-  `claude mcp add --scope user --transport http nebula ${mcpUrl(port)} ` +
+  `claude mcp add --scope user --transport http browminal ${mcpUrl(port)} ` +
   `--header "Authorization: Bearer ${token}"`
 
-/** Sent by agents started from a Nebula terminal: which terminal (so which tab) they work on. */
-export const TERMINAL_HEADER = 'x-nebula-terminal'
+/** Sent by agents started from a Browminal terminal: which terminal (so which tab) they work on. */
+export const TERMINAL_HEADER = 'x-browminal-terminal'
 
 /** The terminal id in a request's TERMINAL_HEADER, or null. */
 export function parseTerminalHeader(value: string | undefined): number | null {
@@ -110,7 +110,7 @@ export function mcpConfigJson(port: number, token: string, terminalId?: number):
   const headers: Record<string, string> = { Authorization: `Bearer ${token}` }
   if (terminalId !== undefined) headers[TERMINAL_HEADER] = String(terminalId)
   return JSON.stringify(
-    { mcpServers: { nebula: { type: 'http', url: mcpUrl(port), headers } } },
+    { mcpServers: { browminal: { type: 'http', url: mcpUrl(port), headers } } },
     null,
     2
   )

@@ -15,7 +15,7 @@ let folder: string
 let path: string
 
 beforeEach(() => {
-  folder = mkdtempSync(join(tmpdir(), 'nebula-store-'))
+  folder = mkdtempSync(join(tmpdir(), 'browminal-store-'))
   path = join(folder, 'counter.json')
 })
 
