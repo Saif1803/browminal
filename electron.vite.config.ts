@@ -10,7 +10,7 @@ export default defineConfig({
       // Sandboxed preloads can't require a shared chunk, so no two may import the same module
       // (see src/shared/terminal-view.ts). electron-vite's isolatedEntries would do this,
       // but it crashes when the build's output isn't a terminal.
-      rollupOptions: {
+      rolldownOptions: {
         // The UI's preload, the terminal view's own (terminal I/O only) and the overlay's
         // (the popovers' actions only).
         input: {
@@ -30,7 +30,7 @@ export default defineConfig({
     },
     plugins: [react(), tailwindcss()],
     build: {
-      rollupOptions: {
+      rolldownOptions: {
         input: {
           index: resolve('src/renderer/index.html'),
           terminal: resolve('src/renderer/terminal.html'),
