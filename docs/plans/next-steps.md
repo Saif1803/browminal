@@ -19,7 +19,12 @@ for them.
   (43); `clipboard.writeText` returns a Promise (44, `copyText`); screen sharing reaches the
   permission handler as `display-capture` (45). Left for the manual pass: glass, window controls,
   the terminal, fullscreen video, screen sharing (its picker is a native box the smoke test can't
-  answer), a PDF. Next: the other dependencies (`@types/node` to 24 with Electron's Node).
+  answer), a PDF.
+- Dependencies are current (2026-11-11): vite 8 (Rolldown), electron-vite 6, plugin-react 6,
+  TypeScript 6.0, `@types/node` 24 (Electron's Node), the eslint configs, the Rust crates' patch
+  releases. Held back, waiting on others: **ESLint 10** (eslint-plugin-react 7.37.5 doesn't run on
+  it) and **TypeScript 7** (typescript-eslint supports < 6.1). `@lydell/node-pty` is a beta, but
+  its latest. Phase 1 is done apart from the manual pass.
 - Found on the way, not fixed: a tab an agent opens while Browminal is minimized never draws, and
   gets no mouse events until the window is shown again (a click on it is lost, though the tool
   says it clicked). Turning background throttling off for the tab didn't help. To look at with
