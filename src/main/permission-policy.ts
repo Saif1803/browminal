@@ -11,6 +11,10 @@ const DENY: Policy = { action: 'deny' }
 // Harmless: a page going fullscreen (it can always leave with Esc) and writing plain text to the clipboard.
 const SILENT = new Set(['fullscreen', 'clipboard-sanitized-write'])
 
+// Screen sharing (getDisplayMedia; Electron 45+ names it apart from camera and microphone). Let
+// through here: the screen picker (setDisplayMediaRequestHandler) asks every time.
+const SCREEN_SHARE = 'display-capture'
+
 const ASK: Record<string, PermissionKind> = {
   geolocation: 'location',
   notifications: 'notifications',
@@ -23,13 +27,12 @@ const ASK: Record<string, PermissionKind> = {
  * opening other apps, pointer lock, …) is denied.
  */
 export function policyFor(permission: string, mediaTypes: readonly string[] = []): Policy {
-  if (SILENT.has(permission)) return ALLOW
+  if (SILENT.has(permission) || permission === SCREEN_SHARE) return ALLOW
   if (permission === 'media') {
     const kinds: PermissionKind[] = []
     if (mediaTypes.includes('video')) kinds.push('camera')
     if (mediaTypes.includes('audio')) kinds.push('microphone')
-    // No camera or microphone: getDisplayMedia on its way to the screen picker, which asks every time.
-    return kinds.length > 0 ? { action: 'ask', kinds } : ALLOW
+    return kinds.length > 0 ? { action: 'ask', kinds } : DENY
   }
   const kind = ASK[permission]
   return kind ? { action: 'ask', kinds: [kind] } : DENY

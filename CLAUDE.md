@@ -211,6 +211,7 @@ runs from `out/` first (the build fails on the locked native module).
 | `shortcut-map.ts` | Pure: key input + platform → browser command |
 | `shortcuts.ts` | Runs commands from `before-input-event` on UI and every tab; mouse back/forward, swipe |
 | `context-menu.ts` | Right-click menus (overlay) for pages, and cut/copy/paste in the UI's text fields |
+| `copy-text.ts` | `copyText`: main's one way to put text on the (asynchronous) clipboard |
 | `protocol.ts` | Registers and serves the `browminal://` scheme |
 | `internal-files.ts` | Pure URL → file mapping for `browminal://` (allowlist, traversal guard) |
 

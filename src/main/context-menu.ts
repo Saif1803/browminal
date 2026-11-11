@@ -1,4 +1,5 @@
-import { clipboard, type ContextMenuParams, type WebContents } from 'electron'
+import type { ContextMenuParams, WebContents } from 'electron'
+import { copyText } from './copy-text'
 import { SEARCH_URL, isHttpUrl } from '../shared/url'
 import { canInspect } from './agent-policy'
 import type { MenuEntry } from './menu-model'
@@ -59,7 +60,7 @@ function pageMenu(
         click: () => openInNewTab(params.linkURL, true)
       })
     }
-    link.push({ label: 'Copy link address', click: () => clipboard.writeText(params.linkURL) })
+    link.push({ label: 'Copy link address', click: () => copyText(params.linkURL) })
   }
 
   const image: MenuEntry[] = []

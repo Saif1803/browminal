@@ -11,10 +11,19 @@ for them.
   39 (2026-11-11, seven runs in a row). Its first runs found a real bug: a tab just brought to
   the front stays hidden under the old one until it draws, and drops input meanwhile, so a click
   right after `new_tab` was lost. Agent tools now wait for their tab to be on screen
-  (`TabManager.whenShown`). Next: the Electron 39 → 45 upgrade, then the dependency updates.
-  Known for 45: screen sharing reaches the
-  permission handler as `display-capture` (`policyFor` must let it through to the picker), main's
-  `clipboard` calls return Promises (44), PDFs render as out-of-process frames (41).
+  (`TabManager.whenShown`).
+- Electron is on **45.3.0** (Node 24, Chromium 156), in three steps (41, 43, 45), each with the
+  checks and the smoke test passing. What changed for us: PDFs show in frames of the tab, and the
+  frame-navigation rule blocked Chromium's PDF viewer until it was allowed (subframes only); the
+  binary downloads on first launch (42); the folder dialog opens beside the last project folder
+  (43); `clipboard.writeText` returns a Promise (44, `copyText`); screen sharing reaches the
+  permission handler as `display-capture` (45). Left for the manual pass: glass, window controls,
+  the terminal, fullscreen video, screen sharing (its picker is a native box the smoke test can't
+  answer), a PDF. Next: the other dependencies (`@types/node` to 24 with Electron's Node).
+- Found on the way, not fixed: a tab an agent opens while Browminal is minimized never draws, and
+  gets no mouse events until the window is shown again (a click on it is lost, though the tool
+  says it clicked). Turning background throttling off for the tab didn't help. To look at with
+  the agent gaps.
 - Phase 2: same-site iframes, `drag`, CPU throttling and original names in minified stacks are
   built and unit-tested; the smoke test runs the first three against the real app (minified
   names still only in unit tests). Left: cross-origin (out-of-process)

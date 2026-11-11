@@ -1,4 +1,5 @@
-import { clipboard, WebContentsView, type BrowserWindow, type WebContents } from 'electron'
+import { WebContentsView, type BrowserWindow, type WebContents } from 'electron'
+import { copyText } from './copy-text'
 import { join } from 'path'
 import { is } from '@electron-toolkit/utils'
 import type { Rect } from '../shared/layout'
@@ -300,9 +301,7 @@ export class Overlay {
     const port = this.agent.port
     if (port === null) return
     const token = this.agent.token
-    clipboard.writeText(
-      what === 'command' ? claudeAddCommand(port, token) : mcpConfigJson(port, token)
-    )
+    copyText(what === 'command' ? claudeAddCommand(port, token) : mcpConfigJson(port, token))
   }
 
   stopAgent(): void {

@@ -1,4 +1,4 @@
-import { clipboard } from 'electron'
+import { copyText } from './copy-text'
 import type { Bookmark, OpenDisposition } from '../shared/types'
 import { openBookmark } from './bookmarks'
 import type { MenuEntry, MenuModifiers } from './menu-model'
@@ -35,7 +35,7 @@ export function showBookmarkMenu(
       { label: 'Open', click: () => openBookmark(tabs, bookmark, 'current') },
       { label: 'Open in new tab', click: () => openBookmark(tabs, bookmark, 'background') },
       { type: 'separator' },
-      { label: 'Copy link address', click: () => clipboard.writeText(bookmark.url) },
+      { label: 'Copy link address', click: () => copyText(bookmark.url) },
       { label: 'Remove', click: () => bookmarks.remove(bookmark.id) },
       { type: 'separator' }
     )

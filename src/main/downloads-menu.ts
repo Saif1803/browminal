@@ -1,4 +1,4 @@
-import { clipboard } from 'electron'
+import { copyText } from './copy-text'
 import { existsSync } from 'fs'
 import { describeStatus, isActive, shortenMiddle } from '../shared/downloads'
 import type { DownloadEntry, Downloads } from './downloads'
@@ -34,7 +34,7 @@ function entryActions(downloads: Downloads, entry: DownloadEntry): MenuEntry[] {
       }
       break
   }
-  items.push({ label: 'Copy download link', click: () => clipboard.writeText(entry.url) })
+  items.push({ label: 'Copy download link', click: () => copyText(entry.url) })
   items.push(
     isActive(entry.status)
       ? { label: 'Cancel', click: () => downloads.cancel(id) }

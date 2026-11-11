@@ -1,4 +1,5 @@
-import { clipboard, ipcMain, type IpcMainEvent, type IpcMainInvokeEvent } from 'electron'
+import { ipcMain, type IpcMainEvent, type IpcMainInvokeEvent } from 'electron'
+import { copyText } from './copy-text'
 import { join } from 'path'
 import { pathToFileURL } from 'url'
 import { is } from '@electron-toolkit/utils'
@@ -303,7 +304,7 @@ export function registerIpc(getMain: () => MainWindow | null): void {
   })
   ipcMain.on(TerminalViewChannel.Copy, (event, text: unknown) => {
     if (terminalSender(event) && typeof text === 'string' && text.length <= MAX_COPY_LENGTH) {
-      clipboard.writeText(text)
+      copyText(text)
     }
   })
   ipcMain.on(TerminalViewChannel.OpenLink, (event, id: unknown, url: unknown) => {

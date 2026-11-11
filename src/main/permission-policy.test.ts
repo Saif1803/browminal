@@ -13,8 +13,13 @@ describe('policyFor', () => {
     expect(policyFor('clipboard-sanitized-write')).toEqual({ action: 'allow' })
   })
 
-  test('screen sharing (media without camera or microphone) passes through to the screen picker', () => {
-    expect(policyFor('media', [])).toEqual({ action: 'allow' })
+  test('screen sharing passes through to the screen picker, which asks every time', () => {
+    expect(policyFor('display-capture', ['video'])).toEqual({ action: 'allow' })
+    expect(policyFor('display-capture', ['video', 'audio'])).toEqual({ action: 'allow' })
+  })
+
+  test('media asking for neither camera nor microphone is denied', () => {
+    expect(policyFor('media', [])).toEqual({ action: 'deny' })
   })
 
   test('camera and microphone are asked, together when requested together', () => {
@@ -44,7 +49,6 @@ describe('policyFor', () => {
       'window-management',
       'storage-access',
       'fileSystem',
-      'display-capture',
       'unknown',
       'something-new'
     ]) {
