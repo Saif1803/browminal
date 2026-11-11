@@ -10,7 +10,9 @@ keep it in step when tools or their rules change.
 - **Bun** is the package manager and script runner only. The app runs on Electron's Node:
   never use Bun-only APIs (`Bun.*`, `bun:*` imports) in `src/main`, `src/preload` or `src/renderer`.
   `bun:test` is allowed in `*.test.ts` files only.
-- `package.json` has `"trustedDependencies": ["electron", "esbuild"]` so their install scripts run under Bun.
+- `package.json` has `"trustedDependencies": ["esbuild"]` so its install script runs under Bun.
+  Electron (42+) has none: its binary downloads the first time it is launched (`bun run dev`, the
+  smoke test), or ahead of time with `node node_modules/electron/install.js`.
 - **Rust** for main-process code where it pays (memory, hot paths): the `native/` crate
   (napi-rs → `native/browminal_native.node`, Node-API so one build serves Electron and `bun test`).
   `bun run build:native` (`scripts/build-native.ts`: `cargo build --release` + copy) runs on install,
@@ -45,7 +47,7 @@ keep it in step when tools or their rules change.
 
 ## Commands
 ```bash
-bun install          # install deps (runs Electron's binary download, builds native/)
+bun install          # install deps, builds native/ (Electron's binary comes on first launch)
 bun run build:native # rebuild the Rust module after changing native/
 bun run dev          # start the app with HMR
 bun run typecheck    # tsc for main/preload, renderer, and tests

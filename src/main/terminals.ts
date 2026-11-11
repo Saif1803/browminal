@@ -1,7 +1,7 @@
 import { dialog, WebContentsView, type BrowserWindow } from 'electron'
 import { existsSync, mkdirSync, rmSync, writeFileSync } from 'fs'
 import { homedir } from 'os'
-import { join } from 'path'
+import { dirname, join } from 'path'
 import { is } from '@electron-toolkit/utils'
 import { spawn, type IPty } from '@lydell/node-pty'
 import {
@@ -73,6 +73,8 @@ export class Terminals {
   private activeId: number | null = null
   /** The folder chosen on a tab without a site (the start page), for this run only. */
   private looseFolder: string | null = null
+  // Where the folder dialog opens next (see chooseFolder).
+  private lastChosenFolder: string | null = null
   private isOpen = false
   /** Where the layout last put the terminal view (null: off screen). */
   private bounds: Rect | null = null
@@ -343,12 +345,20 @@ export class Terminals {
    */
   async chooseFolder(): Promise<string | null> {
     const site = siteKey(this.tabs.active.url)
+    // The OS no longer remembers where the dialog was (Electron 43): it opens beside this site's
+    // folder, or the one chosen last, since projects tend to sit side by side.
+    const near =
+      this.folderFor(this.tabs.active.url) ??
+      this.lastChosenFolder ??
+      Object.values(this.settings.get().terminal.folders).at(-1)
     const result = await dialog.showOpenDialog(this.window, {
       title: site ? `Project folder for ${site}` : 'Project folder',
+      defaultPath: near ? dirname(near) : undefined,
       properties: ['openDirectory']
     })
     const folder = result.filePaths[0]
     if (result.canceled || !folder || this.disposed) return null
+    this.lastChosenFolder = folder
     if (site) {
       const settings = this.settings.get()
       const folders = { ...settings.terminal.folders, [site]: folder }
