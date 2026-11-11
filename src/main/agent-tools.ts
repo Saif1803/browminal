@@ -185,7 +185,9 @@ export function createAgentMcp(context: AgentContext, version: string): McpServe
       if (!isHttpUrl(target)) throw new Error('Only http(s) addresses can be opened')
       const tab = await context.openTab(target, background ?? false)
       return context.run(tab, async () => {
-        await waitForLoad(tab.webContents)
+        // The page started loading in openTab; it may be done by now (run waits for the tab
+        // to be on screen first).
+        if (tab.webContents.isLoading()) await waitForLoad(tab.webContents)
         return text(describeLoad(tab))
       })
     }

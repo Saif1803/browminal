@@ -26,4 +26,17 @@ describe('decideNavigation', () => {
     expect(decideNavigation('javascript:alert(1)')).toBe('block')
     expect(decideNavigation('not a url')).toBe('block')
   })
+
+  test("Chromium's PDF viewer may load in a frame, and only there", () => {
+    const viewer = 'chrome-extension://mhjfbmdgcfjbbpaeojofohoefgiehjai/5cec7dfa-dc37-4dab'
+    expect(decideNavigation(viewer, { mainFrame: false })).toBe('allow')
+    expect(decideNavigation(viewer, { mainFrame: true })).toBe('block')
+    expect(decideNavigation(viewer)).toBe('block')
+    expect(
+      decideNavigation('chrome-extension://aaaabbbbccccddddeeeeffffgggghhhh/x', {
+        mainFrame: false
+      })
+    ).toBe('block')
+    expect(decideNavigation('chrome://settings/', { mainFrame: false })).toBe('block')
+  })
 })

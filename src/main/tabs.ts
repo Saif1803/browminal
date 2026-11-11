@@ -163,8 +163,10 @@ export class Tab {
     // Pages must not be able to embed <webview>, which could bypass these preferences.
     wc.on('will-attach-webview', (event) => event.preventDefault())
     // Links, forms, scripts and redirects: see decideNavigation. Main's own loads don't pass here.
-    wc.on('will-frame-navigate', (event) => this.guardNavigation(event, event.url))
-    wc.on('will-redirect', (event) => this.guardNavigation(event, event.url))
+    wc.on('will-frame-navigate', (event) =>
+      this.guardNavigation(event, event.url, event.isMainFrame)
+    )
+    wc.on('will-redirect', (event) => this.guardNavigation(event, event.url, event.isMainFrame))
     styleScrollbars(wc)
 
     const changed = (): void => {
@@ -466,8 +468,8 @@ export class Tab {
     if (!this.webContents.isDestroyed()) this.webContents.close()
   }
 
-  private guardNavigation(event: Electron.Event, url: string): void {
-    const decision = decideNavigation(url)
+  private guardNavigation(event: Electron.Event, url: string, mainFrame: boolean): void {
+    const decision = decideNavigation(url, { mainFrame })
     if (decision === 'allow') return
     event.preventDefault()
     if (decision === 'external') this.hooks.openExternal(this, url)
