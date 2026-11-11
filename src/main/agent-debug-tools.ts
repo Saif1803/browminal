@@ -251,7 +251,8 @@ export function registerDebugTools(mcp: McpServer, context: AgentContext): void 
         } catch (error) {
           if (cdp.dialog) throw error
           throw new Error(
-            `No element with ref=${ref} on the page now (it changed?). Call read_page again.`
+            `No element with ref=${ref} on the page now (it changed?). Call read_page again.`,
+            { cause: error }
           )
         }
         const parts = [truncate(outerHTML, maxHtml ?? DEFAULT_HTML_CHARS)]

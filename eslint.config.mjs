@@ -25,7 +25,12 @@ export default defineConfig(
     },
     rules: {
       ...eslintPluginReactHooks.configs.recommended.rules,
-      ...eslintPluginReactRefresh.configs.vite.rules
+      ...eslintPluginReactRefresh.configs.vite.rules,
+      // The Vite preset, plus icons.tsx's `icon(…)` wrapper, which returns a component.
+      'react-refresh/only-export-components': [
+        'error',
+        { allowConstantExport: true, allowCompoundComponents: true, extraHOCs: ['icon'] }
+      ]
     }
   },
   {

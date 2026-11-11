@@ -130,7 +130,8 @@ export class CdpSession {
       } catch (error) {
         throw new Error(
           `Couldn't attach to the page (${(error as Error).message}). ` +
-            'If DevTools is open on this tab, close it and try again.'
+            'If DevTools is open on this tab, close it and try again.',
+          { cause: error }
         )
       }
     }

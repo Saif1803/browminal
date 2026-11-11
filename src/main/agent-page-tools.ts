@@ -102,7 +102,7 @@ async function centerOf(
   ref: number,
   scroll = true
 ): Promise<{ x: number; y: number }> {
-  let quads: number[][] = []
+  let quads: number[][]
   try {
     if (scroll) await cdp.send('DOM.scrollIntoViewIfNeeded', { backendNodeId: ref })
     ;({ quads } = await cdp.send<{ quads: number[][] }>('DOM.getContentQuads', {
