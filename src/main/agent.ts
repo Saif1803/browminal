@@ -21,6 +21,9 @@ import type { MainWindow } from './window'
 const WORKING_LINGER_MS = 2000
 // How long whenListening waits for the server to start.
 const START_TIMEOUT_MS = 10_000
+// How long a tool waits for its tab, just brought to the front, to be on screen (and then drawn).
+const SHOW_TIMEOUT_MS = 3000
+const SHOW_FRAME_TIMEOUT_MS = 250
 // How long the toolbar says what became of a pick.
 const PICK_NOTICE_MS = 6000
 
@@ -479,6 +482,11 @@ export class Agent {
       this.changed()
     }
     try {
+      // A tab just brought to the front (new_tab, select_tab, the user) is hidden until it's
+      // shown, and drops input meanwhile; once it's shown, one frame means it's visible.
+      if (await this.getMain()?.tabs.whenShown(tab, SHOW_TIMEOUT_MS)) {
+        await tab.nextFrame(SHOW_FRAME_TIMEOUT_MS)
+      }
       return await work()
     } finally {
       this.inFlight--

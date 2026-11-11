@@ -7,14 +7,17 @@ for them.
 **Progress (2026-11-10, branch `next-steps`):**
 - Phase 0 done: the working tree landed as four commits (rename, internal pages, overlay, docs),
   each passing the three checks; the design inventory and the README are up to date.
-- Phase 1: single instance and `bun run smoke` are built, but the smoke test hasn't run yet. The
-  network was too slow to download Electron's binary, and `node_modules/electron/dist` is
-  missing (fix: `cd node_modules/electron && node install.js`). The Electron 39 → 45 upgrade and
-  the dependency updates wait for the download. Known for 45: screen sharing reaches the
+- Phase 1: single instance and `bun run smoke` are built, and the smoke test passes on Electron
+  39 (2026-11-11, seven runs in a row). Its first runs found a real bug: a tab just brought to
+  the front stays hidden under the old one until it draws, and drops input meanwhile, so a click
+  right after `new_tab` was lost. Agent tools now wait for their tab to be on screen
+  (`TabManager.whenShown`). Next: the Electron 39 → 45 upgrade, then the dependency updates.
+  Known for 45: screen sharing reaches the
   permission handler as `display-capture` (`policyFor` must let it through to the picker), main's
   `clipboard` calls return Promises (44), PDFs render as out-of-process frames (41).
 - Phase 2: same-site iframes, `drag`, CPU throttling and original names in minified stacks are
-  built and unit-tested, not yet run against the real app. Left: cross-origin (out-of-process)
+  built and unit-tested; the smoke test runs the first three against the real app (minified
+  names still only in unit tests). Left: cross-origin (out-of-process)
   iframes, which need child CDP sessions; to be built with the app running.
 
 ## Where it stands (checked 2026-11-10)

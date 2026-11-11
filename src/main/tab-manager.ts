@@ -62,6 +62,8 @@ export class TabManager {
   private showRequest = 0
   // Closed while on screen: kept up until the next tab can take its place, then destroyed.
   private retiring = new Set<Tab>()
+  // whenShown's callers, told on the next reveal (whichever tab it shows).
+  private shownWaiters: (() => void)[] = []
   private readonly veil: PageVeil
 
   private readonly hooks: TabHooks = {
@@ -231,6 +233,25 @@ export class TabManager {
     this.restackListeners.push(listener)
   }
 
+  /**
+   * Resolves once `tab` is on screen, when it's the active tab still waiting to be shown (see
+   * show), or after `timeoutMs`; at once otherwise. Until then its page is hidden and drops input
+   * events, so an agent's click right after new_tab or select_tab would be lost.
+   */
+  whenShown(tab: Tab, timeoutMs: number): Promise<boolean> {
+    if (this.disposed || tab !== this.activeTab || tab === this.shownTab) {
+      return Promise.resolve(false)
+    }
+    return new Promise((resolve) => {
+      const done = (): void => {
+        clearTimeout(timer)
+        resolve(true)
+      }
+      const timer = setTimeout(done, timeoutMs)
+      this.shownWaiters.push(done)
+    })
+  }
+
   /** Called after every layout with where the terminal view goes (null: hidden). */
   onLayout(listener: (terminal: Rect | null) => void): void {
     this.layoutListeners.push(listener)
@@ -265,6 +286,7 @@ export class TabManager {
     this.faviconListeners = []
     this.layoutListeners = []
     this.restackListeners = []
+    this.flushShownWaiters()
     this.externalListener = null
     for (const tab of [...this.tabs, ...this.retiring]) tab.destroy()
     this.tabs = []
@@ -313,6 +335,13 @@ export class TabManager {
     this.shownTab = tab
     this.updateVeil(false)
     this.restacked()
+    this.flushShownWaiters()
+  }
+
+  private flushShownWaiters(): void {
+    const waiters = this.shownWaiters
+    this.shownWaiters = []
+    for (const done of waiters) done()
   }
 
   private restacked(): void {
