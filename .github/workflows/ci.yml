@@ -1,0 +1,43 @@
+# The checks from CLAUDE.md on every push and pull request, on the three systems Browminal
+# builds for. The smoke test isn't here: it drives the real app and needs a desktop.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      # Keep the files as committed (LF), or prettier's lint rule fails on Windows.
+      - run: git config --global core.autocrlf false
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: native
+      - run: bun install --frozen-lockfile
+      - run: bun run typecheck
+      - run: bun test
+      - run: bun run lint
+      - run: cargo fmt --check
+        working-directory: native
+      - run: cargo clippy --release -- -D warnings
+        working-directory: native
+      - run: bunx electron-vite build

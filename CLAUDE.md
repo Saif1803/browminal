@@ -53,6 +53,8 @@ bun run dev          # start the app with HMR
 bun run typecheck    # tsc for main/preload, renderer, and tests
 bun test             # unit tests (src/**/*.test.ts)
 bun run smoke        # builds, then drives the real app through the agent bridge (scripts/smoke.ts)
+                     # `bun scripts/smoke.ts --app dist/win-unpacked/browminal.exe` drives a packaged app
+bun run icons        # build/icon.svg → build/icon.{png,ico,icns} and resources/icon.png
 bun run lint         # eslint
 bun run build        # typecheck + production bundle into out/
 bun run build:win    # package Windows installer (build:mac / build:linux likewise)
@@ -333,4 +335,9 @@ space for the native controls.
 - **Next steps (approved 2026-11-10, in progress):** commit the working tree, single instance, a smoke test,
   Electron 39 → 45, agent gaps (iframes first), daily use, the rest of the design pass, shipping —
   [docs/plans/next-steps.md](docs/plans/next-steps.md).
+- **Release 0.1 (started 2026-11-14):** open source (MIT), built from source on every system, with
+  a Windows installer; unsigned for now (macOS is ad-hoc signed, see `electron-builder.yml`).
+  Done: the app's identity and icon, `LICENSE`, `THIRD-PARTY.md`, the README, CI
+  (`.github/workflows`: checks on three systems; a `v*` tag builds installers into a draft
+  release). macOS and Linux have never been run.
 - **Later (don't start until asked):** history + address suggestions, session restore.

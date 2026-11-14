@@ -34,6 +34,14 @@ for them.
   names still only in unit tests). Left: cross-origin (out-of-process)
   iframes, which need child CDP sessions; to be built with the app running.
 
+- Phase 5 started (2026-11-14), decision 4 answered: Browminal is released as open source (MIT),
+  built from source, with a Windows installer. Done: `electron-builder.yml` (real `appId`,
+  `Browminal`, no publish URL, ad-hoc signing on macOS, AppImage on Linux), version 0.1.0, the
+  icon (`build/icon.svg`, `bun run icons`), `LICENSE`, `THIRD-PARTY.md`, the README, and CI (the
+  checks on Windows, macOS and Linux; a `v*` tag builds installers into a draft release). The
+  packaged Windows app passes the smoke test (`--app`). Not done: signing and notarisation,
+  auto-update, the smoke test in CI, any run on macOS or Linux, the public repository itself.
+
 ## Where it stands (checked 2026-11-10)
 - Browser essentials and the agent browser (Phases 1–6) are done. `bun run typecheck`,
   `bun test` (318 tests, 35 files) and `bun run lint` are all green.

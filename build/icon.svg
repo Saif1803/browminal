@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <!-- Browminal: a browser window (the address pill) holding a terminal prompt. The app's own
+       palette: bar/strip for the tile, accent for the prompt, ink for the cursor.
+       `bun run icons` turns this into build/icon.{png,ico,icns} and resources/icon.png. -->
+  <defs>
+    <linearGradient id="tile" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#33322f" />
+      <stop offset="1" stop-color="#1f1e1d" />
+    </linearGradient>
+  </defs>
+  <rect x="64" y="64" width="896" height="896" rx="204" fill="url(#tile)" />
+  <rect x="66" y="66" width="892" height="892" rx="202" fill="none" stroke="#ffffff" stroke-opacity="0.08" stroke-width="4" />
+  <rect x="232" y="228" width="560" height="72" rx="36" fill="#ffffff" fill-opacity="0.1" />
+  <circle cx="276" cy="264" r="14" fill="#d97757" />
+  <polyline points="312,430 500,566 312,702" fill="none" stroke="#d97757" stroke-width="92" stroke-linecap="round" stroke-linejoin="round" />
+  <line x1="572" y1="702" x2="722" y2="702" stroke="#faf9f5" stroke-width="92" stroke-linecap="round" />
+</svg>

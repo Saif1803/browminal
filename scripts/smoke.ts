@@ -1,5 +1,6 @@
 /**
- * Smoke test of the built app (`bun run smoke`; `--no-build` reuses out/).
+ * Smoke test of the built app (`bun run smoke`; `--no-build` reuses out/; `--app <file>` runs a
+ * packaged Browminal instead, e.g. dist/win-unpacked/browminal.exe, and builds nothing).
  *
  * Builds, starts Browminal on a throwaway profile with the agent bridge already on (a spare port),
  * and drives it the way an agent does: through the bridge's own MCP endpoint. Nothing here uses
@@ -205,8 +206,15 @@ function bridge(port: number, token: string): Bridge {
 // it isn't there yet, and exits with its exit code.
 const ELECTRON_CLI = join(ROOT, 'node_modules', 'electron', 'cli.js')
 
+// `--app <file>`: a packaged Browminal to run in place of out/.
+const APP_FLAG = process.argv.indexOf('--app')
+const PACKAGED_APP = APP_FLAG === -1 ? null : resolve(process.argv[APP_FLAG + 1] ?? '')
+
 function launch(profile: string, url: string): ChildProcess {
-  return spawn(process.execPath, [ELECTRON_CLI, '.', `--user-data-dir=${profile}`, url], {
+  const [command, args] = PACKAGED_APP
+    ? [PACKAGED_APP, []]
+    : [process.execPath, [ELECTRON_CLI, '.']]
+  return spawn(command, [...args, `--user-data-dir=${profile}`, url], {
     cwd: ROOT,
     stdio: ['ignore', 'pipe', 'pipe'],
     detached: process.platform !== 'win32',
@@ -241,13 +249,18 @@ function exited(child: ChildProcess, ms: number): Promise<number | null> {
 // --- the run -------------------------------------------------------------------------------
 
 async function run(): Promise<void> {
-  if (!process.argv.includes('--no-build')) {
+  if (PACKAGED_APP) {
+    if (!existsSync(PACKAGED_APP)) throw new Failure(`${PACKAGED_APP} is not there`)
+    console.log(`Running ${PACKAGED_APP}`)
+  } else if (!process.argv.includes('--no-build')) {
     console.log('Building…')
     const vite = join(ROOT, 'node_modules', '.bin', 'electron-vite')
     const build = spawnSync(vite, ['build'], { cwd: ROOT, stdio: 'inherit', shell: true })
     if (build.status !== 0) throw new Failure('electron-vite build failed')
   }
-  if (!existsSync(join(ROOT, 'out', 'main', 'index.js'))) throw new Failure('out/ is not built')
+  if (!PACKAGED_APP && !existsSync(join(ROOT, 'out', 'main', 'index.js'))) {
+    throw new Failure('out/ is not built')
+  }
 
   const sitePort = await freePort(18_500)
   const bridgePort = await freePort(19_400)

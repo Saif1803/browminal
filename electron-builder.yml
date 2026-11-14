@@ -1,16 +1,19 @@
-appId: com.electron.app
-productName: browminal
+appId: com.browminal.browser
+productName: Browminal
+copyright: Copyright © 2026 Saif
 directories:
   buildResources: build
 files:
   - '!**/.vscode/*'
+  - '!**/.github/*'
   - '!src/*'
   - '!native/**'
   - '!scripts/**'
+  - '!docs/**'
   - '!electron.vite.config.{js,ts,mjs,cjs}'
-  - '!{.eslintcache,eslint.config.mjs,.prettierignore,.prettierrc.yaml,dev-app-update.yml,CHANGELOG.md,README.md}'
-  - '!{.env,.env.*,.npmrc,pnpm-lock.yaml}'
-  - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
+  - '!{.eslintcache,eslint.config.mjs,.prettierignore,.prettierrc.yaml,dev-app-update.yml,CHANGELOG.md,README.md,CLAUDE.md}'
+  - '!{.env,.env.*,.npmrc,pnpm-lock.yaml,bun.lock,bunfig.toml}'
+  - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json,tsconfig.test.json}'
 asarUnpack:
   - resources/**
   # The native module (electron-vite copies it next to main's code); loaded from a real file.
@@ -18,30 +21,37 @@ asarUnpack:
 win:
   executableName: browminal
 nsis:
-  artifactName: ${name}-${version}-setup.${ext}
+  artifactName: ${productName}-${version}-setup.${ext}
   shortcutName: ${productName}
   uninstallDisplayName: ${productName}
   createDesktopShortcut: always
 mac:
+  category: public.app-category.developer-tools
+  target:
+    - dmg
+    - zip
+  # No Developer ID yet: ad-hoc signed, which Apple Silicon needs to start an app at all. A
+  # downloaded copy is still held back by Gatekeeper until the app is signed and notarised; then
+  # remove `identity` and `hardenedRuntime` (the hardened runtime needs a real signature) and set
+  # `notarize: true`.
+  identity: '-'
+  hardenedRuntime: false
   entitlementsInherit: build/entitlements.mac.plist
   extendInfo:
-    - NSCameraUsageDescription: Application requests access to the device's camera.
-    - NSMicrophoneUsageDescription: Application requests access to the device's microphone.
-    - NSDocumentsFolderUsageDescription: Application requests access to the user's Documents folder.
-    - NSDownloadsFolderUsageDescription: Application requests access to the user's Downloads folder.
+    - NSCameraUsageDescription: A page you opened in Browminal wants to use the camera.
+    - NSMicrophoneUsageDescription: A page you opened in Browminal wants to use the microphone.
+    - NSLocationUsageDescription: A page you opened in Browminal wants to know your location.
   notarize: false
 dmg:
-  artifactName: ${name}-${version}.${ext}
+  artifactName: ${productName}-${version}-${arch}.${ext}
 linux:
+  # AppImage only: a .deb needs the project's homepage, which comes with the public repository.
   target:
     - AppImage
-    - snap
-    - deb
-  maintainer: electronjs.org
-  category: Utility
+  maintainer: Saif
+  category: Network
 appImage:
-  artifactName: ${name}-${version}.${ext}
+  artifactName: ${productName}-${version}-${arch}.${ext}
 npmRebuild: false
-publish:
-  provider: generic
-  url: https://example.com/auto-updates
+# No update server yet: nothing is published and the app never checks for updates.
+publish: null

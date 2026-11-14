@@ -1,7 +1,7 @@
 {
   "name": "browminal",
-  "version": "1.0.0",
-  "description": "A personal desktop web browser built on Electron",
+  "version": "0.1.0",
+  "description": "A browser for localhost development that terminal coding agents can see, drive and debug",
   "main": "./out/main/index.js",
   "author": "Saif",
   "scripts": {
@@ -17,6 +17,7 @@
     "dev": "bun run build:native && electron-vite dev",
     "build": "bun run build:native && bun run typecheck && electron-vite build",
     "build:native": "bun scripts/build-native.ts",
+    "icons": "electron scripts/make-icons.cjs",
     "postinstall": "bun run build:native && electron-builder install-app-deps",
     "build:unpack": "bun run build && electron-builder --dir",
     "build:win": "bun run build && electron-builder --win",
