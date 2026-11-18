@@ -184,12 +184,14 @@ runs from `out/` first (the build fails on the locked native module).
 | `agent-tools.ts` | The MCP server and tab tools (list/open/select/close tabs, navigate, screenshot, page text, evaluate) |
 | `agent-page-tools.ts` | Page tools: read_page/find (refs, same-process iframes joined in), click, drag, hover, type, fill, select_option, press_key, scroll, wait_for, handle_dialog |
 | `agent-debug-tools.ts` | Debug tools: console_messages, network_requests/network_request, inspect, set_style/set_attribute, emulate, clear_site_data |
+| `agent-webmcp-tools.ts` | The page's own tools (WebMCP): page_tools, call_page_tool |
+| `webmcp.ts` | Pure: the `document.modelContext` shim for shared tabs, checked page messages, how page tools and results read |
 | `agent-picks.ts` | Picks: capturing an element pick or an errors pick, an element's source line, the `get_picks` tool |
 | `agent-tool-helpers.ts` | What tools share: `AgentContext`, tabId input, inspectable check, load waiting |
-| `tab-debug.ts` | `TabDebug`: the debugger on one shared tab, its console and network logs, source maps, new-errors count, emulation, pick mode |
+| `tab-debug.ts` | `TabDebug`: the debugger on one shared tab, its console and network logs, source maps, new-errors count, emulation, pick mode, the page's WebMCP tools |
 | `console-log.ts` | Pure: console entries from CDP events (console, exceptions, browser log), ring buffer, filters, source-mapped formatting |
 | `source-maps.ts` | Pure: `SourceMaps` (script → map, maps loaded once), original positions, project-relative source names, places in stack text, original function names (from the caller's call site) |
-| `component-source.ts` | Pure: where an element is written, from React/Vue/Svelte dev builds (the page's answer checked) |
+| `component-source.ts` | Pure: where an element is written, from React/Vue/Svelte dev builds or `data-review-loc` (the page's answer checked) |
 | `picks.ts` | Pure: the picks list, how picks read to agents, the prompt typed into the terminal |
 | `network-log.ts` | Pure: requests from Network events, filters, network idle, credentials redacted |
 | `element-inspect.ts` | Pure: inspect's box model, computed styles and matching CSS rules with file and line (source maps, Vite's injected styles) |
@@ -308,6 +310,15 @@ space for the native controls.
   inline `data:` or fetched by main through the tab's session, http(s) on the script's own origin
   only, size-capped (`source-maps.ts`). An element's source line comes from the framework's dev
   data in the page's main world, so it's untrusted and checked (`parseComponentSource`).
+  **WebMCP** (`webmcp.ts`): in shared tabs only, main adds a script to the main world of every
+  new document (`Page.addScriptToEvaluateOnNewDocument`, `runImmediately`) that gives web pages'
+  top frames `document.modelContext` (and `navigator.modelContext`). It does nothing on other schemes,
+  so never on `browminal://`. It reports registered tools and results through a CDP binding with a
+  random name per share, which it takes off the page's global first. Every report is the page's
+  word: parsed and size-capped (`parsePageMessage`), and shown to agents as data. Agents run the
+  page's tools with `call_page_tool`, under the page's own rules (UI SDK's `allow`,
+  `data-agent-confirm`); a call may wait 330 s for the user. Browminal adds no question of its own:
+  the tools act no more than `click` does.
   **Picks:** the user picks an element (Ctrl+Shift+X, the agent sheet, or "Send to agent" in the
   page menu; Esc cancels) or sends a shared tab's new errors (the errors badge's popover);
   picking shares the tab. Picks stay in memory (newest 20), agents read them with `get_picks`,
@@ -331,7 +342,7 @@ space for the native controls.
   4 (page ↔ source: source maps, picks, errors badge), 5 (terminal panel) and 6 (docs:
   [docs/agents.md](docs/agents.md)) — [docs/plans/agent-browser.md](docs/plans/agent-browser.md).
   Since then: same-site iframes, `drag`, CPU throttling, original names in minified stacks
-  (next-steps Phase 2). Not built yet: cross-origin (out-of-process) iframes.
+  (next-steps Phase 2), WebMCP page tools (UI SDK's snapshot/query/act) and `data-review-loc`. Not built yet: cross-origin (out-of-process) iframes.
 - **Creator browser (parked):** capture, studio mode, device preview, profiles, clips panel,
   Claude/ChatGPT handoff — [docs/plans/creator-browser.md](docs/plans/creator-browser.md).
 - **Design pass (started):** done from the Claude Design project "Nebula Design Pass": the agent

@@ -70,7 +70,8 @@ Browminal's own pages (`browminal://home`, error pages) are never read or script
   agent**, or **Dismiss** them.
 
 The agent reads picks with `get_picks`: the element's HTML, box, styles, a screenshot and the
-file and line it's written at (React, Vue and Svelte dev builds), or the errors mapped to your
+file and line it's written at (React, Vue and Svelte dev builds, or a `data-review-loc="file:line"`
+attribute on it or around it), or the errors mapped to your
 source files. If a Claude started from the terminal panel works on that tab, Browminal types
 "Look at … (pick N): " into its prompt for you to finish. It never presses Enter.
 
@@ -106,6 +107,8 @@ used last, the tab of the Browminal terminal it runs in, or the active shared ta
 | | `emulate` | Phone or tablet (iPhone 15, Pixel 8, iPad Air), viewport, dark/light, offline, slow/fast 3G, CPU 4× or 6× slower |
 | | `clear_site_data` | Cookies, storage, cache and service workers of the tab's site, after you agree |
 | Picks | `get_picks` | What you picked or sent (above) |
+| Page's own | `page_tools` | The tools the page offers agents itself (WebMCP), with descriptions and inputs |
+| | `call_page_tool` | Runs one of them and returns its result |
 
 Logs start when a tab is shared and keep the newest 1000 console entries and 500 requests per
 tab. `console_messages` and `network_requests` take `since` (the last `#seq` / `#id` seen) to read
@@ -119,6 +122,31 @@ site (Storybook's preview, an app in a frame): their elements have refs like any
 own site. An embed from another site (a payment form, a sign-in widget) runs in another process
 and shows as "frame content not readable" for now; `evaluate` and `get_page_text` read the main
 frame only.
+
+### Pages with tools of their own (WebMCP, UI SDK)
+A page can offer agents tools of its own through WebMCP: it registers them with
+`document.modelContext.registerTool` (`navigator.modelContext` in older drafts). Pages built with
+[UI SDK](https://ui-sdk.dev/llms.txt) do this with `registerTools(agent, { allow })`: `snapshot`
+lists the page's components with their state and actions, `query` finds them and their choices,
+and `act` runs several changes in one call. That takes an agent a few calls where reading the
+accessibility tree and clicking takes many.
+
+In a shared tab Browminal gives the page `document.modelContext`, so its tools appear. `new_tab`,
+`navigate` and `list_tabs` name them, `page_tools` gives their descriptions and inputs, and
+`call_page_tool` runs one. The agent is told to prefer them to `read_page` and `click`.
+- **The page decides what's allowed.** UI SDK's `allow` callback runs for every step, and a control
+  marked `data-agent-confirm` waits for you. If `allow` asks you (a `confirm()` or its own prompt),
+  the tool waits for your answer for up to 5½ minutes. A step that "needs a person" comes back to
+  the agent as an error that says so, and the agent is told to leave it to you.
+- **Share before the page loads.** A page registers its tools as it starts. A tab shared after
+  that has none until it's reloaded, and `page_tools` says so.
+- Only the top frame of a web page gets `document.modelContext`; iframes and Browminal's own pages
+  don't, and tabs you haven't shared don't either.
+- What the tools return comes from the page, so the agent treats it as data. Results over 100,000
+  characters are cut, and the agent is told where.
+
+UI SDK's `data-review-loc="file:line"` (added by a build step in development) also tells
+`inspect` and picks where an element is written.
 
 ### While Browminal is minimized or behind other windows
 Agents keep working. Chromium treats the pages of a window you can't see as hidden (they stop
@@ -136,6 +164,8 @@ truth again.
 - Read credentials in network logs: `Authorization`, cookies and API-key headers show as `REDACTED`.
 - Get around the usual rules: its navigations, downloads and permission requests go through the
   same checks as yours (`mailto:` asks you, camera asks you, downloads are never opened).
+- Have a page's own tools skip the page's rules: `call_page_tool` runs them as the page wrote them,
+  with its `allow` and `data-agent-confirm` checks.
 - Clear site data without your yes: Browminal asks you under the address bar, marked as an agent's
   request, and the button says **Clear site data**.
 

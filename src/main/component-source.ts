@@ -8,7 +8,8 @@ import {
 /**
  * Where an element is written in the project's source, from what a framework's dev build keeps
  * on DOM nodes: React's fiber (_debugSource up to React 18, _debugStack from React 19), Vue's
- * component (__file) and Svelte's __svelte_meta. Pure: the page's answer comes in as a plain
+ * component (__file) and Svelte's __svelte_meta; or from a `data-review-loc="file:line"`
+ * attribute, which UI SDK reads too and a build step adds in development. Pure: the page's answer comes in as a plain
  * value and is checked here, since a page can put anything on its nodes.
  */
 
@@ -16,7 +17,8 @@ const MAX_NAME = 200
 const MAX_FILE = 1000
 const MAX_STACK = 4000
 
-export type Framework = 'react' | 'vue' | 'svelte'
+/** Who recorded where it's written: a framework, or a data-review-loc attribute ('markup'). */
+export type Framework = 'react' | 'vue' | 'svelte' | 'markup'
 
 export interface ComponentSource {
   framework: Framework
@@ -44,6 +46,11 @@ export const COMPONENT_SOURCE = `function () {
       : null
   let el = this.nodeType === Node.ELEMENT_NODE ? this : this.parentElement
   for (let depth = 0; el && depth < 40; el = el.parentElement, depth++) {
+    const loc = str(el.getAttribute('data-review-loc'), ${MAX_FILE} + 20)
+    if (loc) {
+      return { framework: 'markup', component: null, file: null, line: null, column: null,
+        stack: null, loc }
+    }
     const svelte = el.__svelte_meta && el.__svelte_meta.loc
     if (svelte) {
       return { framework: 'svelte', component: null, file: str(svelte.file, ${MAX_FILE}),
@@ -78,7 +85,19 @@ export const COMPONENT_SOURCE = `function () {
   return null
 }`
 
-const FRAMEWORKS: readonly Framework[] = ['react', 'vue', 'svelte']
+const FRAMEWORKS: readonly Framework[] = ['react', 'vue', 'svelte', 'markup']
+
+/** "src/App.tsx:12" or "src/App.tsx:12:5" (a Windows drive's colon included) → its parts. */
+export function parseReviewLoc(
+  value: string
+): { file: string; line: number; column: number | null } | null {
+  const match = /^(.+?):(\d+)(?::(\d+))?$/.exec(value.trim())
+  if (!match) return null
+  const line = Number(match[2])
+  const column = match[3] === undefined ? null : Number(match[3])
+  if (!line || line >= 10_000_000 || column === 0 || (column ?? 0) >= 10_000_000) return null
+  return { file: match[1].slice(0, MAX_FILE), line, column }
+}
 
 const text = (value: unknown, max: number): string | null =>
   typeof value === 'string' && value.trim() ? value.trim().slice(0, max) : null
@@ -94,6 +113,10 @@ export function parseComponentSource(value: unknown): ComponentSource | null {
   const raw = value as Record<string, unknown>
   const framework = FRAMEWORKS.find((name) => name === raw.framework)
   if (!framework) return null
+  if (framework === 'markup') {
+    const loc = typeof raw.loc === 'string' ? parseReviewLoc(raw.loc) : null
+    return loc ? { framework, component: null, stack: null, ...loc } : null
+  }
   let line = count(raw.line)
   let column = count(raw.column)
   // Svelte 4 counts lines and columns from 0, Svelte 5 lines from 1 and columns from 0.
@@ -128,7 +151,12 @@ export function appFrame(stack: string): SourcePosition | null {
   return null
 }
 
-const FRAMEWORK_NAMES: Record<Framework, string> = { react: 'React', vue: 'Vue', svelte: 'Svelte' }
+const FRAMEWORK_NAMES: Record<Framework, string> = {
+  react: 'React',
+  vue: 'Vue',
+  svelte: 'Svelte',
+  markup: 'data-review-loc'
+}
 
 /**
  * One line for the agent: "src/components/Cart.tsx:42:9 (React, in <Cart>)". `fromStack` is

@@ -72,6 +72,13 @@ describe('describeTabs', () => {
     expect(text).not.toContain('example.com/2')
   })
 
+  test('names the tools a page offers (WebMCP)', () => {
+    const text = describeTabs([tab(1, { pageTools: ['snapshot', 'act', 'query'] }), tab(2)])
+    expect(text).toContain('https://example.com/1 · page tools: snapshot, act, query')
+    expect(text).toContain('page_tools describes them')
+    expect(describeTabs([tab(2)])).not.toContain('page_tools')
+  })
+
   test('says when nothing is open', () => {
     expect(describeTabs([])).toBe('No tabs are open.')
     expect(describeTabs([tab(1, { shared: false }), tab(2, { shared: false })])).toStartWith(

@@ -49,6 +49,44 @@ const PAGE = `<!doctype html>
   fetch('/api/ping').then((r) => r.text())
 </script>`
 
+// Registers tools the way UI SDK's registerTools does (document.modelContext, a signal each).
+const WEBMCP_PAGE = `<!doctype html>
+<meta charset="utf-8">
+<title>WebMCP page</title>
+<p>Region: <span id="region">eu</span></p>
+<script>
+  const registration = new AbortController()
+  const tools = [
+    {
+      name: 'snapshot',
+      description: 'Lists the components on the page',
+      inputSchema: { type: 'object', properties: {} },
+      annotations: { readOnlyHint: true, untrustedContentHint: true },
+      execute: () => ({
+        components: [{ ref: 'r1', component: 'select', label: 'Region',
+          value: document.getElementById('region').textContent }]
+      })
+    },
+    {
+      name: 'act',
+      description: 'Runs steps',
+      inputSchema: { type: 'object', properties: { steps: { type: 'array' } }, required: ['steps'] },
+      annotations: { consequentialHint: true, untrustedContentHint: true },
+      execute: async ({ steps }) => {
+        for (const step of steps) {
+          if (step.action === 'press') throw new Error('Needs a person: "Deletes the project"')
+          if (step.action === 'ask' && !confirm('Change Region?')) throw new Error('The person said no')
+          document.getElementById('region').textContent = step.args[0]
+        }
+        return { ok: true, values: { Region: document.getElementById('region').textContent } }
+      }
+    }
+  ]
+  for (const tool of tools) {
+    document.modelContext?.registerTool(tool, { signal: registration.signal }).catch(() => {})
+  }
+</script>`
+
 const hits: string[] = []
 
 function startSite(port: number): Promise<Server> {
@@ -58,6 +96,11 @@ function startSite(port: number): Promise<Server> {
     if (path === '/api/ping') {
       res.writeHead(200, { 'content-type': 'application/json' })
       res.end('{"pong":true}')
+      return
+    }
+    if (path === '/webmcp') {
+      res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' })
+      res.end(WEBMCP_PAGE)
       return
     }
     if (path === '/frame') {
@@ -409,6 +452,75 @@ async function run(): Promise<void> {
     })
     check(dropped.includes('Dropped card'), 'drag drops with HTML5 drag and drop', dragged)
     check(dragged.includes('HTML5'), 'drag says it used HTML5 drag and drop', dragged)
+
+    console.log('WebMCP page tools')
+    const none = await agent.ok('page_tools', { tabId })
+    check(none.includes('offers no tools'), 'page_tools says a plain page has none', none)
+    const webmcp = await agent.ok('new_tab', { url: `${site}/webmcp` })
+    const webmcpTab = Number(/\[tab (\d+)\]/.exec(webmcp)?.[1])
+    check(
+      webmcp.includes('Page tools (WebMCP): snapshot, act'),
+      'new_tab names the page’s own tools',
+      webmcp
+    )
+    const listed = await agent.ok('list_tabs')
+    check(listed.includes('page tools: snapshot, act'), 'list_tabs names them', listed)
+    const described = await agent.ok('page_tools', { tabId: webmcpTab })
+    check(
+      described.includes('## snapshot (read-only; returns page content)') &&
+        described.includes('"required":["steps"]'),
+      'page_tools gives their hints and inputs',
+      described
+    )
+    const snapshot = await agent.ok('call_page_tool', { tabId: webmcpTab, name: 'snapshot' })
+    check(
+      snapshot.includes('"label":"Region","value":"eu"'),
+      'call_page_tool runs snapshot',
+      snapshot
+    )
+    const acted = await agent.ok('call_page_tool', {
+      tabId: webmcpTab,
+      name: 'act',
+      input: { steps: [{ ref: 'Region', action: 'setValue', args: ['us'] }] }
+    })
+    check(acted.includes('"Region":"us"'), 'call_page_tool runs act and returns its result', acted)
+    const refused = await agent.tool('call_page_tool', {
+      tabId: webmcpTab,
+      name: 'act',
+      input: { steps: [{ ref: 'Delete', action: 'press' }] }
+    })
+    check(
+      refused.isError && agent.text(refused).includes('Needs a person'),
+      'a step the page refuses comes back as its error',
+      agent.text(refused)
+    )
+    // The page asks the person (confirm) while the call waits; here an agent answers for them.
+    const asking = agent.tool('call_page_tool', {
+      tabId: webmcpTab,
+      name: 'act',
+      input: { steps: [{ ref: 'Region', action: 'ask', args: ['apac'] }] }
+    })
+    await until('the page’s confirm', 10_000, async () => {
+      const answer = await agent.tool('handle_dialog', { tabId: webmcpTab, accept: true })
+      return agent.text(answer).startsWith('Accepted') ? true : null
+    })
+    const asked = await asking
+    check(
+      !asked.isError && agent.text(asked).includes('"Region":"apac"'),
+      'a page tool waits while the page asks the person',
+      agent.text(asked)
+    )
+    const missing = await agent.tool('call_page_tool', { tabId: webmcpTab, name: 'nope' })
+    check(
+      missing.isError && agent.text(missing).includes('It has: snapshot, act'),
+      'an unknown tool says which there are',
+      agent.text(missing)
+    )
+    await agent.ok('navigate', { tabId: webmcpTab, url: `${site}/private` })
+    const gone = await agent.ok('page_tools', { tabId: webmcpTab })
+    check(gone.includes('offers no tools'), 'a new page drops the old page’s tools', gone)
+    await agent.ok('close_tab', { tabId: webmcpTab })
+    await agent.ok('select_tab', { tabId })
 
     console.log('Debug tools')
     const slow = await agent.ok('emulate', { tabId, cpu: 4 })

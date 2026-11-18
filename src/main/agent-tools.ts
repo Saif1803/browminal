@@ -6,6 +6,7 @@ import { describeTabs, formatValue, MAX_AGENT_TEXT, scaledSize, truncate } from 
 import { registerDebugTools } from './agent-debug-tools'
 import { registerPageTools } from './agent-page-tools'
 import { registerPickTools } from './agent-picks'
+import { registerWebMcpTools } from './agent-webmcp-tools'
 import {
   AGENT_WORLD_ID,
   assertInspectable,
@@ -17,6 +18,7 @@ import {
 } from './agent-tool-helpers'
 import type { CdpSession } from './cdp'
 import type { Tab } from './tabs'
+import { pageToolsNote } from './webmcp'
 
 export type { AgentContext } from './agent-tool-helpers'
 
@@ -29,6 +31,10 @@ const INSTRUCTIONS = `Browminal is the user's own web browser. These tools act o
 - You only see tabs the user shared with agents, and tabs you opened with new_tab.
 - Tools take an optional tabId (from list_tabs); without one they act on the tab you used last,
   the tab of the Browminal terminal you run in, or the active shared tab.
+- Some pages offer tools of their own (WebMCP), like snapshot, query and act on pages built with
+  UI SDK (https://ui-sdk.dev/llms.txt); list_tabs and navigate name them. Prefer them to read_page
+  and click: they read and change the page's components in a few calls. page_tools describes
+  them, call_page_tool runs one. A step the page says needs a person is the user's to do.
 - To act on a page: read_page (or find) gives each element a ref; pass it to click, type, fill,
   select_option, press_key, hover or scroll. Refs go stale when the page changes: read again.
 - get_page_text is the cheapest way to read a page; screenshot shows its layout.
@@ -153,6 +159,15 @@ async function evaluateInPage(cdp: CdpSession, expression: string): Promise<stri
   }
 }
 
+/** Where a tab ended up after loading, and the tools the page offers (WebMCP), if any. */
+function describeLoaded(context: AgentContext, tab: Tab): string {
+  const note = tab.webContents.isDestroyed() ? '' : pageToolsNote(context.debug(tab).pageTools)
+  return note
+    ? `${describeLoad(tab)}
+${note}`
+    : describeLoad(tab)
+}
+
 /** One MCP server with every tool, for one request (the agent server is stateless). */
 export function createAgentMcp(context: AgentContext, version: string): McpServer {
   const mcp = new McpServer({ name: 'browminal', version }, { instructions: INSTRUCTIONS })
@@ -188,7 +203,7 @@ export function createAgentMcp(context: AgentContext, version: string): McpServe
         // The page started loading in openTab; it may be done by now (run waits for the tab
         // to be on screen first).
         if (tab.webContents.isLoading()) await waitForLoad(tab.webContents)
-        return text(describeLoad(tab))
+        return text(describeLoaded(context, tab))
       })
     }
   )
@@ -200,7 +215,7 @@ export function createAgentMcp(context: AgentContext, version: string): McpServe
         'Brings a shared tab to the front; the next tools act on it when they name no tab.',
       inputSchema: { tabId: z.number().int() }
     },
-    async ({ tabId }) => text(describeLoad(context.selectTab(tabId)))
+    async ({ tabId }) => text(describeLoaded(context, context.selectTab(tabId)))
   )
 
   mcp.registerTool(
@@ -252,7 +267,7 @@ export function createAgentMcp(context: AgentContext, version: string): McpServe
           else tab.reload(action === 'hardReload')
           await loaded
         }
-        return text(describeLoad(tab))
+        return text(describeLoaded(context, tab))
       })
     }
   )
@@ -371,5 +386,6 @@ export function createAgentMcp(context: AgentContext, version: string): McpServe
   registerPageTools(mcp, context)
   registerDebugTools(mcp, context)
   registerPickTools(mcp, context)
+  registerWebMcpTools(mcp, context)
   return mcp
 }

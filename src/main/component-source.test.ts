@@ -1,5 +1,10 @@
 import { describe, expect, test } from 'bun:test'
-import { appFrame, formatComponentSource, parseComponentSource } from './component-source'
+import {
+  appFrame,
+  formatComponentSource,
+  parseComponentSource,
+  parseReviewLoc
+} from './component-source'
 
 describe('parseComponentSource', () => {
   test('React up to 18: _debugSource', () => {
@@ -125,5 +130,37 @@ describe('formatComponentSource', () => {
       'http://localhost:5173/assets/x.js:1:900 (React, in <Cart>) (no source map)'
     )
     expect(formatComponentSource(base)).toContain('unknown file (React, in <Cart>)')
+  })
+})
+
+describe('data-review-loc', () => {
+  test('reads file:line and file:line:column, Windows drives included', () => {
+    expect(parseReviewLoc('src/App.tsx:12')).toEqual({
+      file: 'src/App.tsx',
+      line: 12,
+      column: null
+    })
+    expect(parseReviewLoc('C:/app/src/App.tsx:12:5')).toEqual({
+      file: 'C:/app/src/App.tsx',
+      line: 12,
+      column: 5
+    })
+    expect(parseReviewLoc('src/App.tsx')).toBeNull()
+    expect(parseReviewLoc('src/App.tsx:0')).toBeNull()
+    expect(parseReviewLoc(':12')).toBeNull()
+  })
+
+  test('is a source of its own, shown as data-review-loc', () => {
+    const source = parseComponentSource({ framework: 'markup', loc: 'src/Field.tsx:8:3' })
+    expect(source).toEqual({
+      framework: 'markup',
+      component: null,
+      file: 'src/Field.tsx',
+      line: 8,
+      column: 3,
+      stack: null
+    })
+    expect(formatComponentSource(source!)).toBe('src/Field.tsx:8:3 (data-review-loc)')
+    expect(parseComponentSource({ framework: 'markup', loc: 'nowhere' })).toBeNull()
   })
 })

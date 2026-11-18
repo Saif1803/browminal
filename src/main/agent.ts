@@ -361,7 +361,9 @@ export class Agent {
     const active = main.tabs.active
     return main.tabs.all.map((tab) => {
       const { title, url } = tab.getSummary()
-      return { id: tab.id, url, title, isActive: tab === active, shared: this.isShared(tab.id) }
+      const shared = this.isShared(tab.id)
+      const pageTools = shared ? this.debuggers.get(tab.id)?.pageTools.map((t) => t.name) : []
+      return { id: tab.id, url, title, isActive: tab === active, shared, pageTools }
     })
   }
 

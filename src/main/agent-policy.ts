@@ -9,6 +9,8 @@ export interface AgentTab {
   isActive: boolean
   /** Whether agents may see and act on it. */
   shared: boolean
+  /** The tools its page offers agents itself (WebMCP), by name. */
+  pageTools?: readonly string[]
 }
 
 export const DEFAULT_AGENT_PORT = 9339
@@ -63,7 +65,8 @@ export function describeTabs(tabs: readonly AgentTab[]): string {
   const lines = visible.map((tab) => {
     const marks = [tab.isActive && 'active'].filter(Boolean)
     const title = tab.title && tab.title !== tab.url ? `${tab.title} — ` : ''
-    return `[tab ${tab.id}]${marks.length ? ` (${marks.join(', ')})` : ''} ${title}${tab.url}`
+    const tools = tab.pageTools?.length ? ` · page tools: ${tab.pageTools.join(', ')}` : ''
+    return `[tab ${tab.id}]${marks.length ? ` (${marks.join(', ')})` : ''} ${title}${tab.url}${tools}`
   })
   const hidden = tabs.length - visible.length
   if (hidden > 0) {
@@ -72,6 +75,9 @@ export function describeTabs(tabs: readonly AgentTab[]): string {
         'The user shares a tab with the agent button in Browminal’s toolbar (or Ctrl+Shift+A); ' +
         'new_tab opens a shared one.'
     )
+  }
+  if (visible.some((tab) => tab.pageTools?.length)) {
+    lines.push('Page tools are the page’s own (WebMCP): page_tools describes them.')
   }
   return lines.length ? lines.join('\n') : 'No tabs are open.'
 }

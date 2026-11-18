@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto'
 import type { Session, WebContents } from 'electron'
 import { isHttpUrl } from '../shared/url'
 import { canInspect } from './agent-policy'
@@ -21,6 +22,22 @@ import {
 import { NetworkLog } from './network-log'
 import { MAX_SOURCE_MAP_BYTES, SourceMaps } from './source-maps'
 import { themeColors } from './theme'
+import {
+  abortExpression,
+  callExpression,
+  parsePageMessage,
+  webMcpShim,
+  type PageTool,
+  type PageToolResult
+} from './webmcp'
+
+/** How long a page tool may take: UI SDK's `allow` waits up to 5 minutes for the person. */
+export const PAGE_TOOL_TIMEOUT_MS = 330_000
+
+interface PageToolCall {
+  resolve: (result: PageToolResult) => void
+  reject: (error: Error) => void
+}
 
 // What Chromium keeps of response bodies for network_request.
 const MAX_TOTAL_BODIES = 20 * 1024 * 1024
@@ -62,6 +79,11 @@ export class TabDebug {
   private pickState: { stop: () => void; end: PickEnd } | null = null
   // Whether the page is told it's visible and focused although its window isn't (see wakeIfHidden).
   private awake = false
+  /** The CDP binding the page's WebMCP shim reports through (a fresh name per share). */
+  private readonly webMcpBinding = `__browminal_${randomBytes(8).toString('hex')}`
+  private pageToolList: readonly PageTool[] = []
+  private readonly pageToolCalls = new Map<number, PageToolCall>()
+  private nextPageToolCall = 1
 
   constructor(
     private readonly webContents: WebContents,
@@ -114,9 +136,26 @@ export class TabDebug {
       skipPauses()
       if (this.awake) this.sendAwake((method, params) => cdp.send(method, params)).catch(() => {})
       if (url && canInspect(url)) this.console.add(navigationEntry(url))
-      // A new page: what was being picked on the old one is gone, and so are its errors.
+      // A new page: what was being picked on the old one is gone, and so are its errors and
+      // its tools (the new one registers its own).
       this.endPicking(null)
+      this.pageToolList = []
+      this.endPageToolCalls('The page loaded a new document before the tool answered')
       this.onChange()
+    })
+    cdp.on('Runtime.bindingCalled', ({ name, payload }) => {
+      if (name !== this.webMcpBinding || typeof payload !== 'string') return
+      if (!canInspect(this.webContents.getURL())) return
+      const message = parsePageMessage(payload)
+      if (!message) return
+      if (message.type === 'tools') {
+        this.pageToolList = message.tools
+        return
+      }
+      const call = this.pageToolCalls.get(message.id)
+      if (!call) return
+      this.pageToolCalls.delete(message.id)
+      call.resolve(message)
     })
     cdp.on('Debugger.scriptParsed', ({ url, sourceMapURL }) => {
       if (typeof url === 'string' && typeof sourceMapURL === 'string')
@@ -141,6 +180,13 @@ export class TabDebug {
       // For each script's source map (scriptParsed); never pausing (see skipPauses).
       await send('Debugger.enable')
       await send('Debugger.setSkipAllPauses', { skip: true })
+      // WebMCP: the page's own tools (document.modelContext), in the page loaded now and in
+      // every page after it. The binding comes first: the shim takes it as it runs.
+      await send('Runtime.addBinding', { name: this.webMcpBinding })
+      await send('Page.addScriptToEvaluateOnNewDocument', {
+        source: webMcpShim(this.webMcpBinding),
+        runImmediately: true
+      })
       // Attached again after something else detached the debugger: put the emulation back.
       if (emulationLabel(this.emulationState)) await this.applyEmulation(send)
       if (this.awake) await this.sendAwake(send)
@@ -184,6 +230,59 @@ export class TabDebug {
     if (this.errorsSeenSeq === this.console.lastSeq) return
     this.errorsSeenSeq = this.console.lastSeq
     this.onChange()
+  }
+
+  /** The tools the page registered with WebMCP (document.modelContext), as it last said. */
+  get pageTools(): readonly PageTool[] {
+    return this.pageToolList
+  }
+
+  /**
+   * Runs one of the page's WebMCP tools and resolves with what it returned (or threw). The call
+   * is started by one evaluate and answered through the binding, so a tool may ask the person
+   * (a confirm(), UI SDK's `allow`) for as long as `timeoutMs`; after that it's told to stop.
+   */
+  async callPageTool(
+    name: string,
+    input: Record<string, unknown>,
+    timeoutMs = PAGE_TOOL_TIMEOUT_MS
+  ): Promise<PageToolResult> {
+    const id = this.nextPageToolCall++
+    const answered = new Promise<PageToolResult>((resolve, reject) => {
+      this.pageToolCalls.set(id, { resolve, reject })
+    })
+    // It may be rejected (the page navigated) before it's awaited below.
+    answered.catch(() => {})
+    let timer: NodeJS.Timeout | undefined
+    try {
+      const { result } = await this.cdp.send<{ result?: { value?: unknown } }>('Runtime.evaluate', {
+        expression: callExpression(id, name, input),
+        returnByValue: true,
+        userGesture: true
+      })
+      if (result?.value !== true) {
+        throw new Error(
+          result?.value === false
+            ? `The page has no tool named "${name}" (page_tools lists them)`
+            : 'This page offers no tools of its own (WebMCP)'
+        )
+      }
+      const timeout = new Promise<never>((_, reject) => {
+        timer = setTimeout(() => {
+          this.cdp.send('Runtime.evaluate', { expression: abortExpression(id) }).catch(() => {})
+          reject(new Error(`The page's tool "${name}" didn't answer in ${timeoutMs / 1000}s`))
+        }, timeoutMs)
+      })
+      return await Promise.race([answered, timeout])
+    } finally {
+      clearTimeout(timer)
+      this.pageToolCalls.delete(id)
+    }
+  }
+
+  private endPageToolCalls(reason: string): void {
+    for (const call of this.pageToolCalls.values()) call.reject(new Error(reason))
+    this.pageToolCalls.clear()
   }
 
   /** Whether the user is picking an element on this tab. */
@@ -289,6 +388,8 @@ export class TabDebug {
   dispose(): void {
     this.endPicking(null)
     this.awake = false
+    this.pageToolList = []
+    this.endPageToolCalls('The tab stopped being shared')
     if (this.emulationLabel === null) {
       this.cdp.detach()
       return
