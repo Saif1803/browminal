@@ -55,7 +55,7 @@ export const tabIdInput = z
   .describe('The tab to act on (from list_tabs). Defaults to the tab used last, or the active one.')
 
 export function assertInspectable(tab: Tab): void {
-  if (!canInspect(tab.webContents.getURL())) {
+  if (!canInspect(tab.pageUrl)) {
     throw new Error(
       `Tab ${tab.id} shows one of Browminal's own pages (${tab.url || 'the start page'}), which ` +
         'agents can’t read or script. Navigate it to a web page first.'

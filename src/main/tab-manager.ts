@@ -9,6 +9,7 @@ import {
 import type { TabSummary } from '../shared/types'
 import { HOME_URL, isHomeUrl, isHttpUrl } from '../shared/url'
 import { PageVeil } from './page-veil'
+import { sessionOf, type SavedSession } from './session-file'
 import { activeAfterClose, insertionIndex } from './tab-order'
 import { Tab, type OpenRequest, type TabActiveState, type TabHooks } from './tabs'
 
@@ -85,11 +86,16 @@ export class TabManager {
     }
   }
 
-  constructor(private readonly window: BrowserWindow) {
+  /** `restore`: the tabs of the last session to bring back; else the window opens a start page. */
+  constructor(
+    private readonly window: BrowserWindow,
+    restore: SavedSession | null = null
+  ) {
     this.veil = new PageVeil(window.contentView, () => {
       if (!this.disposed) this.activeTab.webContents.focus()
     })
-    this.create()
+    if (restore && restore.tabs.length > 0) this.restoreTabs(restore)
+    else this.create()
   }
 
   get active(): Tab {
@@ -120,6 +126,12 @@ export class TabManager {
     this.faviconListeners.push(listener)
   }
 
+  /** The tabs to bring back next launch: the ones that can come back, in strip order. */
+  snapshot(): SavedSession {
+    const tabs = this.tabs.map((tab) => ({ url: tab.url, title: tab.title }))
+    return sessionOf(tabs, this.tabs.indexOf(this.activeTab))
+  }
+
   getState(): { tabs: Omit<TabSummary, 'agentShared'>[]; active: TabActiveState } {
     return {
       tabs: this.tabs.map((tab) => tab.getSummary()),
@@ -146,6 +158,8 @@ export class TabManager {
     if (!tab || this.window.isDestroyed()) return
     const previous = this.activeTab
     this.activeTab = tab
+    // A tab restored from the last session loads its page when it's first shown.
+    tab.loadPending()
     if (this.fullscreenTab && this.fullscreenTab !== tab) this.fullscreenTab.exitHtmlFullscreen()
     if (previous !== tab) this.show(tab)
     this.layout()
@@ -390,6 +404,16 @@ export class TabManager {
       if (!this.windowWasFullscreen) this.window.setFullScreen(false)
     }
     this.layout()
+  }
+
+  /** The last session's tabs, in order; only the one in front loads its page now. */
+  private restoreTabs({ tabs, active }: SavedSession): void {
+    const front = Math.min(Math.max(active, 0), tabs.length - 1)
+    for (const saved of tabs) {
+      const tab = new Tab({ id: nextId(), openerId: null, restore: saved }, this.hooks)
+      this.insert(tab, this.tabs.length)
+    }
+    this.activate(this.tabs[front].id)
   }
 
   /** A tab for something a page opened (window.open, target=_blank, middle-click), next to it. */

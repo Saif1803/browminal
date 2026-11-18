@@ -10,6 +10,7 @@ import { registerIpc } from './ipc'
 import { registerPermissions } from './permissions'
 import { handleInternalProtocol, registerInternalScheme } from './protocol'
 import { parseSettings, type Settings } from './settings'
+import { Session } from './session'
 import { registerShortcuts } from './shortcuts'
 import { launchUrl } from './launch-args'
 import { JsonStore } from './store'
@@ -38,7 +39,8 @@ function openWindow(
   bookmarks: Bookmarks,
   adblock: Adblock,
   agent: Agent,
-  settings: JsonStore<Settings>
+  settings: JsonStore<Settings>,
+  session: Session
 ): void {
   const opened = createMainWindow(
     downloads,
@@ -46,6 +48,7 @@ function openWindow(
     adblock,
     agent,
     settings,
+    session,
     app.getPath('userData')
   )
   main = opened
@@ -89,14 +92,19 @@ function startBrowser(): void {
   const bookmarks = new Bookmarks(userData, settings)
   const adblock = new Adblock(userData, settings)
   const agent = new Agent(userData, settings, () => main)
+  const session = new Session(userData, settings)
+  const restoring = session.toRestore() !== null
   registerIpc(() => main)
-  openWindow(downloads, bookmarks, adblock, agent, settings)
+  const open = (): void => openWindow(downloads, bookmarks, adblock, agent, settings, session)
+  open()
+  // A page named on the command line: in the first tab, or after the tabs brought back.
   const firstUrl = launchUrl(process.argv)
-  if (firstUrl) main?.tabs.active.load(firstUrl)
+  if (firstUrl && restoring) main?.tabs.create({ url: firstUrl })
+  else if (firstUrl) main?.tabs.active.load(firstUrl)
 
   // Another launch of Browminal (it quits at once): show this window, and its URL in a new tab.
   app.on('second-instance', (_event, commandLine) => {
-    if (!main) openWindow(downloads, bookmarks, adblock, agent, settings)
+    if (!main) open()
     const opened = main
     if (!opened) return
     const url = launchUrl(commandLine)
@@ -107,8 +115,7 @@ function startBrowser(): void {
   })
 
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0)
-      openWindow(downloads, bookmarks, adblock, agent, settings)
+    if (BrowserWindow.getAllWindows().length === 0) open()
   })
   app.on('before-quit', (event) => {
     if (!downloads.confirmQuit(main?.window ?? null)) event.preventDefault()
@@ -117,6 +124,7 @@ function startBrowser(): void {
     downloads.cancelAll()
     agent.dispose()
     bookmarks.flush()
+    session.flush()
     settings.flush()
   })
 }

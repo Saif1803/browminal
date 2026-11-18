@@ -385,6 +385,8 @@ export class Agent {
           'agent button in Browminal’s toolbar.'
       )
     }
+    // A tab restored from the last session loads its page once something needs it (see run).
+    tab.loadPending()
     return tab
   }
 
@@ -489,6 +491,7 @@ export class Agent {
       this.changed()
     }
     try {
+      await tab.whenRestored()
       // A tab just brought to the front (new_tab, select_tab, the user) is hidden until it's
       // shown, and drops input meanwhile; once it's shown, one frame means it's visible.
       if (await this.getMain()?.tabs.whenShown(tab, SHOW_TIMEOUT_MS)) {

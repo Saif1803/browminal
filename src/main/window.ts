@@ -11,6 +11,7 @@ import type { Bookmarks } from './bookmarks'
 import type { Downloads } from './downloads'
 import { confirmOpenExternal } from './external-links'
 import { Overlay } from './overlay'
+import type { Session } from './session'
 import type { Settings } from './settings'
 import type { JsonStore } from './store'
 import { TabManager } from './tab-manager'
@@ -44,6 +45,7 @@ export function createMainWindow(
   adblock: Adblock,
   agent: Agent,
   settings: JsonStore<Settings>,
+  session: Session,
   userData: string
 ): MainWindow {
   const isMac = process.platform === 'darwin'
@@ -95,7 +97,8 @@ export function createMainWindow(
   // The window title follows the page, not the UI's <title>.
   window.on('page-title-updated', (event) => event.preventDefault())
 
-  const tabs = new TabManager(window)
+  // The tabs that were open last time come back (unless the user starts with a start page).
+  const tabs = new TabManager(window, session.toRestore())
   const terminals = new Terminals(window, tabs, settings, agent, userData)
   // After the terminal, so it's placed (and kept) above the terminal view.
   const overlay = new Overlay(window, tabs, agent)
@@ -158,6 +161,7 @@ export function createMainWindow(
   const push = (): void => {
     pushScheduled = false
     if (window.isDestroyed()) return
+    session.update(tabs.snapshot())
     const state = getState()
     const { title } = state.active
     window.setTitle(title ? `${title} - ${APP_NAME}` : APP_NAME)

@@ -21,6 +21,7 @@ import { decideNavigation } from './navigation-policy'
 import { parsePageColor } from './page-color'
 import { styleScrollbars } from './scrollbars'
 import { themeColors } from './theme'
+import type { SavedTab } from './session-file'
 import { nextZoomFactor } from './zoom-levels'
 
 const PAGE_BACKGROUND = '#ffffff'
@@ -30,6 +31,8 @@ const ERR_ABORTED = -3
 const PAGE_WORLD_ID = 2002
 // A page that hasn't drawn anything this long after it started counts as drawn anyway.
 const MAX_UNPAINTED_MS = 3000
+// A restored tab's first load counts as done after this long, even if the page still loads.
+const RESTORE_LOAD_TIMEOUT_MS = 30_000
 // The page's own background colour: the root element's, else the body's.
 const READ_PAGE_COLOR = `(() => {
   for (const element of [document.documentElement, document.body]) {
@@ -97,6 +100,11 @@ export interface TabOptions {
   openerId: number | null
   /** Adopt this webContents (from window.open) instead of creating one. */
   webContents?: WebContents
+  /**
+   * A tab brought back from the last session: it shows this URL and title, and loads the page
+   * only when it's first needed (loadPending).
+   */
+  restore?: SavedTab
 }
 
 /** One browsing tab: a sandboxed WebContentsView with no preload and no Node access. */
@@ -123,6 +131,12 @@ export class Tab {
   private pageColor: string | null = null
   // Whether the view's background is the theme's page colour (browminal:// pages), not white.
   private themedBackground = false
+  // A restored tab that hasn't loaded its page yet (see TabOptions.restore).
+  private pending: SavedTab | null
+  // What a restored tab shows until its page commits (it's still blank until then).
+  private restored: SavedTab | null
+  // Resolves when a restored tab's first load is done (see whenRestored).
+  private restoring: Promise<void> | null = null
   private placement: { bounds: Rectangle; radius: number } = {
     bounds: { x: 0, y: 0, width: 0, height: 0 },
     radius: 0
@@ -134,6 +148,8 @@ export class Tab {
   ) {
     this.id = options.id
     this.openerId = options.openerId
+    this.pending = options.restore ?? null
+    this.restored = this.pending
     this.view = options.webContents
       ? new WebContentsView({ webContents: options.webContents })
       : new WebContentsView({ webPreferences: TAB_WEB_PREFERENCES })
@@ -182,7 +198,10 @@ export class Tab {
     })
     // A new document replaced the page: it's blank until it draws. Chromium's undocumented
     // ready-to-show comes with each document's first visually non-empty paint.
-    wc.on('did-navigate', () => this.setPainted(false))
+    wc.on('did-navigate', () => {
+      this.restored = null
+      this.setPainted(false)
+    })
     const events: NodeJS.EventEmitter = wc
     events.on('ready-to-show', () => {
       this.setPainted(true)
@@ -208,7 +227,10 @@ export class Tab {
     })
     wc.on('did-fail-load', (_event, code, name, url, isMainFrame) => {
       if (isMainFrame && code !== ERR_ABORTED && isHttpUrl(url)) this.showError(name, url)
-      if (isMainFrame) this.setPainted(true)
+      if (isMainFrame) {
+        this.restored = null
+        this.setPainted(true)
+      }
       changed()
     })
     wc.on('render-process-gone', (_event, { reason }) => {
@@ -248,18 +270,62 @@ export class Tab {
     return this.view.webContents
   }
 
+  /**
+   * The page's URL, as Chromium has it (error pages are browminal://error/). A restored tab that
+   * hasn't shown its page yet answers with the page it will load.
+   */
+  get pageUrl(): string {
+    return this.restored?.url ?? this.webContents.getURL()
+  }
+
   /** The page's URL as the user sees it: error pages show the URL that failed. */
   get url(): string {
-    return displayUrl(this.webContents.getURL())
+    return displayUrl(this.pageUrl)
+  }
+
+  /** The tab's title as its strip shows it (the URL when the page has none). */
+  get title(): string {
+    return this.restored?.title || this.webContents.getTitle() || this.url
+  }
+
+  /** Whether this is a restored tab that hasn't loaded its page yet. */
+  get isPending(): boolean {
+    return this.pending !== null
+  }
+
+  /** A restored tab loads its page now (it's shown, or an agent wants it); else nothing happens. */
+  loadPending(): void {
+    const pending = this.pending
+    if (!pending || this.isDestroyed) return
+    this.pending = null
+    const wc = this.webContents
+    this.restoring = new Promise((resolve) => {
+      const done = (): void => {
+        clearTimeout(timer)
+        wc.off('did-stop-loading', done)
+        this.restoring = null
+        resolve()
+      }
+      const timer = setTimeout(done, RESTORE_LOAD_TIMEOUT_MS)
+      wc.on('did-stop-loading', done)
+      wc.once('destroyed', done)
+    })
+    // Not drawn: the tab shown before stays up (or the veil) until this page draws.
+    this.setPainted(false)
+    this.load(pending.url)
+  }
+
+  /** Resolves once a restored tab's first load is done (at once for any other tab). */
+  whenRestored(): Promise<void> {
+    return this.restoring ?? Promise.resolve()
   }
 
   getSummary(): Omit<TabSummary, 'agentShared'> {
     const wc = this.webContents
-    const url = this.url
     return {
       id: this.id,
-      url,
-      title: wc.getTitle() || url,
+      url: this.url,
+      title: this.title,
       favicon: this.favicon,
       isLoading: wc.isLoading(),
       isAudible: wc.isCurrentlyAudible(),
@@ -317,11 +383,10 @@ export class Tab {
 
   getActiveState(): TabActiveState {
     const wc = this.webContents
-    const url = this.url
     return {
       id: this.id,
-      url,
-      title: wc.getTitle() || url,
+      url: this.url,
+      title: this.title,
       canGoBack: wc.navigationHistory.canGoBack(),
       canGoForward: wc.navigationHistory.canGoForward(),
       isLoading: wc.isLoading(),

@@ -6,7 +6,8 @@
  * and drives it the way an agent does: through the bridge's own MCP endpoint. Nothing here uses
  * --remote-debugging-port. The user's own tab (opened from the command line, never shared) must
  * stay invisible; requests from a browser or without the token must be refused; a page must not
- * reach browminal://; a second launch must hand its URL to the first and quit.
+ * reach browminal://; a second launch must hand its URL to the first and quit; a relaunch must
+ * bring the tabs back, loading only the one shown.
  *
  * Exits non-zero on the first failure. Never run it while a Browminal runs from out/ (the build
  * would fail halfway on the locked native module).
@@ -589,6 +590,72 @@ async function run(): Promise<void> {
     check(true, 'its URL opens in the running app')
     const after = await agent.ok('list_tabs')
     check(!after.includes('/handed-over'), 'the handed-over tab is not shared', after)
+
+    console.log('Session restore')
+    const sessionFile = join(profile, 'session.json')
+    const savedUrls = (): string[] =>
+      existsSync(sessionFile)
+        ? (JSON.parse(readFileSync(sessionFile, 'utf8')).tabs as { url: string }[]).map(
+            (tab) => tab.url
+          )
+        : []
+    await inMain(inspectPort, "require('electron').app.quit()")
+    const quitCode = await exited(app, 20_000)
+    check(quitCode === 0, 'the app quits', `exit code ${quitCode}`)
+    const saved = savedUrls()
+    check(
+      saved.join(' ') === [`${site}/private`, `${site}/`, `${site}/handed-over`].join(' '),
+      'session.json has the open tabs, in order',
+      saved.join(', ')
+    )
+    const privateHits = hits.filter((path) => path === '/private').length
+    const relaunchInspect = await freePort(inspectPort + 1)
+    const relaunched = launch(profile, `${site}/relaunched`, [`--inspect=${relaunchInspect}`])
+    second.push(relaunched)
+    await until('the relaunch’s page', START_TIMEOUT_MS, async () => {
+      if (relaunched.exitCode !== null)
+        throw new Failure(`the relaunch exited (${relaunched.exitCode})`)
+      return hits.includes('/relaunched') ? true : null
+    })
+    const restored = await until('the restored session', 10_000, async () => {
+      const urls = savedUrls()
+      return urls.length === 4 ? urls : null
+    }).catch(() => savedUrls())
+    check(
+      restored.join(' ') === [...saved, `${site}/relaunched`].join(' '),
+      'a relaunch brings the tabs back, its own page after them',
+      restored.join(', ')
+    )
+    await sleep(1_000)
+    check(
+      hits.filter((path) => path === '/private').length === privateHits,
+      'a restored tab in the background loads nothing until it’s shown'
+    )
+    const relaunchAgent = bridge(bridgePort, token)
+    const restoredTabs = await until('the bridge after the relaunch', START_TIMEOUT_MS, () =>
+      relaunchAgent.call('tools/list', {}).then(() => relaunchAgent.ok('list_tabs'))
+    )
+    check(!restoredTabs.includes(site), 'restored tabs are not shared', restoredTabs)
+    // Ctrl+1 (Cmd+1), as the shortcut handler sees it: the first tab comes to the front.
+    const mac = process.platform === 'darwin'
+    const ctrl1 = JSON.stringify({
+      type: 'keyDown',
+      key: '1',
+      code: 'Digit1',
+      control: !mac,
+      meta: mac,
+      shift: false,
+      alt: false,
+      isAutoRepeat: false
+    })
+    await inMain(
+      relaunchInspect,
+      `${WINDOW}.webContents.emit('before-input-event', { preventDefault() {} }, ${ctrl1})`
+    )
+    const shown = await until('the restored tab to load', 10_000, async () =>
+      hits.filter((path) => path === '/private').length > privateHits ? true : null
+    ).catch(() => false)
+    check(shown, 'a restored tab loads its page when it’s shown')
   } catch (error) {
     if (log.trim()) console.error(`\n--- app output ---\n${log.trim()}\n------------------`)
     throw error

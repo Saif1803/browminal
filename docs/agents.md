@@ -56,6 +56,7 @@ command again afterwards.
   active tab. Do it again to unshare. The agent button is tinted while the tab is shared.
 - Tabs an agent opens with `new_tab`, and tabs a shared tab opens, are shared too.
 - **Share every tab** shares all of them (off by default; keep your mail and bank out of it).
+- Tabs that come back when Browminal starts again are not shared: share them again.
 - While an agent works on a tab it is marked, the page gets an accent ring and an
   **Agent working · Stop** bar (the sheet shows it too). **Stop** unshares the tab (and turns
   "Share every tab" off).

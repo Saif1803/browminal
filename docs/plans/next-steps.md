@@ -43,6 +43,14 @@ for them.
   checks on Windows, macOS and Linux; a `v*` tag builds installers into a draft release). The
   packaged Windows app passes the smoke test (`--app`). Not done: signing and notarisation,
   auto-update, the smoke test in CI, any run on macOS or Linux, the public repository itself.
+- Phase 3 started (2026-11-18), decision 2 answered for session restore: it's built. The tabs
+  are kept in `session.json` (`session.ts`, format in `session-file.ts`), brought back on the next
+  launch with only the tab in front loading (the others when first shown, or when an agent tool
+  needs one), never shared; `startup: 'home'` in `settings.json` keeps nothing. The smoke test
+  quits, relaunches and checks the tabs, that a background tab fetches nothing, and that Ctrl+1
+  loads it. Not built yet: history and suggestions (`history-list.ts` is written, not wired in),
+  the tab strip's drag and menu (`moveTarget` and `idsRightOf` are written), a place in the UI to
+  choose the startup setting.
 
 ## Where it stands (checked 2026-11-10)
 - Browser essentials and the agent browser (Phases 1–6) are done. `bun run typecheck`,

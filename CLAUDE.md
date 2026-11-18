@@ -132,8 +132,15 @@ runs from `out/` first (the build fails on the locked native module).
   is kept as `*.broken`), written debounced and atomically (temp file + rename), flushed on quit.
   Files: `bookmarks.json` (`{version: 1, bookmarks}`), `settings.json` (bookmarks bar,
   `adblock: {enabled, pausedSites}`, `agent: {enabled, port, shareAll}`,
-  `terminal: {dock, height, width, folders, agentCommands}`) and `agent.json` (`{version: 1, token}`, written
-  `0o600`). Per-terminal MCP configs live in `agent-mcp/` (`0o600`, deleted with the terminal and
+  `terminal: {dock, height, width, folders, agentCommands}`, `startup: 'restore' | 'home'`),
+  `session.json` (`{version: 1, tabs: [{url, title}], active}`, `session.ts`) and `agent.json`
+  (`{version: 1, token}`, written `0o600`).
+  **Session restore:** the window's tabs are saved on every state push (unchanged ones write
+  nothing), http(s) and the start page only, at most 100; with `startup: 'home'` the file is kept
+  empty. A new window brings them back (`TabManager` with `restore`): only the tab in front loads
+  now, the others show their saved title and load when first shown (`Tab.loadPending`) or when an
+  agent tool needs one (`Agent.tab`, `run` waits for it). Sharing with agents is never restored.
+  A launch's URL opens after the restored tabs. Per-terminal MCP configs live in `agent-mcp/` (`0o600`, deleted with the terminal and
   cleared on start). Pure file formats live in their own tested modules.
   The ad blocker's engine is cached separately as `adblock-engine.bin` (adblock-rust's own checksummed
   format, not a JsonStore): the worker writes `adblock-engine.bin.tmp`, main loads it and renames
@@ -172,6 +179,9 @@ runs from `out/` first (the build fails on the locked native module).
 | `downloads-menu.ts` | The downloads button's menu (an overlay menu; placeholder until the design pass) |
 | `store.ts` | `JsonStore`: one JSON file in userData; checked on read, debounced atomic writes |
 | `settings.ts` | Pure: `settings.json` format and defaults |
+| `session-file.ts` | Pure: `session.json` format (checked on read), what can come back |
+| `session.ts` | `Session`: the open tabs kept in `session.json`, what a new window brings back |
+| `history-list.ts` | Pure: `history.json` format and ranking (not wired in yet) |
 | `adblock.ts` | `Adblock`: filter engine lifecycle (list download, cache, daily update), request blocking, element hiding, per-tab counts |
 | `adblock-filters.ts` | adblock-rust engine wrapper (native module): load, `shouldBlock`, `cosmeticStyles` (no Electron; tested) |
 | `adblock-policy.ts` | Pure: filter list URLs, sites, paused list, shield status, update timing, page-scan checks |
@@ -358,4 +368,6 @@ space for the native controls.
   Done: the app's identity and icon, `LICENSE`, `THIRD-PARTY.md`, the README, CI
   (`.github/workflows`: checks on three systems; a `v*` tag builds installers into a draft
   release). macOS and Linux have never been run.
-- **Later (don't start until asked):** history + address suggestions, session restore.
+- **Session restore (done 2026-11-18):** the open tabs come back on the next launch (see Storage).
+- **Later (don't start until asked):** history + address suggestions (`history-list.ts` is
+  written and tested, not wired in).
