@@ -386,6 +386,11 @@ export class Agent {
     return tab
   }
 
+  /** The window is in front again: pages kept awake for agents (see run) are as usual again. */
+  windowShown(): void {
+    for (const debug of this.debuggers.values()) debug.sleep()
+  }
+
   private debugOf(tab: Tab): TabDebug {
     let debug = this.debuggers.get(tab.id)
     if (!debug) {
@@ -487,6 +492,8 @@ export class Agent {
       if (await this.getMain()?.tabs.whenShown(tab, SHOW_TIMEOUT_MS)) {
         await tab.nextFrame(SHOW_FRAME_TIMEOUT_MS)
       }
+      // The window may be minimized or behind other windows, where pages drop clicks.
+      if (canInspect(tab.webContents.getURL())) await this.debugOf(tab).wakeIfHidden()
       return await work()
     } finally {
       this.inFlight--

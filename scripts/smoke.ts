@@ -210,11 +210,11 @@ const ELECTRON_CLI = join(ROOT, 'node_modules', 'electron', 'cli.js')
 const APP_FLAG = process.argv.indexOf('--app')
 const PACKAGED_APP = APP_FLAG === -1 ? null : resolve(process.argv[APP_FLAG + 1] ?? '')
 
-function launch(profile: string, url: string): ChildProcess {
+function launch(profile: string, url: string, flags: string[] = []): ChildProcess {
   const [command, args] = PACKAGED_APP
     ? [PACKAGED_APP, []]
     : [process.execPath, [ELECTRON_CLI, '.']]
-  return spawn(command, [...args, `--user-data-dir=${profile}`, url], {
+  return spawn(command, [...args, ...flags, `--user-data-dir=${profile}`, url], {
     cwd: ROOT,
     stdio: ['ignore', 'pipe', 'pipe'],
     detached: process.platform !== 'win32',
@@ -246,6 +246,38 @@ function exited(child: ChildProcess, ms: number): Promise<number | null> {
   })
 }
 
+/**
+ * Runs `expression` in the app's main process, through Node's inspector (`--inspect`). Only for
+ * what no agent tool can do: minimizing the window.
+ */
+async function inMain(port: number, expression: string): Promise<void> {
+  const targets = (await (await fetch(`http://127.0.0.1:${port}/json`)).json()) as {
+    webSocketDebuggerUrl: string
+  }[]
+  const socket = new WebSocket(targets[0].webSocketDebuggerUrl)
+  await new Promise<void>((done, fail) => {
+    const timer = setTimeout(() => fail(new Error('the inspector did not answer')), 10_000)
+    socket.onerror = () => fail(new Error('could not reach the inspector'))
+    socket.onopen = () =>
+      socket.send(
+        JSON.stringify({
+          id: 1,
+          method: 'Runtime.evaluate',
+          params: { expression, includeCommandLineAPI: true }
+        })
+      )
+    socket.onmessage = (event) => {
+      const reply = JSON.parse(String(event.data))
+      if (reply.id !== 1) return
+      clearTimeout(timer)
+      if (reply.result?.exceptionDetails) fail(new Error(JSON.stringify(reply.result)))
+      else done()
+    }
+  }).finally(() => socket.close())
+}
+
+const WINDOW = "require('electron').BrowserWindow.getAllWindows()[0]"
+
 // --- the run -------------------------------------------------------------------------------
 
 async function run(): Promise<void> {
@@ -264,6 +296,7 @@ async function run(): Promise<void> {
 
   const sitePort = await freePort(18_500)
   const bridgePort = await freePort(19_400)
+  const inspectPort = await freePort(19_600)
   const site = `http://127.0.0.1:${sitePort}`
   const server = await startSite(sitePort)
   const profile = mkdtempSync(join(tmpdir(), 'browminal-smoke-'))
@@ -276,7 +309,7 @@ async function run(): Promise<void> {
     })
   )
 
-  const app = launch(profile, `${site}/private`)
+  const app = launch(profile, `${site}/private`, [`--inspect=${inspectPort}`])
   let log = ''
   app.stdout?.on('data', (chunk) => (log += chunk))
   app.stderr?.on('data', (chunk) => (log += chunk))
@@ -406,6 +439,32 @@ async function run(): Promise<void> {
       'a page can’t open browminal://',
       where
     )
+
+    console.log('Minimized window')
+    await inMain(inspectPort, `${WINDOW}.minimize()`)
+    await sleep(1_000)
+    const hidden = await agent.ok('new_tab', { url: `${site}/` })
+    const hiddenId = Number(/\[tab (\d+)\]/.exec(hidden)?.[1])
+    check(hidden.includes('Smoke page'), 'new_tab opens a page while minimized', hidden)
+    const hiddenTree = await agent.ok('read_page', { tabId: hiddenId })
+    const hiddenButton = Number(/button "Say hi" \[ref=(\d+)\]/.exec(hiddenTree)?.[1])
+    await agent.ok('click', { tabId: hiddenId, ref: hiddenButton })
+    const hiddenText = await until('the click while minimized', 5_000, async () => {
+      const text = await agent.ok('get_page_text', { tabId: hiddenId })
+      return text.includes('Hello') ? text : null
+    }).catch(() => '')
+    check(hiddenText.includes('Hello'), 'a click works while minimized')
+    const hiddenShot = await agent.tool('screenshot', { tabId: hiddenId })
+    check(
+      !hiddenShot.isError && hiddenShot.content.some((part) => part.type === 'image'),
+      'screenshot works while minimized',
+      agent.text(hiddenShot)
+    )
+    await inMain(inspectPort, `${WINDOW}.restore()`)
+    await sleep(500)
+    const back = await agent.ok('click', { tabId: hiddenId, ref: hiddenButton })
+    check(back.includes('Clicked'), 'the tab still takes clicks once the window is back', back)
+    await agent.ok('close_tab', { tabId: hiddenId })
 
     console.log('Single instance')
     const other = launch(profile, `${site}/handed-over`)

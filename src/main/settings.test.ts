@@ -12,6 +12,9 @@ describe('parseSettings', () => {
   test('reads saved settings', () => {
     const saved = {
       bookmarksBarVisible: false,
+      startup: 'home' as const,
+      searchEngine: 'duckduckgo' as const,
+      keepHistory: false,
       adblock: { enabled: false, pausedSites: ['example.com', 'news.bbc.co.uk'] },
       agent: { enabled: true, port: 9400, shareAll: true },
       terminal: {
@@ -23,6 +26,14 @@ describe('parseSettings', () => {
       }
     }
     expect(parseSettings(saved)).toEqual(saved)
+  })
+
+  test('falls back for an unknown startup choice or search engine', () => {
+    const settings = parseSettings({ startup: 'everything', searchEngine: 'altavista' })
+    expect(settings.startup).toBe('restore')
+    expect(settings.searchEngine).toBe('google')
+    expect(parseSettings({ searchEngine: 'toString' }).searchEngine).toBe('google')
+    expect(parseSettings({ keepHistory: 'yes' }).keepHistory).toBe(true)
   })
 
   test('turns an older single agent command into the list', () => {

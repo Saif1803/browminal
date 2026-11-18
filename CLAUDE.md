@@ -54,6 +54,7 @@ bun run typecheck    # tsc for main/preload, renderer, and tests
 bun test             # unit tests (src/**/*.test.ts)
 bun run smoke        # builds, then drives the real app through the agent bridge (scripts/smoke.ts)
                      # `bun scripts/smoke.ts --app dist/win-unpacked/browminal.exe` drives a packaged app
+                     # (it minimizes the window through `--inspect`, the one thing no agent tool does)
 bun run icons        # build/icon.svg → build/icon.{png,ico,icns} and resources/icon.png
 bun run lint         # eslint
 bun run build        # typecheck + production bundle into out/
@@ -295,6 +296,12 @@ space for the native controls.
   shown as `REDACTED`. What an agent emulates (device, colour scheme, network) shows as a badge in
   the address bar that resets it, and ends with Stop. `clear_site_data` runs only after the user
   agrees (an overlay question marked as the agent's, one at a time).
+  **Window away:** a page in a minimized, hidden or covered window is hidden to Chromium and
+  drops mouse presses, so before an agent's tool runs on a shared tab whose page says it's hidden,
+  it gets `Emulation.setFocusEmulationEnabled` (`TabDebug.wakeIfHidden`), ended when the window
+  is shown or focused again (`Agent.windowShown`). The page's answer only decides that and is
+  waited for briefly. Pages keep their size while the window is minimized (`TabManager.layout`),
+  and a tab brought to the front then is revealed at once (no frame to wait for).
   **Page ↔ source:** the Debugger domain is on in shared tabs only for `scriptParsed` (source
   maps) and must never pause a page: `setSkipAllPauses`, sent again on every new page (Chromium
   drops it on a renderer swap), and any pause that slips through is resumed. Source maps are

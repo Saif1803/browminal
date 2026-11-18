@@ -1,4 +1,17 @@
-export const SEARCH_URL = 'https://www.google.com/search?q='
+/** The search engines the address bar can use (Settings → Search with). */
+export const SEARCH_ENGINES = {
+  google: { name: 'Google', url: 'https://www.google.com/search?q=' },
+  duckduckgo: { name: 'DuckDuckGo', url: 'https://duckduckgo.com/?q=' },
+  bing: { name: 'Bing', url: 'https://www.bing.com/search?q=' }
+} as const
+
+export type SearchEngine = keyof typeof SEARCH_ENGINES
+
+export const isSearchEngine = (value: unknown): value is SearchEngine =>
+  typeof value === 'string' && Object.hasOwn(SEARCH_ENGINES, value)
+
+/** The default engine's search URL; the query goes at its end. */
+export const SEARCH_URL = SEARCH_ENGINES.google.url
 
 /** Scheme for the browser's own pages, served from resources/ by src/main/protocol.ts. */
 export const INTERNAL_SCHEME = 'browminal'
@@ -43,10 +56,11 @@ const DOMAIN = /^([a-z0-9-]+\.)+[a-z]{2,}\.?(:\d{1,5})?([/?#].*)?$/i
  * Turns address-bar text into a URL to load.
  * - http(s) URLs are used as-is.
  * - Bare hostnames get https://, except localhost and IPs, which get http://.
- * - Everything else (including other schemes like javascript: or file:) is a Google search.
+ * - Everything else (including other schemes like javascript: or file:) is a search, with the
+ *   engine whose URL is `searchUrl` (Google unless the user chose another).
  * - Empty input goes to the home page.
  */
-export function resolveInput(raw: string): string {
+export function resolveInput(raw: string, searchUrl: string = SEARCH_URL): string {
   const input = raw.trim()
   if (!input) return HOME_URL
 
@@ -58,7 +72,7 @@ export function resolveInput(raw: string): string {
     if (DOMAIN.test(input) && isValidUrl(`https://${input}`)) return `https://${input}`
   }
 
-  return SEARCH_URL + encodeURIComponent(input)
+  return searchUrl + encodeURIComponent(input)
 }
 
 function isValidUrl(value: string): boolean {

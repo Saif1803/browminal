@@ -25,10 +25,12 @@ for them.
   releases. Held back, waiting on others: **ESLint 10** (eslint-plugin-react 7.37.5 doesn't run on
   it) and **TypeScript 7** (typescript-eslint supports < 6.1). `@lydell/node-pty` is a beta, but
   its latest. Phase 1 is done apart from the manual pass.
-- Found on the way, not fixed: a tab an agent opens while Browminal is minimized never draws, and
-  gets no mouse events until the window is shown again (a click on it is lost, though the tool
-  says it clicked). Turning background throttling off for the tab didn't help. To look at with
-  the agent gaps.
+- Found on the way, fixed 2026-11-14: a tab an agent opened while Browminal was minimized never
+  drew and lost clicks (the tool still said it clicked). Three causes: the new tab waited under
+  the old one for a frame that never came; pages took the minimized window's tiny size; and
+  Chromium drops mouse presses on a hidden page, which also hit a window merely covered by
+  others. Now such a page is told it's visible while an agent works on it
+  (`TabDebug.wakeIfHidden`); the smoke test minimizes the window and clicks.
 - Phase 2: same-site iframes, `drag`, CPU throttling and original names in minified stacks are
   built and unit-tested; the smoke test runs the first three against the real app (minified
   names still only in unit tests). Left: cross-origin (out-of-process)

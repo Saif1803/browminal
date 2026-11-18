@@ -1,5 +1,6 @@
 import { MAX_PAUSED_SITES, isSite } from './adblock-policy'
 import { DEFAULT_AGENT_PORT, isAgentPort } from './agent-policy'
+import { isSearchEngine, type SearchEngine } from '../shared/url'
 import {
   isPanelDock,
   TERMINAL_DEFAULT_HEIGHT,
@@ -46,9 +47,19 @@ export interface TerminalSettings {
   agentCommands: string[]
 }
 
+/** What a launch opens: the tabs that were open last time, or one start page. */
+export type Startup = 'restore' | 'home'
+
+const isStartup = (value: unknown): value is Startup => value === 'restore' || value === 'home'
+
 /** Saved in settings.json. */
 export interface Settings {
   bookmarksBarVisible: boolean
+  startup: Startup
+  /** What the address bar searches with. */
+  searchEngine: SearchEngine
+  /** Visited pages are remembered (history.json) and suggested in the address bar. */
+  keepHistory: boolean
   adblock: AdblockSettings
   agent: AgentSettings
   terminal: TerminalSettings
@@ -56,6 +67,9 @@ export interface Settings {
 
 export const DEFAULT_SETTINGS: Settings = {
   bookmarksBarVisible: true,
+  startup: 'restore',
+  searchEngine: 'google',
+  keepHistory: true,
   adblock: { enabled: true, pausedSites: [] },
   agent: { enabled: false, port: DEFAULT_AGENT_PORT, shareAll: false },
   terminal: {
@@ -134,6 +148,12 @@ export function parseSettings(raw: unknown): Settings {
       typeof input.bookmarksBarVisible === 'boolean'
         ? input.bookmarksBarVisible
         : DEFAULT_SETTINGS.bookmarksBarVisible,
+    startup: isStartup(input.startup) ? input.startup : DEFAULT_SETTINGS.startup,
+    searchEngine: isSearchEngine(input.searchEngine)
+      ? input.searchEngine
+      : DEFAULT_SETTINGS.searchEngine,
+    keepHistory:
+      typeof input.keepHistory === 'boolean' ? input.keepHistory : DEFAULT_SETTINGS.keepHistory,
     adblock: parseAdblock(input.adblock),
     agent: parseAgent(input.agent),
     terminal: parseTerminal(input.terminal)

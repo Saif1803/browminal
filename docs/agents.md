@@ -120,6 +120,13 @@ own site. An embed from another site (a payment form, a sign-in widget) runs in 
 and shows as "frame content not readable" for now; `evaluate` and `get_page_text` read the main
 frame only.
 
+### While Browminal is minimized or behind other windows
+Agents keep working. Chromium treats the pages of a window you can't see as hidden (they stop
+drawing and ignore clicks), so before a tool runs on such a page Browminal tells it that it's
+visible and focused. Your page then sees `document.visibilityState === 'visible'` and
+`document.hasFocus() === true` until you bring Browminal back to the front, when it hears the
+truth again.
+
 ## What an agent can't do
 - See or touch tabs you haven't shared, or Browminal's own pages.
 - Load anything but http(s), close your tabs, or open OS windows.

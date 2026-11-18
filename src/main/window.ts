@@ -115,6 +115,14 @@ export function createMainWindow(
     overlay.windowResized()
     layout()
   })
+  // Back in front: pages agents worked on while it was away go back to normal, and pages lay
+  // out for the window's real size again (they keep their size while it's minimized).
+  window.on('restore', () => {
+    agent.windowShown()
+    layout()
+  })
+  window.on('show', () => agent.windowShown())
+  window.on('focus', () => agent.windowShown())
   // Maximize/restore/fullscreen can change the content size without a matching resize on some platforms.
   window.on('maximize', layout)
   window.on('unmaximize', layout)

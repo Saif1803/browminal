@@ -64,6 +64,8 @@ export class TabManager {
   private retiring = new Set<Tab>()
   // whenShown's callers, told on the next reveal (whichever tab it shows).
   private shownWaiters: (() => void)[] = []
+  // The window's content size at the last layout while it wasn't minimized (see layout).
+  private contentSize: { width: number; height: number } | null = null
   private readonly veil: PageVeil
 
   private readonly hooks: TabHooks = {
@@ -259,7 +261,12 @@ export class TabManager {
 
   layout(): void {
     if (this.window.isDestroyed()) return
-    const { width, height } = this.window.getContentBounds()
+    // A minimized window reports a tiny size (Windows): pages keep the size they had, so one an
+    // agent works on meanwhile lays out, and takes clicks, as it will when the window is back.
+    if (!this.window.isMinimized() || !this.contentSize) {
+      this.contentSize = this.window.getContentBounds()
+    }
+    const { width, height } = this.contentSize
     // The page sits inset from the window's sides and bottom (and the terminal panel under it or
     // to its right, when it's open), with rounded corners. A fullscreen page covers the panel too.
     const { page, terminal } = windowLayout(
@@ -304,6 +311,12 @@ export class TabManager {
     const current = this.shownTab
     // A browminal:// page that hasn't drawn shows the theme's page colour, so it can go up at once.
     if (!current || current === tab || (!tab.isPainted && tab.hasThemedBackground)) {
+      this.reveal(tab)
+      return
+    }
+    // A minimized or hidden window draws nothing, so there is no frame to wait for: the tab
+    // would stay beneath the old one, where it gets no input (an agent's click was lost).
+    if (this.window.isMinimized() || !this.window.isVisible()) {
       this.reveal(tab)
       return
     }

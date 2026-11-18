@@ -38,6 +38,12 @@ const NO_NETWORK_THROTTLING = {
 /** Called when picking ends: with the element the user clicked, or null when it was cancelled. */
 export type PickEnd = (backendNodeId: number | null) => void
 
+// How long a page kept awake (wakeIfHidden) gets to notice, how often it's asked, and how long
+// one answer may take.
+const AWAKE_TIMEOUT_MS = 1500
+const AWAKE_POLL_MS = 40
+const AWAKE_PROBE_TIMEOUT_MS = 2000
+
 /**
  * The debugger on one shared tab and what's recorded through it: the console and network logs
  * and the scripts' source maps (from the moment it's attached, which is when the tab is shared
@@ -54,6 +60,8 @@ export class TabDebug {
   /** The last error the user sent or dismissed, or an agent read: the badge counts newer ones. */
   private errorsSeenSeq = 0
   private pickState: { stop: () => void; end: PickEnd } | null = null
+  // Whether the page is told it's visible and focused although its window isn't (see wakeIfHidden).
+  private awake = false
 
   constructor(
     private readonly webContents: WebContents,
@@ -104,6 +112,7 @@ export class TabDebug {
       const { parentId, url } = (frame ?? {}) as { parentId?: string; url?: string }
       if (parentId) return
       skipPauses()
+      if (this.awake) this.sendAwake((method, params) => cdp.send(method, params)).catch(() => {})
       if (url && canInspect(url)) this.console.add(navigationEntry(url))
       // A new page: what was being picked on the old one is gone, and so are its errors.
       this.endPicking(null)
@@ -134,6 +143,7 @@ export class TabDebug {
       await send('Debugger.setSkipAllPauses', { skip: true })
       // Attached again after something else detached the debugger: put the emulation back.
       if (emulationLabel(this.emulationState)) await this.applyEmulation(send)
+      if (this.awake) await this.sendAwake(send)
     })
   }
 
@@ -231,9 +241,54 @@ export class TabDebug {
     picking.end(backendNodeId)
   }
 
+  /**
+   * Chromium treats the pages of a window that is minimized, hidden or covered by other windows
+   * as hidden: they stop drawing and drop mouse presses, so an agent's click was lost though the
+   * tool said it clicked. Before an agent's tool runs, a page that says it's hidden is told it's
+   * visible and focused, until the window is back in front (`sleep`).
+   *
+   * The page's word is only used to decide this and to wait for it: if it lies, the page is kept
+   * awake for nothing, or the short wait runs out.
+   */
+  async wakeIfHidden(): Promise<void> {
+    try {
+      if ((await this.visibility()) !== 'hidden') return
+      this.awake = true
+      await this.sendAwake((method, params) => this.cdp.send(method, params))
+      // The page hears about it a moment later; until then it still drops presses.
+      const end = Date.now() + AWAKE_TIMEOUT_MS
+      while (Date.now() < end && (await this.visibility()) === 'hidden') {
+        await new Promise((resolve) => setTimeout(resolve, AWAKE_POLL_MS))
+      }
+    } catch {
+      // A dialog is open, the page is busy or the debugger is gone: the tool that follows says so.
+    }
+  }
+
+  /** The window is in front again: the page hears about its real visibility and focus. */
+  sleep(): void {
+    if (!this.awake) return
+    this.awake = false
+    this.sendAwake((method, params) => this.cdp.send(method, params)).catch(() => {})
+  }
+
+  private async visibility(): Promise<unknown> {
+    const { result } = (await this.cdp.send(
+      'Runtime.evaluate',
+      { expression: 'document.visibilityState', returnByValue: true },
+      AWAKE_PROBE_TIMEOUT_MS
+    )) as { result?: { value?: unknown } }
+    return result?.value
+  }
+
+  private async sendAwake(send: RawSend): Promise<void> {
+    await send('Emulation.setFocusEmulationEnabled', { enabled: this.awake })
+  }
+
   /** Turns emulation and picking off and detaches. */
   dispose(): void {
     this.endPicking(null)
+    this.awake = false
     if (this.emulationLabel === null) {
       this.cdp.detach()
       return

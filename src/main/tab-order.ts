@@ -35,3 +35,19 @@ export function activeAfterClose(
   if (index === -1) return activeId
   return remaining[Math.min(index, remaining.length - 1)].id
 }
+
+/**
+ * Where the tab at `from` ends up when it's dragged to `to`: both inside the strip, or null
+ * when there's nothing to move.
+ */
+export function moveTarget(count: number, from: number, to: number): number | null {
+  if (!Number.isInteger(from) || !Number.isInteger(to) || from < 0 || from >= count) return null
+  const target = Math.max(0, Math.min(to, count - 1))
+  return target === from ? null : target
+}
+
+/** The tabs right of `id`, in strip order (the tab menu's "Close tabs to the right"). */
+export function idsRightOf(tabs: readonly TabOrderEntry[], id: number): number[] {
+  const index = tabs.findIndex((tab) => tab.id === id)
+  return index === -1 ? [] : tabs.slice(index + 1).map((tab) => tab.id)
+}

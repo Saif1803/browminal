@@ -1,10 +1,12 @@
 import { describe, expect, test } from 'bun:test'
 import {
   HOME_URL,
+  SEARCH_ENGINES,
   SEARCH_URL,
   displayUrl,
   errorPageUrl,
   isHomeUrl,
+  isSearchEngine,
   parseErrorPageUrl,
   resolveInput
 } from './url'
@@ -96,5 +98,25 @@ describe('error pages', () => {
   test('other pages are not error pages', () => {
     expect(parseErrorPageUrl('https://example.com/?url=https://a.example/')).toBeNull()
     expect(parseErrorPageUrl('browminal://errorx/?url=https://a.example/')).toBeNull()
+  })
+})
+
+describe('search engines', () => {
+  test('a search uses the engine it is given', () => {
+    expect(resolveInput('rust lifetimes', SEARCH_ENGINES.duckduckgo.url)).toBe(
+      'https://duckduckgo.com/?q=rust%20lifetimes'
+    )
+    expect(resolveInput('rust lifetimes')).toBe(search('rust lifetimes'))
+  })
+
+  test('addresses are loaded as they are, whatever the engine', () => {
+    expect(resolveInput('example.com', SEARCH_ENGINES.bing.url)).toBe('https://example.com')
+  })
+
+  test('only the listed engines are engines', () => {
+    expect(isSearchEngine('google')).toBe(true)
+    expect(isSearchEngine('bing')).toBe(true)
+    expect(isSearchEngine('constructor')).toBe(false)
+    expect(isSearchEngine(1)).toBe(false)
   })
 })

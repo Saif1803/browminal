@@ -36,7 +36,7 @@ Browminal is built from source. You need:
 Then:
 
 ```bash
-git clone <this repository>
+git clone https://github.com/Saif1803/browminal.git
 cd browminal
 bun install
 bun run dev
