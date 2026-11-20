@@ -291,15 +291,16 @@ function exited(child: ChildProcess, ms: number): Promise<number | null> {
 }
 
 /**
- * Runs `expression` in the app's main process, through Node's inspector (`--inspect`). Only for
- * what no agent tool can do: minimizing the window.
+ * Runs `expression` in the app's main process, through Node's inspector (`--inspect`), and
+ * returns its (awaited) value. Only for what no agent tool can do: minimizing the window,
+ * dragging a tab in the strip.
  */
-async function inMain(port: number, expression: string): Promise<void> {
+async function inMain(port: number, expression: string): Promise<unknown> {
   const targets = (await (await fetch(`http://127.0.0.1:${port}/json`)).json()) as {
     webSocketDebuggerUrl: string
   }[]
   const socket = new WebSocket(targets[0].webSocketDebuggerUrl)
-  await new Promise<void>((done, fail) => {
+  return await new Promise<unknown>((done, fail) => {
     const timer = setTimeout(() => fail(new Error('the inspector did not answer')), 10_000)
     socket.onerror = () => fail(new Error('could not reach the inspector'))
     socket.onopen = () =>
@@ -307,7 +308,12 @@ async function inMain(port: number, expression: string): Promise<void> {
         JSON.stringify({
           id: 1,
           method: 'Runtime.evaluate',
-          params: { expression, includeCommandLineAPI: true }
+          params: {
+            expression,
+            includeCommandLineAPI: true,
+            awaitPromise: true,
+            returnByValue: true
+          }
         })
       )
     socket.onmessage = (event) => {
@@ -315,7 +321,7 @@ async function inMain(port: number, expression: string): Promise<void> {
       if (reply.id !== 1) return
       clearTimeout(timer)
       if (reply.result?.exceptionDetails) fail(new Error(JSON.stringify(reply.result)))
-      else done()
+      else done(reply.result?.result?.value)
     }
   }).finally(() => socket.close())
 }
@@ -656,6 +662,84 @@ async function run(): Promise<void> {
       hits.filter((path) => path === '/private').length > privateHits ? true : null
     ).catch(() => false)
     check(shown, 'a restored tab loads its page when it’s shown')
+
+    console.log('Tab strip')
+    // A real drag in the UI: press on the first tab, move past the last one's middle, release.
+    await inMain(
+      relaunchInspect,
+      `(async () => {
+      const ui = ${WINDOW}.webContents
+      const tabs = JSON.parse(await ui.executeJavaScript(
+        "JSON.stringify([...document.querySelectorAll('[data-tab-id]')].map((tab) => { const r = tab.getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2] }))"
+      ))
+      const wait = (ms) => new Promise((done) => setTimeout(done, ms))
+      const [x0, y] = tabs[0].map(Math.round)
+      const x1 = Math.round(tabs[tabs.length - 1][0]) + 20
+      ui.sendInputEvent({ type: 'mouseDown', x: x0, y, button: 'left', clickCount: 1 })
+      for (let x = x0; x <= x1; x += 12) {
+        ui.sendInputEvent({ type: 'mouseMove', x, y, button: 'left', modifiers: ['leftButtonDown'] })
+        await wait(16)
+      }
+      ui.sendInputEvent({ type: 'mouseMove', x: x1, y, button: 'left', modifiers: ['leftButtonDown'] })
+      await wait(50)
+      ui.sendInputEvent({ type: 'mouseUp', x: x1, y, button: 'left', clickCount: 1 })
+    })()`
+    )
+    const afterDrag = [`${site}/`, `${site}/handed-over`, `${site}/relaunched`, `${site}/private`]
+    const reordered = await until('the dragged tab’s new place', 10_000, async () => {
+      const urls = savedUrls()
+      return urls.join(' ') === afterDrag.join(' ') ? urls : null
+    }).catch(() => savedUrls())
+    check(
+      reordered.join(' ') === afterDrag.join(' '),
+      'dragging the first tab past the last moves it to the end',
+      reordered.join(', ')
+    )
+    // Right-click the second tab (handed-over), then "Duplicate" in the overlay's menu.
+    const menuText = await inMain(
+      relaunchInspect,
+      `(async () => {
+      const win = ${WINDOW}
+      const ui = win.webContents
+      const wait = (ms) => new Promise((done) => setTimeout(done, ms))
+      const [x, y] = JSON.parse(await ui.executeJavaScript(
+        "JSON.stringify((() => { const r = document.querySelectorAll('[data-tab-id]')[1].getBoundingClientRect(); return [Math.round(r.left + r.width / 2), Math.round(r.top + r.height / 2)] })())"
+      ))
+      ui.sendInputEvent({ type: 'mouseDown', x, y, button: 'right', clickCount: 1 })
+      ui.sendInputEvent({ type: 'mouseUp', x, y, button: 'right', clickCount: 1 })
+      for (let i = 0; i < 50; i++) {
+        await wait(100)
+        const overlay = win.contentView.children.find((view) => view.webContents?.getURL().includes('overlay.html'))
+        if (!overlay) continue
+        const text = await overlay.webContents.executeJavaScript(
+          "(() => { const rows = [...document.querySelectorAll('[role^=menuitem]')]; const row = rows.find((r) => r.textContent.includes('Duplicate')); if (!row) return ''; const text = rows.map((r) => r.textContent).join('|'); row.click(); return text })()"
+        )
+        if (text) return text
+      }
+      return ''
+    })()`
+    )
+    check(
+      typeof menuText === 'string' && menuText.includes('Close other tabs'),
+      'right-click on a tab opens its menu',
+      String(menuText)
+    )
+    const afterDuplicate = [
+      `${site}/`,
+      `${site}/handed-over`,
+      `${site}/handed-over`,
+      `${site}/relaunched`,
+      `${site}/private`
+    ]
+    const duplicated = await until('the duplicated tab', 10_000, async () => {
+      const urls = savedUrls()
+      return urls.join(' ') === afterDuplicate.join(' ') ? urls : null
+    }).catch(() => savedUrls())
+    check(
+      duplicated.join(' ') === afterDuplicate.join(' '),
+      'its Duplicate opens the page again right of it',
+      duplicated.join(', ')
+    )
   } catch (error) {
     if (log.trim()) console.error(`\n--- app output ---\n${log.trim()}\n------------------`)
     throw error

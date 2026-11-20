@@ -206,6 +206,10 @@ export interface BrowserApi {
   activateTab(id: number): Promise<void>
   reopenClosedTab(): Promise<void>
   toggleMute(id: number): Promise<void>
+  /** Dragging a tab in the strip: tab `id` moves to `index` (main clamps it). */
+  moveTab(id: number, index: number): Promise<void>
+  /** Right-click on tab `id`: its menu (reload, duplicate, share, close others…) at (x, y). */
+  showTabMenu(id: number, x: number, y: number): Promise<void>
   /** Back to 100% for the active tab's site. */
   resetZoom(): Promise<void>
 
@@ -296,6 +300,8 @@ export const IpcChannel = {
   ActivateTab: 'tabs:activate',
   ReopenClosedTab: 'tabs:reopen',
   ToggleMute: 'tabs:toggle-mute',
+  MoveTab: 'tabs:move',
+  ShowTabMenu: 'tabs:show-menu',
   ResetZoom: 'tab:reset-zoom',
   Find: 'find:query',
   FindNext: 'find:next',

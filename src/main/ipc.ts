@@ -11,6 +11,7 @@ import { showAdblockMenu } from './adblock-menu'
 import { openBookmark } from './bookmarks'
 import { showBookmarkMenu, showBookmarksOverflow } from './bookmarks-menu'
 import { showDownloadsMenu } from './downloads-menu'
+import { showTabMenu } from './tab-menu'
 import { isAgentCommand, isTerminalSize, MAX_TERMINAL_INPUT } from './terminal-policy'
 import type { MainWindow } from './window'
 
@@ -126,6 +127,20 @@ export function registerIpc(getMain: () => MainWindow | null): void {
   ipcMain.handle(IpcChannel.ToggleMute, (event, id: unknown) => {
     const main = assertTrustedSender(event)
     main.tabs.toggleMute(assertTabId(main, id))
+  })
+  ipcMain.handle(IpcChannel.MoveTab, (event, id: unknown, index: unknown) => {
+    const main = assertTrustedSender(event)
+    const tabId = assertTabId(main, id)
+    if (typeof index !== 'number' || !Number.isInteger(index) || index < 0) {
+      throw new Error('moveTab: index must be a whole number')
+    }
+    main.tabs.move(tabId, index)
+  })
+  ipcMain.handle(IpcChannel.ShowTabMenu, (event, id: unknown, x: unknown, y: unknown) => {
+    const main = assertTrustedSender(event)
+    const tabId = assertTabId(main, id)
+    const point = assertPoint(main, x, y)
+    showTabMenu(main, tabId, point.x, point.y)
   })
 
   ipcMain.handle(IpcChannel.ResetZoom, (event) =>

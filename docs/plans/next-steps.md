@@ -49,8 +49,11 @@ for them.
   needs one), never shared; `startup: 'home'` in `settings.json` keeps nothing. The smoke test
   quits, relaunches and checks the tabs, that a background tab fetches nothing, and that Ctrl+1
   loads it. Not built yet: history and suggestions (`history-list.ts` is written, not wired in),
-  the tab strip's drag and menu (`moveTarget` and `idsRightOf` are written), a place in the UI to
-  choose the startup setting.
+  a place in the UI to choose the startup setting.
+- Tab strip done (2026-11-20): drag to reorder (the tab follows the pointer, the others glide
+  aside, the new order shows at once; pure rules in `src/shared/tab-drag.ts`) and a right-click
+  menu through the overlay (`tab-menu.ts`). The smoke test drags a tab with real mouse events and
+  picks Duplicate from the menu. No keyboard reorder yet.
 
 ## Where it stands (checked 2026-11-10)
 - Browser essentials and the agent browser (Phases 1–6) are done. `bun run typecheck`,

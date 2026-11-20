@@ -26,7 +26,11 @@ open, sits under the page or to its right.
   - **Shared-with-agents mark** (agent icon, accent) when agents can see this tab.
   - **Mute / Unmute** button, only when the tab plays sound or is muted.
   - **Close** button (always on the active tab, on hover for others).
-  - States: active (raised, lit rim), inactive, hover. Middle-click closes.
+  - States: active (raised, lit rim), inactive, hover, dragged (follows the pointer above the
+    others, which glide aside). Middle-click closes. Drag along the strip to reorder.
+  - Right-click → tab menu (overlay): **New tab to the right** · **Reload** · **Duplicate** ·
+    **Mute / Unmute tab** · ☑ **Share with agents** · **Close tab** · **Close other tabs** ·
+    **Close tabs to the right** · **Reopen closed tab**. Shortcuts show on the active tab's menu only.
 - **New tab** (+) button after the last tab.
 
 ### 1.2 Toolbar (row under the tabs)
@@ -183,5 +187,5 @@ Left to right:
 - Fullscreen page (no chrome, square corners).
 
 ## 6. Not built yet (open to design)
-A downloads panel, a shield panel, a picks list, a settings page, the tab strip's final look (and
-its right-click menu and drag to reorder), history and address suggestions, session restore.
+A downloads panel, a shield panel, a picks list, a settings page, the tab strip's final look,
+history and address suggestions, a place to choose what opens on startup (restore or home).

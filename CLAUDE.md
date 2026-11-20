@@ -54,7 +54,8 @@ bun run typecheck    # tsc for main/preload, renderer, and tests
 bun test             # unit tests (src/**/*.test.ts)
 bun run smoke        # builds, then drives the real app through the agent bridge (scripts/smoke.ts)
                      # `bun scripts/smoke.ts --app dist/win-unpacked/browminal.exe` drives a packaged app
-                     # (it minimizes the window through `--inspect`, the one thing no agent tool does)
+                     # (through `--inspect` it does what no agent tool does: minimizes the window,
+                     # drags a tab and opens its menu in the UI)
 bun run icons        # build/icon.svg → build/icon.{png,ico,icns} and resources/icon.png
 bun run lint         # eslint
 bun run build        # typecheck + production bundle into out/
@@ -216,6 +217,7 @@ runs from `out/` first (the build fails on the locked native module).
 | `bookmark-list.ts` | Pure: `bookmarks.json` format, add/remove/find, URL and favicon checks |
 | `bookmarks.ts` | `Bookmarks`: the list and the bar setting; star/Ctrl+D toggle, favicon refresh, open |
 | `bookmarks-menu.ts` | Menus: right-click on a bookmark or the bar, and the "»" overflow |
+| `tab-menu.ts` | Right-click on a tab: reload, duplicate, mute, share, close others/right, reopen |
 | `menu-model.ts` | Pure: `MenuEntry` (what menus are built from) → the rows the overlay draws, and their actions |
 | `theme.ts` | Light/dark colours main paints itself; follows `nativeTheme` |
 | `glass.ts` | Pure: which see-through window material this OS supports (acrylic, vibrancy, none) |
@@ -359,7 +361,8 @@ space for the native controls.
   sheet, the errors popover, questions over the page (permissions, open link, agent requests), the
   terminal panel (header, empty panel, exit bar) and the start page. Menus are drawn by the
   overlay (frosted), but downloads and the shield are still plain menus in place of real panels.
-  Still placeholders: the screen-share picker (a native message box) and the plain tab strip.
+  Still placeholders: the screen-share picker (a native message box) and the tab strip's look
+  (its drag to reorder and right-click menu are built).
 - **Next steps (approved 2026-11-10, in progress):** commit the working tree, single instance, a smoke test,
   Electron 39 → 45, agent gaps (iframes first), daily use, the rest of the design pass, shipping —
   [docs/plans/next-steps.md](docs/plans/next-steps.md).

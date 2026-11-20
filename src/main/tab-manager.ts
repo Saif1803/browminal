@@ -10,7 +10,7 @@ import type { TabSummary } from '../shared/types'
 import { HOME_URL, isHomeUrl, isHttpUrl } from '../shared/url'
 import { PageVeil } from './page-veil'
 import { sessionOf, type SavedSession } from './session-file'
-import { activeAfterClose, insertionIndex } from './tab-order'
+import { activeAfterClose, idsRightOf, insertionIndex, moveTarget } from './tab-order'
 import { Tab, type OpenRequest, type TabActiveState, type TabHooks } from './tabs'
 
 const MAX_CLOSED_TABS = 25
@@ -215,6 +215,55 @@ export class TabManager {
 
   toggleMute(id: number): void {
     this.get(id)?.toggleMute()
+  }
+
+  /** Whether Ctrl+Shift+T has a tab to bring back. */
+  get canReopen(): boolean {
+    return this.closed.length > 0
+  }
+
+  /** Dragging a tab in the strip: tab `id` goes to `index` (clamped to the strip). */
+  move(id: number, index: number): void {
+    const tab = this.get(id)
+    if (!tab) return
+    const target = moveTarget(this.tabs.length, this.tabs.indexOf(tab), index)
+    if (target === null) return
+    this.tabs.splice(this.tabs.indexOf(tab), 1)
+    this.tabs.splice(target, 0, tab)
+    this.notifyChange()
+  }
+
+  /** The tab menu's Reload: a restored tab that hasn't loaded yet loads its page. */
+  reload(id: number): void {
+    const tab = this.get(id)
+    if (!tab) return
+    if (tab.isPending) tab.loadPending()
+    else tab.reload()
+  }
+
+  /** The same page in a new tab right of `id`, in front. Only pages main would load itself. */
+  duplicate(id: number): void {
+    const tab = this.get(id)
+    if (!tab || !isReopenable(tab.url)) return
+    this.create({ url: tab.url, index: this.tabs.indexOf(tab) + 1 })
+  }
+
+  /** "Close other tabs": `id` comes to the front first, so closing the rest moves nothing. */
+  closeOthers(id: number): void {
+    if (!this.get(id)) return
+    this.activate(id)
+    for (const other of this.tabs.filter((tab) => tab.id !== id)) this.close(other.id)
+  }
+
+  /** "Close tabs to the right". */
+  closeRightOf(id: number): void {
+    for (const other of idsRightOf(this.tabs, id)) this.close(other)
+  }
+
+  /** Whether "Duplicate" can copy this tab's page. */
+  canDuplicate(id: number): boolean {
+    const tab = this.get(id)
+    return tab !== undefined && isReopenable(tab.url)
   }
 
   /** The UI's height, reported by the UI itself. Tabs are placed below it. */
