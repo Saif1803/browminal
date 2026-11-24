@@ -18,7 +18,7 @@ import {
   type AgentContext
 } from './agent-tool-helpers'
 import { browserCommandFor, keyEvents, parseKeyCombo } from './cdp-keys'
-import type { CdpSession } from './cdp'
+import { staleRefError, type CdpSession, type CdpTarget, type FrameSession } from './cdp'
 import type { Tab } from './tabs'
 
 // After an action, how long to watch for a navigation it started, and how long to wait for it.
@@ -42,8 +42,7 @@ const modifiersInput = z
   .optional()
   .describe('Keys held during the click')
 
-const staleRef = (ref: number): Error =>
-  new Error(`No element with ref=${ref} on the page now (it changed?). Call read_page again.`)
+const staleRef = staleRefError
 
 /** A short description of an element for replies: tag and visible text. */
 export const DESCRIBE_ELEMENT = `function () {
@@ -68,17 +67,18 @@ export async function callOn<T>(
   fn: string,
   args: unknown[] = []
 ): Promise<T> {
+  const { session, node } = cdp.at(ref)
   let objectId: string | undefined
   try {
-    const { object } = await cdp.send<{ object: RemoteObject }>('DOM.resolveNode', {
-      backendNodeId: ref
+    const { object } = await session.send<{ object: RemoteObject }>('DOM.resolveNode', {
+      backendNodeId: node
     })
     objectId = object.objectId
   } catch (error) {
     if (cdp.dialog) throw error
   }
   if (!objectId) throw staleRef(ref)
-  const { result, exceptionDetails } = await cdp.send<{
+  const { result, exceptionDetails } = await session.send<{
     result: RemoteObject
     exceptionDetails?: { exception?: { description?: string }; text: string }
   }>('Runtime.callFunctionOn', {
@@ -89,25 +89,32 @@ export async function callOn<T>(
     awaitPromise: true,
     userGesture: true
   })
-  cdp.send('Runtime.releaseObject', { objectId }).catch(() => {})
+  session.send('Runtime.releaseObject', { objectId }).catch(() => {})
   if (exceptionDetails) {
     throw new Error(exceptionDetails.exception?.description ?? exceptionDetails.text)
   }
   return result.value as T
 }
 
-/** Scrolls element `ref` into view (unless `scroll` is false) and returns its centre in CSS px. */
+/**
+ * Scrolls element `ref` into view (unless `scroll` is false) and returns its centre in CSS px,
+ * from the tab's top left (an element in a frame of another process: plus where that frame is).
+ */
 async function centerOf(
   cdp: CdpSession,
   ref: number,
   scroll = true
 ): Promise<{ x: number; y: number }> {
+  const { session, node, frame } = cdp.at(ref)
   let quads: number[][]
+  let offset: { x: number; y: number }
   try {
-    if (scroll) await cdp.send('DOM.scrollIntoViewIfNeeded', { backendNodeId: ref })
-    ;({ quads } = await cdp.send<{ quads: number[][] }>('DOM.getContentQuads', {
-      backendNodeId: ref
+    if (scroll && frame) await cdp.frameOffset(frame, true)
+    if (scroll) await session.send('DOM.scrollIntoViewIfNeeded', { backendNodeId: node })
+    ;({ quads } = await session.send<{ quads: number[][] }>('DOM.getContentQuads', {
+      backendNodeId: node
     }))
+    offset = await cdp.frameOffset(frame)
   } catch (error) {
     if (cdp.dialog) throw error
     throw staleRef(ref)
@@ -127,8 +134,19 @@ async function centerOf(
   const quad = quads.find((q) => area(q) > 1)
   if (!quad) throw new Error(`The element ref=${ref} has no size on screen (hidden?)`)
   return {
-    x: (quad[0] + quad[2] + quad[4] + quad[6]) / 4,
-    y: (quad[1] + quad[3] + quad[5] + quad[7]) / 4
+    x: offset.x + (quad[0] + quad[2] + quad[4] + quad[6]) / 4,
+    y: offset.y + (quad[1] + quad[3] + quad[5] + quad[7]) / 4
+  }
+}
+
+/** Focuses element `ref` (in whichever frame it is). */
+async function focus(cdp: CdpSession, ref: number): Promise<void> {
+  const { session, node } = cdp.at(ref)
+  try {
+    await session.send('DOM.focus', { backendNodeId: node })
+  } catch (error) {
+    if (cdp.dialog) throw error
+    throw staleRef(ref)
   }
 }
 
@@ -252,39 +270,81 @@ interface CdpFrameTree {
 
 /**
  * The page's accessibility tree with its iframes' trees joined in (see joinFrameTrees). Frames
- * in the page's own renderer are read through the tab's session; one in another process (an
- * embed from another site) can't be, and shows as not readable.
+ * in the page's own renderer are read through the tab's session, frames in another process (an
+ * embed from another site) through their own (`FrameSession`), whose elements get refs of
+ * their own (`CdpSession.refOf`).
  */
 async function pageTree(cdp: CdpSession): Promise<AXNode[]> {
   const { nodes } = await cdp.send<{ nodes: AXNode[] }>('Accessibility.getFullAXTree')
-  const { frameTree } = await cdp
+  const frames: FrameTree[] = []
+  await collectFrames(cdp, null, frames)
+  return frames.length > 0 ? joinFrameTrees(nodes, frames) : nodes
+}
+
+/** An accessibility tree read in `frame`, its elements given the refs agents see. */
+function withRefs(cdp: CdpSession, frame: FrameSession | null, nodes: AXNode[]): AXNode[] {
+  if (!frame) return nodes
+  return nodes.map((node) =>
+    node.backendDOMNodeId === undefined
+      ? node
+      : { ...node, backendDOMNodeId: cdp.refOf(frame, node.backendDOMNodeId) }
+  )
+}
+
+/** The trees of the frames inside `frame`'s document (null: the tab's own), into `out`. */
+async function collectFrames(
+  cdp: CdpSession,
+  frame: FrameSession | null,
+  out: FrameTree[]
+): Promise<void> {
+  const session: CdpTarget = frame ?? cdp
+  const { frameTree } = await session
     .send<{ frameTree: CdpFrameTree }>('Page.getFrameTree')
     .catch(() => ({ frameTree: null }))
-  if (!frameTree) return nodes
-  const children: CdpFrameTree['frame'][] = []
+  // Frames in another process are read through their own session, as is what's inside them.
+  const elsewhere = new Set(cdp.frames.map((other) => other.frameId))
+  const local: CdpFrameTree['frame'][] = []
   const walk = (tree: CdpFrameTree): void => {
     for (const child of tree.childFrames ?? []) {
-      children.push(child.frame)
+      if (elsewhere.has(child.frame.id)) continue
+      local.push(child.frame)
       walk(child)
     }
   }
-  walk(frameTree)
-  const frames = await Promise.all(
-    children.slice(0, MAX_FRAMES).map(async ({ id, url }): Promise<FrameTree> => {
-      const owner = await cdp
-        .send<{ backendNodeId: number }>('DOM.getFrameOwner', { frameId: id })
-        .then((reply) => reply.backendNodeId)
-        .catch(() => null)
+  if (frameTree) walk(frameTree)
+  const ownerOf = (target: CdpTarget, frameId: string): Promise<number | null> =>
+    target
+      .send<{ backendNodeId: number }>('DOM.getFrameOwner', { frameId })
+      .then((reply) => reply.backendNodeId)
+      .catch(() => null)
+  const room = Math.max(0, MAX_FRAMES - out.length)
+  const read = await Promise.all(
+    local.slice(0, room).map(async ({ id, url }): Promise<FrameTree> => {
+      const owner = await ownerOf(session, id)
+      const ownerRef = owner === null ? null : cdp.refOf(frame, owner)
       // Never Browminal's own pages (pages can't load them in frames; this makes sure).
-      if (/^browminal:/i.test(url)) return { owner, url, nodes: null }
-      const tree = await cdp
+      if (/^browminal:/i.test(url)) return { owner: ownerRef, url, nodes: null }
+      const tree = await session
         .send<{ nodes: AXNode[] }>('Accessibility.getFullAXTree', { frameId: id })
-        .then((reply) => reply.nodes)
+        .then((reply) => withRefs(cdp, frame, reply.nodes))
         .catch(() => null)
-      return { owner, url, nodes: tree }
+      return { owner: ownerRef, url, nodes: tree }
     })
   )
-  return joinFrameTrees(nodes, frames)
+  out.push(...read)
+  for (const inner of cdp.frames.filter((other) => other.parent === frame)) {
+    if (out.length >= MAX_FRAMES) return
+    const owner = await ownerOf(inner.parentTarget, inner.frameId)
+    const ownerRef = owner === null ? null : cdp.refOf(frame, owner)
+    const tree = /^browminal:/i.test(inner.url)
+      ? null
+      : await inner
+          .send<{ nodes: AXNode[] }>('Accessibility.getFullAXTree')
+          .then((reply) => withRefs(cdp, inner, reply.nodes))
+          .catch(() => null)
+    out.push({ owner: ownerRef, url: inner.url, nodes: tree })
+    await collectFrames(cdp, inner, out)
+  }
 }
 
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms))
@@ -515,14 +575,7 @@ export function registerPageTools(mcp: McpServer, context: AgentContext): void {
     async ({ tabId, text: typed, ref, submit }) => {
       const { tab, cdp } = page(tabId)
       return context.run(tab, async () => {
-        if (ref !== undefined) {
-          try {
-            await cdp.send('DOM.focus', { backendNodeId: ref })
-          } catch (error) {
-            if (cdp.dialog) throw error
-            throw staleRef(ref)
-          }
-        }
+        if (ref !== undefined) await focus(cdp, ref)
         const where = ref === undefined ? '' : ` into ref=${ref}`
         const reply = await act(cdp, tab, `Typed ${typed.length} characters${where}`, async () => {
           if (typed) await cdp.send('Input.insertText', { text: typed })
@@ -624,14 +677,7 @@ export function registerPageTools(mcp: McpServer, context: AgentContext): void {
     async ({ tabId, keys, ref, repeat = 1 }) => {
       const { tab, cdp } = page(tabId)
       return context.run(tab, async () => {
-        if (ref !== undefined) {
-          try {
-            await cdp.send('DOM.focus', { backendNodeId: ref })
-          } catch (error) {
-            if (cdp.dialog) throw error
-            throw staleRef(ref)
-          }
-        }
+        if (ref !== undefined) await focus(cdp, ref)
         const times = repeat > 1 ? ` ×${repeat}` : ''
         return text(
           await act(cdp, tab, `Pressed ${keys}${times}`, () => pressCombo(cdp, keys, repeat))

@@ -103,6 +103,11 @@ export class NetworkLog {
   }
 
   /** Network.requestWillBeSent. A redirect closes the previous hop and starts a new entry. */
+  /** Whether request `requestId` is in the log. */
+  has(requestId: string): boolean {
+    return this.byRequestId.has(requestId)
+  }
+
   requestWillBeSent(params: Params, now = Date.now()): void {
     const requestId = String(params.requestId ?? '')
     const request = asRecord(params.request)

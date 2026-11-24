@@ -2,7 +2,7 @@ import { randomBytes } from 'node:crypto'
 import type { Session, WebContents } from 'electron'
 import { isHttpUrl } from '../shared/url'
 import { canInspect } from './agent-policy'
-import { CdpSession, type RawSend } from './cdp'
+import { CdpSession, type CdpTarget, type FrameSession, type RawSend } from './cdp'
 import {
   ConsoleLog,
   type ConsoleEntry,
@@ -45,6 +45,9 @@ const MAX_BODY = 5 * 1024 * 1024
 
 const SOURCE_MAP_TIMEOUT_MS = 15_000
 
+// Requests made by frames in other processes whose frame is remembered (for their bodies).
+const MAX_FRAME_REQUESTS = 1000
+
 const NO_NETWORK_THROTTLING = {
   offline: false,
   latency: 0,
@@ -52,7 +55,7 @@ const NO_NETWORK_THROTTLING = {
   uploadThroughput: -1
 }
 
-/** Called when picking ends: with the element the user clicked, or null when it was cancelled. */
+/** Called when picking ends: with the ref of the element the user clicked, or null (cancelled). */
 export type PickEnd = (backendNodeId: number | null) => void
 
 // How long a page kept awake (wakeIfHidden) gets to notice, how often it's asked, and how long
@@ -76,7 +79,7 @@ export class TabDebug {
   private emulationState: Emulation = NO_EMULATION
   /** The last error the user sent or dismissed, or an agent read: the badge counts newer ones. */
   private errorsSeenSeq = 0
-  private pickState: { stop: () => void; end: PickEnd } | null = null
+  private pickState: { stops: (() => void)[]; end: PickEnd } | null = null
   // Whether the page is told it's visible and focused although its window isn't (see wakeIfHidden).
   private awake = false
   /** The CDP binding the page's WebMCP shim reports through (a fresh name per share). */
@@ -84,6 +87,8 @@ export class TabDebug {
   private pageToolList: readonly PageTool[] = []
   private readonly pageToolCalls = new Map<number, PageToolCall>()
   private nextPageToolCall = 1
+  /** Requests made in frames of other processes: their bodies are those frames' to give. */
+  private readonly frameRequests = new Map<string, FrameSession>()
 
   constructor(
     private readonly webContents: WebContents,
@@ -98,26 +103,20 @@ export class TabDebug {
         if (canInspect(this.webContents.getURL())) handler(params)
       }
     }
-    cdp.on(
-      'Runtime.consoleAPICalled',
-      recording((params) => {
-        const entry = fromConsoleApiCalled(params)
-        if (!entry) return
-        this.console.add(entry)
-        if (entry.level === 'error') this.onChange()
-      })
-    )
-    cdp.on(
-      'Runtime.exceptionThrown',
-      recording((params) => {
-        this.console.add(fromExceptionThrown(params))
-        this.onChange()
-      })
-    )
-    cdp.on(
-      'Log.entryAdded',
-      recording((params) => this.console.add(fromLogEntry(params)))
-    )
+    const onConsole = recording((params) => {
+      const entry = fromConsoleApiCalled(params)
+      if (!entry) return
+      this.console.add(entry)
+      if (entry.level === 'error') this.onChange()
+    })
+    const onException = recording((params) => {
+      this.console.add(fromExceptionThrown(params))
+      this.onChange()
+    })
+    const onLog = recording((params) => this.console.add(fromLogEntry(params)))
+    cdp.on('Runtime.consoleAPICalled', onConsole)
+    cdp.on('Runtime.exceptionThrown', onException)
+    cdp.on('Log.entryAdded', onLog)
     // The Debugger domain is on only for source maps, and the page's `debugger;` statements
     // must never pause it: nobody is there to resume. Chromium forgets setSkipAllPauses when
     // the tab moves to a new renderer process (a cross-site navigation) while the domain stays
@@ -161,15 +160,42 @@ export class TabDebug {
       if (typeof url === 'string' && typeof sourceMapURL === 'string')
         this.sourceMaps.register(url, sourceMapURL)
     })
-    cdp.on('Network.requestWillBeSent', (params) => {
+    const onRequest = (params: Record<string, unknown>): void => {
       const { url } = (params.request ?? {}) as { url?: string }
       const isPageLoad = params.type === 'Document' && params.loaderId === params.requestId
       if (canInspect(this.webContents.getURL()) || (isPageLoad && isHttpUrl(String(url))))
         this.network.requestWillBeSent(params)
-    })
+    }
+    cdp.on('Network.requestWillBeSent', onRequest)
     cdp.on('Network.responseReceived', (params) => this.network.responseReceived(params))
     cdp.on('Network.loadingFinished', (params) => this.network.loadingFinished(params))
     cdp.on('Network.loadingFailed', (params) => this.network.loadingFailed(params))
+    // Iframes in other processes (embeds from other sites) log and load through their own
+    // session: the same logs take what they report.
+    cdp.onFrame(async (frame) => {
+      frame.on('Runtime.consoleAPICalled', onConsole)
+      frame.on('Runtime.exceptionThrown', onException)
+      frame.on('Log.entryAdded', onLog)
+      frame.on('Network.requestWillBeSent', (params) => {
+        const requestId = String(params.requestId ?? '')
+        // The frame's own document was already logged by the page that loaded it.
+        if (this.network.has(requestId) && !params.redirectResponse) return
+        this.rememberFrameRequest(requestId, frame)
+        onRequest(params)
+      })
+      frame.on('Network.responseReceived', (params) => this.network.responseReceived(params))
+      frame.on('Network.loadingFinished', (params) => this.network.loadingFinished(params))
+      frame.on('Network.loadingFailed', (params) => this.network.loadingFailed(params))
+      await frame.send('Runtime.enable')
+      await frame.send('Log.enable')
+      await frame.send('Network.enable', {
+        maxTotalBufferSize: MAX_TOTAL_BODIES,
+        maxResourceBufferSize: MAX_BODY
+      })
+      // Before the frame runs (it waits for this hook): what's emulated, and picking, reach it.
+      if (emulationLabel(this.emulationState)) await this.emulateFrame(frame)
+      if (this.pickState) await this.pickIn(frame).catch(() => {})
+    })
     cdp.onAttach(async (send) => {
       await send('Runtime.enable')
       await send('Log.enable')
@@ -193,6 +219,20 @@ export class TabDebug {
     })
   }
 
+  /** Where to ask for request `requestId`'s response body: the frame that made it, or the tab. */
+  bodyTarget(requestId: string): CdpTarget {
+    const frame = this.frameRequests.get(requestId)
+    return frame && this.cdp.frames.includes(frame) ? frame : this.cdp
+  }
+
+  private rememberFrameRequest(requestId: string, frame: FrameSession): void {
+    this.frameRequests.delete(requestId)
+    this.frameRequests.set(requestId, frame)
+    if (this.frameRequests.size > MAX_FRAME_REQUESTS) {
+      this.frameRequests.delete(this.frameRequests.keys().next().value!)
+    }
+  }
+
   /** Attaches the debugger now, so the logs start. */
   start(): void {
     this.cdp.attach().catch(() => {
@@ -214,7 +254,7 @@ export class TabDebug {
     this.emulationState =
       change === 'reset' ? NO_EMULATION : applyEmulationChange(this.emulationState, change)
     try {
-      await this.applyEmulation((method, params) => this.cdp.send(method, params))
+      await this.emulateEverywhere()
     } finally {
       if (this.emulationLabel !== before) this.onChange()
     }
@@ -297,11 +337,32 @@ export class TabDebug {
    */
   async startPicking(end: PickEnd): Promise<void> {
     this.endPicking(null)
-    const { cdp } = this
+    const state = { end, stops: [] as (() => void)[] }
+    // Set first, so a frame that attaches meanwhile joins in (see onFrame).
+    this.pickState = state
+    try {
+      await this.pickIn(null)
+    } catch (error) {
+      if (this.pickState === state) {
+        this.pickState = null
+        for (const stop of state.stops) stop()
+      }
+      throw error
+    }
+    // The tab's own inspect mode stops at the <iframe> of a frame in another process: elements
+    // in there are picked by that frame's renderer.
+    await Promise.all(this.cdp.frames.map((frame) => this.pickIn(frame).catch(() => {})))
+  }
+
+  /** Turns DevTools' inspect mode on in `frame` (null: the tab's own renderer) while picking. */
+  private async pickIn(frame: FrameSession | null): Promise<void> {
+    const state = this.pickState
+    if (!state) return
+    const target: CdpTarget = frame ?? this.cdp
     const [r, g, b] = hexRgb(themeColors().accent)
-    await cdp.send('DOM.enable')
-    await cdp.send('Overlay.enable')
-    await cdp.send('Overlay.setInspectMode', {
+    await target.send('DOM.enable')
+    await target.send('Overlay.enable')
+    await target.send('Overlay.setInspectMode', {
       mode: 'searchForNode',
       highlightConfig: {
         showInfo: true,
@@ -311,33 +372,35 @@ export class TabDebug {
         borderColor: { r, g, b, a: 0.9 }
       }
     })
-    const offPicked = cdp.on('Overlay.inspectNodeRequested', ({ backendNodeId }) => {
-      this.endPicking(typeof backendNodeId === 'number' ? backendNodeId : null)
+    const offPicked = target.on('Overlay.inspectNodeRequested', ({ backendNodeId }) => {
+      this.endPicking(
+        typeof backendNodeId === 'number' ? this.cdp.refOf(frame, backendNodeId) : null
+      )
     })
-    const offCancelled = cdp.on('Overlay.inspectModeCanceled', () => this.endPicking(null))
-    this.pickState = {
-      end,
-      stop: () => {
-        offPicked()
-        offCancelled()
-        const quiet = (method: string, params?: Record<string, unknown>): void => {
-          cdp.send(method, params).catch(() => {})
-        }
-        quiet('Overlay.setInspectMode', { mode: 'none' })
-        quiet('Overlay.hideHighlight')
-        quiet('Overlay.disable')
-        quiet('DOM.disable')
+    const offCancelled = target.on('Overlay.inspectModeCanceled', () => this.endPicking(null))
+    const stop = (): void => {
+      offPicked()
+      offCancelled()
+      const quiet = (method: string, params?: Record<string, unknown>): void => {
+        target.send(method, params).catch(() => {})
       }
+      quiet('Overlay.setInspectMode', { mode: 'none' })
+      quiet('Overlay.hideHighlight')
+      quiet('Overlay.disable')
+      quiet('DOM.disable')
     }
+    // Picking ended (or started over) while this was being set up.
+    if (this.pickState !== state) stop()
+    else state.stops.push(stop)
   }
 
-  /** Stops picking, if it's on; its `end` hears `backendNodeId` (null: nothing was picked). */
-  endPicking(backendNodeId: number | null = null): void {
+  /** Stops picking, if it's on; its `end` hears the picked element's ref (null: nothing). */
+  endPicking(ref: number | null = null): void {
     const picking = this.pickState
     if (!picking) return
     this.pickState = null
-    if (!this.webContents.isDestroyed()) picking.stop()
-    picking.end(backendNodeId)
+    if (!this.webContents.isDestroyed()) for (const stop of picking.stops) stop()
+    picking.end(ref)
   }
 
   /**
@@ -397,15 +460,32 @@ export class TabDebug {
     // Detaching alone leaves the emulated viewport size behind: clear it first.
     this.emulationState = NO_EMULATION
     this.onChange()
-    this.applyEmulation((method, params) => this.cdp.send(method, params))
+    this.emulateEverywhere()
       .catch(() => {})
       .finally(() => this.cdp.detach())
   }
 
+  /** Sends the emulation to the tab and to each of its frames in another process. */
+  private async emulateEverywhere(): Promise<void> {
+    await this.applyEmulation((method, params) => this.cdp.send(method, params))
+    await Promise.all(this.cdp.frames.map((frame) => this.emulateFrame(frame)))
+  }
+
+  /**
+   * A frame in another process has its own renderer: its user agent, colour scheme, touch,
+   * network and CPU are set there too. Its size is its `<iframe>`'s, so no viewport. A frame
+   * that went meanwhile is no error.
+   */
+  private async emulateFrame(frame: FrameSession): Promise<void> {
+    await this.applyEmulation((method, params) => frame.send(method, params), true).catch(() => {})
+  }
+
   /** Sends every part of the emulation, on or off (each call is idempotent). */
-  private async applyEmulation(send: RawSend): Promise<void> {
+  private async applyEmulation(send: RawSend, inFrame = false): Promise<void> {
     const { viewport, userAgent, colorScheme, network, cpu } = this.emulationState
-    if (viewport) {
+    if (inFrame) {
+      // The frame takes its size and pixel ratio from the page around it.
+    } else if (viewport) {
       await send('Emulation.setDeviceMetricsOverride', { ...viewport })
     } else {
       await send('Emulation.clearDeviceMetricsOverride')

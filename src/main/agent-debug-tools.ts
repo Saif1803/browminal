@@ -16,6 +16,7 @@ import {
   formatComputed,
   formatMatchedStyles,
   rulePlaces,
+  shiftBoxModel,
   type BoxModel,
   type MatchedStyles,
   type SheetInfo
@@ -24,7 +25,7 @@ import { formatOriginal, mapRefFor, type MapRef, type OriginalPosition } from '.
 import { DEVICE_NAMES, emulationLabel, NETWORKS, type CpuRate, type NetworkName } from './emulation'
 import { formatBytes, formatNetworkDetail, formatNetworkLine } from './network-log'
 import type { Tab } from './tabs'
-import type { CdpSession } from './cdp'
+import type { CdpSession, CdpTarget } from './cdp'
 
 const DEFAULT_BODY_CHARS = 20_000
 const DEFAULT_HTML_CHARS = 2000
@@ -191,10 +192,12 @@ export function registerDebugTools(mcp: McpServer, context: AgentContext): void 
         else if (!log.isLatestHop(entry)) response = '(no longer kept)'
         else {
           try {
-            const result = await cdp.send<{ body: string; base64Encoded: boolean }>(
-              'Network.getResponseBody',
-              { requestId: entry.requestId }
-            )
+            const result = await context
+              .debug(tab)
+              .bodyTarget(entry.requestId)
+              .send<{ body: string; base64Encoded: boolean }>('Network.getResponseBody', {
+                requestId: entry.requestId
+              })
             if (!result.base64Encoded) {
               response = truncate(result.body, maxChars ?? DEFAULT_BODY_CHARS)
             } else if (TEXT_MIME.test(entry.mimeType)) {
@@ -243,10 +246,13 @@ export function registerDebugTools(mcp: McpServer, context: AgentContext): void 
     async ({ tabId, ref, properties, maxHtml }) => {
       const { tab, cdp } = page(tabId)
       return context.run(tab, async () => {
+        // The element may be in a frame of another process: ask that frame's session.
+        const at = cdp.at(ref)
+        const dom = at.session
         let outerHTML: string
         try {
-          ;({ outerHTML } = await cdp.send<{ outerHTML: string }>('DOM.getOuterHTML', {
-            backendNodeId: ref
+          ;({ outerHTML } = await dom.send<{ outerHTML: string }>('DOM.getOuterHTML', {
+            backendNodeId: at.node
           }))
         } catch (error) {
           if (cdp.dialog) throw error
@@ -260,10 +266,12 @@ export function registerDebugTools(mcp: McpServer, context: AgentContext): void 
         const source = await elementSource(cdp, debug, ref)
         if (source) parts.push(`source: ${source}`)
         try {
-          const { model } = await cdp.send<{ model: BoxModel }>('DOM.getBoxModel', {
-            backendNodeId: ref
+          const { model } = await dom.send<{ model: BoxModel }>('DOM.getBoxModel', {
+            backendNodeId: at.node
           })
-          parts.push(formatBoxModel(model))
+          // Where it is in the tab, as clicks take it.
+          const offset = await cdp.frameOffset(at.frame)
+          parts.push(formatBoxModel(shiftBoxModel(model, offset.x, offset.y)))
         } catch {
           parts.push('box: not rendered (display: none, or not in the page)')
         }
@@ -274,7 +282,7 @@ export function registerDebugTools(mcp: McpServer, context: AgentContext): void 
         const sheetMaps = new Map<string, MapRef>()
         const owners = new Map<string, number>()
         const documentUrl = tab.webContents.getURL()
-        const offSheets = cdp.on('CSS.styleSheetAdded', ({ header }) => {
+        const offSheets = dom.on('CSS.styleSheetAdded', ({ header }) => {
           const h = (header ?? {}) as Record<string, unknown>
           const id = String(h.styleSheetId)
           const sourceURL = String(h.sourceURL ?? '')
@@ -289,26 +297,26 @@ export function registerDebugTools(mcp: McpServer, context: AgentContext): void 
           if (!sourceURL && typeof h.ownerNode === 'number') owners.set(id, h.ownerNode)
         })
         try {
-          await cdp.send('DOM.enable')
-          await cdp.send('CSS.enable')
-          await cdp.send('DOM.getDocument', { depth: 0 })
-          const { nodeIds } = await cdp.send<{ nodeIds: number[] }>(
+          await dom.send('DOM.enable')
+          await dom.send('CSS.enable')
+          await dom.send('DOM.getDocument', { depth: 0 })
+          const { nodeIds } = await dom.send<{ nodeIds: number[] }>(
             'DOM.pushNodesByBackendIdsToFrontend',
-            { backendNodeIds: [ref] }
+            { backendNodeIds: [at.node] }
           )
           const nodeId = nodeIds[0]
-          const { computedStyle } = await cdp.send<{
+          const { computedStyle } = await dom.send<{
             computedStyle: { name: string; value: string }[]
           }>('CSS.getComputedStyleForNode', { nodeId })
           parts.push(`Computed:\n${formatComputed(computedStyle, properties)}`)
-          const matched = await cdp.send<MatchedStyles>('CSS.getMatchedStylesForNode', { nodeId })
+          const matched = await dom.send<MatchedStyles>('CSS.getMatchedStylesForNode', { nodeId })
           const places = rulePlaces(matched)
           await Promise.all(
             [...new Set(places.map((place) => place.styleSheetId))].map(async (id) => {
               const sheet = sheets.get(id)
               const owner = owners.get(id)
               if (sheet && owner !== undefined && !sheetMaps.has(id))
-                sheet.file = (await viteFileOf(cdp, owner)) ?? undefined
+                sheet.file = (await viteFileOf(dom, owner)) ?? undefined
             })
           )
           const originals = new Map<string, OriginalPosition>()
@@ -331,9 +339,9 @@ export function registerDebugTools(mcp: McpServer, context: AgentContext): void 
           parts.push(`(No styles: ${(error as Error).message}. Is ref=${ref} a text node?)`)
         } finally {
           offSheets()
-          cdp.send('CSS.disable').catch(() => {})
-          // Picking needs the DOM domain on (the inspect highlight).
-          if (!debug.picking) cdp.send('DOM.disable').catch(() => {})
+          dom.send('CSS.disable').catch(() => {})
+          // Picking needs the DOM domain on in the tab (the inspect highlight).
+          if (at.frame || !debug.picking) dom.send('DOM.disable').catch(() => {})
         }
         return text(parts.join('\n'))
       })
@@ -499,7 +507,7 @@ export function registerDebugTools(mcp: McpServer, context: AgentContext): void 
 }
 
 /** Vite in dev injects each CSS file as <style data-vite-dev-id="<its path>">: that path. */
-async function viteFileOf(cdp: CdpSession, backendNodeId: number): Promise<string | null> {
+async function viteFileOf(cdp: CdpTarget, backendNodeId: number): Promise<string | null> {
   try {
     const { node } = await cdp.send<{ node: { attributes?: string[] } }>('DOM.describeNode', {
       backendNodeId

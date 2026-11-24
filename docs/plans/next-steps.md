@@ -33,8 +33,14 @@ for them.
   (`TabDebug.wakeIfHidden`); the smoke test minimizes the window and clicks.
 - Phase 2: same-site iframes, `drag`, CPU throttling and original names in minified stacks are
   built and unit-tested; the smoke test runs the first three against the real app (minified
-  names still only in unit tests). Left: cross-origin (out-of-process)
-  iframes, which need child CDP sessions; to be built with the app running.
+  names still only in unit tests). Cross-origin (out-of-process) iframes done 2026-11-20: child
+  CDP sessions (`FrameSession`), refs from `FRAME_REF_BASE`, offsets for clicks, their console
+  and network in the tab's logs; the smoke test reads, fills, clicks, types, inspects and logs
+  inside a `localhost` frame on a `127.0.0.1` page. Phase 2 is done. Since (2026-11-24):
+  `evaluate` in frames (`frame`: an `<iframe>`'s ref), emulation reaching their process (all but
+  the viewport), and picking inside them (inspect mode in every frame session; "Send to agent"
+  hit-tests into them); the smoke test evaluates in both kinds of frame, checks the colour
+  scheme reaches the other site's, and picks inside it with "Send to agent" and Ctrl+Shift+X.
 
 - Phase 5 started (2026-11-14), decision 4 answered: Browminal is released as open source (MIT),
   built from source, with a Windows installer. Done: `electron-builder.yml` (real `appId`,

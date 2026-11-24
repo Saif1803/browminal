@@ -104,6 +104,32 @@ function startSite(port: number): Promise<Server> {
       res.end(WEBMCP_PAGE)
       return
     }
+    // A page from another site (localhost, not 127.0.0.1): Chromium runs it in its own process.
+    if (path === '/xsite') {
+      const other = `http://localhost:${req.socket.localPort}/xframe`
+      res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' })
+      res.end(
+        '<!doctype html><title>Cross-site host</title><h1>Host</h1>' +
+          '<div style="height:120px"></div>' +
+          `<iframe src="${other}" title="Other site" style="width:360px;height:160px;margin-left:40px"></iframe>`
+      )
+      return
+    }
+    if (path === '/xframe') {
+      res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' })
+      res.end(`<!doctype html><title>Other site</title>
+<label>Who <input id="who"></label>
+<label>Note <input id="note"></label>
+<button onclick="document.getElementById('said').textContent = 'Cross clicked ' + document.getElementById('who').value">Cross-site button</button>
+<p id="said">Not clicked</p>
+<script>console.log('xframe console line'); fetch('/api/xping')</script>`)
+      return
+    }
+    if (path === '/api/xping') {
+      res.writeHead(200, { 'content-type': 'text/plain' })
+      res.end('xpong')
+      return
+    }
     if (path === '/frame') {
       res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' })
       res.end(
@@ -448,6 +474,22 @@ async function run(): Promise<void> {
       return text.includes('Frame clicked') ? text : null
     })
     check(afterFrame.includes('Frame clicked'), 'a click inside the iframe works')
+    const inFrame = await agent.ok('evaluate', {
+      tabId,
+      frame: refOf(/frame "Inner frame"/),
+      expression: 'location.pathname'
+    })
+    check(inFrame.includes('/frame'), 'evaluate runs in a same-site iframe', inFrame)
+    const notFrame = await agent.tool('evaluate', {
+      tabId,
+      frame: refOf(/button "Say hi"/),
+      expression: '1'
+    })
+    check(
+      notFrame.isError && agent.text(notFrame).includes('not an <iframe>'),
+      'evaluate refuses a frame ref that is no iframe',
+      agent.text(notFrame)
+    )
     const dragged = await agent.ok('drag', {
       tabId,
       fromRef: refOf(/button "Card"/),
@@ -459,6 +501,148 @@ async function run(): Promise<void> {
     })
     check(dropped.includes('Dropped card'), 'drag drops with HTML5 drag and drop', dragged)
     check(dragged.includes('HTML5'), 'drag says it used HTML5 drag and drop', dragged)
+
+    console.log('Cross-site iframes')
+    const xsite = await agent.ok('new_tab', { url: `${site}/xsite` })
+    const xsiteTab = Number(/\[tab (\d+)\]/.exec(xsite)?.[1])
+    const xtree = await until('the other site’s frame in read_page', 10_000, async () => {
+      const read = await agent.ok('read_page', { tabId: xsiteTab })
+      return read.includes('Cross-site button') ? read : null
+    }).catch(() => agent.ok('read_page', { tabId: xsiteTab }))
+    const xref = (pattern: RegExp): number => {
+      const line = xtree.split('\n').find((row) => pattern.test(row))
+      const ref = Number(/\[ref=(\d+)\]/.exec(line ?? '')?.[1])
+      if (!Number.isInteger(ref)) throw new Failure(`no ref for ${pattern} in\n${xtree}`)
+      return ref
+    }
+    check(
+      xtree.includes('button "Cross-site button"'),
+      'read_page shows a cross-site iframe’s button',
+      xtree
+    )
+    await agent.ok('fill', { tabId: xsiteTab, ref: xref(/textbox "Who"/), value: 'Ada' })
+    await agent.ok('click', { tabId: xsiteTab, ref: xref(/button "Cross-site button"/) })
+    const xclicked = await until('the cross-site click', 5_000, async () => {
+      const read = await agent.ok('read_page', { tabId: xsiteTab })
+      return read.includes('Cross clicked Ada') ? read : null
+    }).catch(() => '')
+    check(xclicked !== '', 'fill and click work inside it')
+    await agent.ok('type', { tabId: xsiteTab, ref: xref(/textbox "Note"/), text: 'typed here' })
+    const xtyped = await agent.ok('read_page', { tabId: xsiteTab })
+    check(/textbox "Note".*typed here/.test(xtyped), 'type reaches a field inside it', xtyped)
+    const xinspect = await agent.ok('inspect', {
+      tabId: xsiteTab,
+      ref: xref(/button "Cross-site button"/)
+    })
+    check(
+      xinspect.includes('Cross-site button') && xinspect.includes('Computed'),
+      'inspect reads an element inside it',
+      xinspect
+    )
+    const xconsole = await agent.ok('console_messages', { tabId: xsiteTab })
+    check(xconsole.includes('xframe console line'), 'console_messages has its log', xconsole)
+    const xnetwork = await until('the frame’s fetch', 5_000, async () => {
+      const list = await agent.ok('network_requests', { tabId: xsiteTab })
+      return list.includes('/api/xping') ? list : null
+    }).catch(() => agent.ok('network_requests', { tabId: xsiteTab }))
+    check(xnetwork.includes('/api/xping'), 'network_requests has its fetch', xnetwork)
+    const xframe = xref(/frame "Other site"/)
+    const inX = (expression: string): Promise<string> =>
+      agent.ok('evaluate', { tabId: xsiteTab, frame: xframe, expression })
+    const xeval = await inX('location.host + " " + document.getElementById("said").textContent')
+    check(
+      xeval.includes('localhost:') && xeval.includes('Cross clicked Ada'),
+      'evaluate runs inside it',
+      xeval
+    )
+    // Both schemes, so the check holds whichever the OS uses.
+    for (const scheme of ['dark', 'light']) {
+      await agent.ok('emulate', { tabId: xsiteTab, colorScheme: scheme })
+      const matches = await inX(`matchMedia('(prefers-color-scheme: ${scheme})').matches`)
+      check(matches.includes('true'), `emulate's ${scheme} colour scheme reaches it`, matches)
+    }
+    await agent.ok('emulate', { tabId: xsiteTab, reset: true })
+    // The user's "Send to agent" (right-click in the page) on the button inside the frame.
+    const xbox = /box: ([\d.]+)×([\d.]+) at \((-?[\d.]+), (-?[\d.]+)\)/.exec(
+      await agent.ok('inspect', { tabId: xsiteTab, ref: xref(/button "Cross-site button"/) })
+    )
+    const [bw, bh, bx, by] = (xbox ?? []).slice(1).map(Number)
+    const pickMenu = await inMain(
+      inspectPort,
+      `(async () => {
+      const win = ${WINDOW}
+      const wait = (ms) => new Promise((done) => setTimeout(done, ms))
+      const page = win.contentView.children.find((view) => view.webContents?.getURL().endsWith('/xsite')).webContents
+      const [x, y] = [${Math.round(bx + bw / 2)}, ${Math.round(by + bh / 2)}]
+      page.sendInputEvent({ type: 'mouseMove', x, y })
+      page.sendInputEvent({ type: 'mouseDown', x, y, button: 'right', clickCount: 1 })
+      page.sendInputEvent({ type: 'mouseUp', x, y, button: 'right', clickCount: 1 })
+      for (let i = 0; i < 50; i++) {
+        await wait(100)
+        const overlay = win.contentView.children.find((view) => view.webContents?.getURL().includes('overlay.html'))
+        if (!overlay) continue
+        const text = await overlay.webContents.executeJavaScript(
+          "(() => { const row = [...document.querySelectorAll('[role^=menuitem]')].find((r) => r.textContent.includes('Send to agent')); if (!row) return ''; row.click(); return 'sent' })()"
+        )
+        if (text) return text
+      }
+      return ''
+    })()`
+    )
+    check(pickMenu === 'sent', 'right-click inside it offers "Send to agent"', String(pickMenu))
+    const xpick = await until('the pick inside the frame', 10_000, async () => {
+      const picks = await agent.ok('get_picks')
+      return picks.includes('Cross-site button') ? picks : null
+    }).catch(() => agent.ok('get_picks'))
+    const pickRef = Number(/\[ref=(\d+)\]/.exec(xpick)?.[1])
+    const firstPickId = Number(/# Pick (\d+),/.exec(xpick)?.[1])
+    check(
+      xpick.includes('button "Cross-site button"') && pickRef >= 1_000_000_000,
+      'it picks the element inside the frame, not its <iframe>',
+      xpick
+    )
+    check(
+      // The frame sits under a heading and 120 px, 40 px from the left: not at the frame's (8, 8).
+      xpick.includes(`at (${xbox?.[3]}, ${xbox?.[4]})`) && bx > 40 && by > 120,
+      'the pick’s box is where the element is in the tab',
+      xpick
+    )
+    // Ctrl+Shift+X (Cmd+Shift+X), then a real click on the button: inspect mode in the frame.
+    const pickKey = JSON.stringify({
+      type: 'keyDown',
+      key: 'X',
+      code: 'KeyX',
+      control: process.platform !== 'darwin',
+      meta: process.platform === 'darwin',
+      shift: true,
+      alt: false,
+      isAutoRepeat: false
+    })
+    await inMain(
+      inspectPort,
+      `(async () => {
+      const win = ${WINDOW}
+      const wait = (ms) => new Promise((done) => setTimeout(done, ms))
+      win.webContents.emit('before-input-event', { preventDefault() {} }, ${pickKey})
+      await wait(600)
+      const page = win.contentView.children.find((view) => view.webContents?.getURL().endsWith('/xsite')).webContents
+      const [x, y] = [${Math.round(bx + bw / 2)}, ${Math.round(by + bh / 2)}]
+      page.sendInputEvent({ type: 'mouseMove', x, y })
+      await wait(100)
+      page.sendInputEvent({ type: 'mouseDown', x, y, button: 'left', clickCount: 1 })
+      page.sendInputEvent({ type: 'mouseUp', x, y, button: 'left', clickCount: 1 })
+    })()`
+    )
+    const keyPick = await until('the Ctrl+Shift+X pick', 10_000, async () => {
+      const picks = await agent.ok('get_picks')
+      return picks.includes(`# Pick ${firstPickId + 1},`) ? picks : null
+    }).catch(() => agent.ok('get_picks'))
+    check(
+      keyPick.includes('Cross-site button') && /\[ref=1\d{9}\]/.test(keyPick),
+      'Ctrl+Shift+X picks an element inside it',
+      keyPick
+    )
+    await agent.ok('close_tab', { tabId: xsiteTab })
 
     console.log('WebMCP page tools')
     const none = await agent.ok('page_tools', { tabId })

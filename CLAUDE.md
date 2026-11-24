@@ -296,8 +296,15 @@ space for the native controls.
   exposes the UI. Agents see and act only on **shared** tabs: shared by the user (Ctrl+Shift+A),
   opened by an agent (`new_tab`), or opened by a shared tab; "Share every tab" shares all. Main
   attaches the debugger only to shared tabs, and never reads or scripts `browminal://` pages
-  (`canInspect`). Sharing a tab shares the frames it embeds from its own renderer (read_page
-  joins their trees; their refs work in every tool); a `browminal:` frame is never read.
+  (`canInspect`). Sharing a tab shares every frame it embeds (read_page joins their trees; their
+  refs work in every tool); a `browminal:` frame is never read. Frames in another process (other
+  sites) are child sessions of the tab's debugger (`Target.setAutoAttach`, `flatten`, new frames
+  wait until their logs are on; `FrameSession` in `cdp.ts`); their elements get refs from
+  `FRAME_REF_BASE` (`CdpSession.refOf` / `at`), and points in them add the `<iframe>`s' offsets.
+  Workers that attach are let go at once. The Debugger domain and the WebMCP shim stay off in them.
+  `evaluate` takes an `<iframe>`'s ref (`CdpSession.worldOf`: a frame session, or the main world's
+  execution context of a same-process frame, never a `browminal:` one); emulation (all but the
+  viewport) and pick mode are sent to every frame session too, and `refAt` hit-tests into them.
   Agents load http(s) only, close only tabs they opened, and their actions still go through the
   usual navigation, download and permission rules. Keys an agent presses that are
   Browminal shortcuts (Ctrl+W, F5…) are refused (`browserCommandFor`), since CDP key events reach
@@ -354,7 +361,8 @@ space for the native controls.
   4 (page ↔ source: source maps, picks, errors badge), 5 (terminal panel) and 6 (docs:
   [docs/agents.md](docs/agents.md)) — [docs/plans/agent-browser.md](docs/plans/agent-browser.md).
   Since then: same-site iframes, `drag`, CPU throttling, original names in minified stacks
-  (next-steps Phase 2), WebMCP page tools (UI SDK's snapshot/query/act) and `data-review-loc`. Not built yet: cross-origin (out-of-process) iframes.
+  (next-steps Phase 2), WebMCP page tools (UI SDK's snapshot/query/act), `data-review-loc` and
+  cross-origin (out-of-process) iframes (2026-11-20).
 - **Creator browser (parked):** capture, studio mode, device preview, profiles, clips panel,
   Claude/ChatGPT handoff — [docs/plans/creator-browser.md](docs/plans/creator-browser.md).
 - **Design pass (started):** done from the Claude Design project "Nebula Design Pass": the agent

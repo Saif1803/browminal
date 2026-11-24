@@ -216,11 +216,8 @@ export class Agent {
     if (!tab || !canInspect(tab.webContents.getURL())) return
     this.share(tabId)
     try {
-      const { backendNodeId } = await this.debugOf(tab).cdp.send<{ backendNodeId: number }>(
-        'DOM.getNodeForLocation',
-        { x: Math.round(x), y: Math.round(y), ignorePointerEventsNone: true }
-      )
-      this.pickElement(tabId, backendNodeId)
+      // Inside a frame of another process too, not just its <iframe>.
+      this.pickElement(tabId, await this.debugOf(tab).cdp.refAt(x, y))
     } catch (error) {
       this.notify({ id: null, kind: 'element', typed: false, error: (error as Error).message })
     }

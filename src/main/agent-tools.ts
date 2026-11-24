@@ -16,7 +16,7 @@ import {
   waitForLoad,
   type AgentContext
 } from './agent-tool-helpers'
-import type { CdpSession } from './cdp'
+import type { CdpTarget } from './cdp'
 import type { Tab } from './tabs'
 import { pageToolsNote } from './webmcp'
 
@@ -38,7 +38,8 @@ const INSTRUCTIONS = `Browminal is the user's own web browser. These tools act o
 - To act on a page: read_page (or find) gives each element a ref; pass it to click, type, fill,
   select_option, press_key, hover or scroll. Refs go stale when the page changes: read again.
 - get_page_text is the cheapest way to read a page; screenshot shows its layout.
-- evaluate runs JavaScript in the page itself, like the DevTools console (top-level await works).
+- evaluate runs JavaScript in the page itself, like the DevTools console (top-level await works);
+  with frame (an <iframe>'s ref) it runs in that frame's document.
 - If an action opens an alert/confirm/prompt, answer it with handle_dialog.
 - To debug like DevTools: console_messages (errors with stacks), network_requests and
   network_request (status, headers, bodies), inspect(ref) (box, computed styles, the CSS rules
@@ -124,9 +125,14 @@ function throwIfException(details: ExceptionDetails | undefined): void {
  * Runs `expression` like the DevTools console and returns its result as text. In REPL mode a
  * returned promise isn't awaited for us, so it's awaited here; objects are then read as JSON.
  */
-async function evaluateInPage(cdp: CdpSession, expression: string): Promise<string> {
+async function evaluateIn(
+  cdp: CdpTarget,
+  expression: string,
+  contextId: number | undefined
+): Promise<string> {
   const evaluated = await cdp.send<EvaluateResult>('Runtime.evaluate', {
     expression,
+    ...(contextId === undefined ? {} : { contextId }),
     objectGroup: OBJECT_GROUP,
     awaitPromise: true,
     userGesture: true,
@@ -363,21 +369,36 @@ export function createAgentMcp(context: AgentContext, version: string): McpServe
         'Runs JavaScript in the page, like the DevTools console, and returns the result as JSON. ' +
         'Top-level await works; promises are awaited. Has user activation (can click, focus, play). ' +
         'Runs in the page’s global scope: wrap code in { } or an IIFE to avoid clashing with the ' +
-        'page’s own top-level const/let names.',
+        'page’s own top-level const/let names. With frame, runs in that iframe’s document ' +
+        '(same site or another).',
       inputSchema: {
         tabId: tabIdInput,
-        expression: z.string().max(100_000).describe('The code; its last expression is returned')
+        expression: z.string().max(100_000).describe('The code; its last expression is returned'),
+        frame: z
+          .number()
+          .int()
+          .positive()
+          .optional()
+          .describe('The ref of an <iframe> (from read_page): run in its document instead')
       }
     },
-    async ({ tabId, expression }) => {
+    async ({ tabId, expression, frame }) => {
       const tab = context.tab(tabId)
       assertInspectable(tab)
       return context.run(tab, async () => {
         const cdp = context.cdp(tab)
+        const world =
+          frame === undefined
+            ? { session: cdp, contextId: undefined, url: tab.webContents.getURL() }
+            : await cdp.worldOf(frame)
+        // Never Browminal's own pages (pages can't load them in frames; this makes sure).
+        if (world.url.startsWith('browminal:')) throw new Error('That frame shows a Browminal page')
         try {
-          return text(await evaluateInPage(cdp, expression))
+          return text(await evaluateIn(world.session, expression, world.contextId))
         } finally {
-          cdp.send('Runtime.releaseObjectGroup', { objectGroup: OBJECT_GROUP }).catch(() => {})
+          world.session
+            .send('Runtime.releaseObjectGroup', { objectGroup: OBJECT_GROUP })
+            .catch(() => {})
         }
       })
     }

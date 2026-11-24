@@ -4,6 +4,7 @@ import {
   formatComputed,
   formatMatchedStyles,
   rulePlaces,
+  shiftBoxModel,
   type SheetInfo
 } from './element-inspect'
 
@@ -255,5 +256,28 @@ describe('rule locations from source maps and Vite', () => {
     expect(text).toContain(
       '.cart {  /* C:/shop/src/Cart.css (line 5 of the CSS Vite serves for it) */'
     )
+  })
+})
+
+describe('shiftBoxModel', () => {
+  const model = {
+    content: quad(10, 20, 30, 40),
+    padding: quad(8, 18, 34, 44),
+    border: quad(7, 17, 36, 46),
+    margin: quad(2, 12, 46, 56),
+    width: 36,
+    height: 46
+  }
+
+  test('moves every quad, keeps the size', () => {
+    const moved = shiftBoxModel(model, 100, 5)
+    expect(moved.content).toEqual(quad(110, 25, 30, 40))
+    expect(moved.margin).toEqual(quad(102, 17, 46, 56))
+    expect(moved.width).toBe(36)
+    expect(formatBoxModel(moved)).toContain('at (107, 22)')
+  })
+
+  test('no offset: the same model', () => {
+    expect(shiftBoxModel(model, 0, 0)).toBe(model)
   })
 })

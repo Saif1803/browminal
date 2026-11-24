@@ -89,7 +89,7 @@ used last, the tab of the Browminal terminal it runs in, or the active shared ta
 | | `navigate` | Loads a URL, or back / forward / reload (`hardReload` skips the cache) |
 | Read | `get_page_text` | Title, URL and visible text: the cheapest read |
 | | `screenshot` | The visible part or the whole page, scaled to `maxWidth` |
-| | `read_page` | The accessibility tree, one element per line, each with a ref; same-site iframes included |
+| | `read_page` | The accessibility tree, one element per line, each with a ref; iframes included |
 | | `find` | Elements whose role, name or value contains some text, with refs |
 | Act | `click`, `hover` | Real mouse events on a ref or a point |
 | | `drag` | Drags a ref or point onto another: HTML5 drag and drop, or press-move-release for pointer-based libraries (says which) |
@@ -99,7 +99,7 @@ used last, the tab of the Browminal terminal it runs in, or the active shared ta
 | | `scroll` | Scrolls a ref into view, or the page with the wheel |
 | | `wait_for` | Text appears / disappears, load, network idle, or some seconds |
 | | `handle_dialog` | Accepts or dismisses an alert, confirm, prompt or "Leave page?" |
-| | `evaluate` | Runs JavaScript in the page, like the DevTools console |
+| | `evaluate` | Runs JavaScript in the page, like the DevTools console (or in an iframe: `frame`) |
 | Debug | `console_messages` | Console calls, uncaught exceptions with stacks, browser messages |
 | | `network_requests` | Requests: method, status or failure, type, size, time |
 | | `network_request` | One request in full: headers, request and response bodies |
@@ -117,12 +117,17 @@ only what's new. Where the page has source maps (any dev server), stacks and CSS
 files (`src/App.tsx:12:5`), not the bundle; in a minified build, stack frames also get their
 functions' original names back (from the name the caller used, so `at t` reads `at checkout`).
 
-**Iframes:** `read_page` and `find` include what iframes show when they're from the page's own
-site (Storybook's preview, an app in a frame): their elements have refs like any other, so
-`click`, `fill`, `inspect` and the rest work on them. Sharing a tab shares what it embeds from its
-own site. An embed from another site (a payment form, a sign-in widget) runs in another process
-and shows as "frame content not readable" for now; `evaluate` and `get_page_text` read the main
-frame only.
+**Iframes:** `read_page` and `find` include what iframes show, from the page's own site
+(Storybook's preview, an app in a frame) or from another (a payment form, a sign-in widget, an
+embed on another port of localhost): their elements have refs like any other, so `click`, `fill`,
+`type`, `inspect` and the rest work on them. Refs in a frame from another site are big numbers
+(from 1000000000); they stay valid until that frame loads another page. Their console lines and
+requests show in `console_messages` and `network_requests` too. **Sharing a tab shares
+everything it embeds**, from any site. `evaluate` runs in an iframe's document when given its
+ref as `frame`; `get_page_text` reads the main frame only. `emulate` reaches frames from other
+sites too (colour scheme, user agent, touch, network, CPU); their size is their `<iframe>`'s.
+Picking (Ctrl+Shift+X or **Send to agent**) picks elements inside any frame, and a pick's box is
+where the element is in the tab.
 
 ### Pages with tools of their own (WebMCP, UI SDK)
 A page can offer agents tools of its own through WebMCP: it registers them with
@@ -185,4 +190,5 @@ you'd let the agent use.
   with the terminal) holds it.
 
 ## Not built yet
-Iframes from other sites (cross-origin embeds run in their own process and aren't read yet).
+Nothing from the plan. `get_page_text` reads the main frame only (use `read_page`, or `evaluate`
+with `frame`).

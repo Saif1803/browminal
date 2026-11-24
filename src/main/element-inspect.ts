@@ -49,6 +49,22 @@ export interface BoxModel {
   height: number
 }
 
+/**
+ * `model` moved by (dx, dy): an element in a frame of another process is measured in that
+ * frame's viewport, and shown to agents where it is in the tab (where clicks go).
+ */
+export function shiftBoxModel(model: BoxModel, dx: number, dy: number): BoxModel {
+  if (dx === 0 && dy === 0) return model
+  const shift = (quad: number[]): number[] => quad.map((v, i) => v + (i % 2 === 0 ? dx : dy))
+  return {
+    ...model,
+    content: shift(model.content),
+    padding: shift(model.padding),
+    border: shift(model.border),
+    margin: shift(model.margin)
+  }
+}
+
 /** Where a stylesheet came from (CSS.styleSheetAdded's header). */
 export interface SheetInfo {
   sourceURL: string

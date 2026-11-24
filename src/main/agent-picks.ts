@@ -11,7 +11,7 @@ import {
   parseComponentSource
 } from './component-source'
 import { formatConsoleEntries } from './console-log'
-import { formatBoxModel, formatComputed, type BoxModel } from './element-inspect'
+import { formatBoxModel, formatComputed, shiftBoxModel, type BoxModel } from './element-inspect'
 import { formatPick, formatPickLine, type NewPick } from './picks'
 import type { TabDebug } from './tab-debug'
 import type { Tab } from './tabs'
@@ -122,14 +122,19 @@ async function screenshotOf(cdp: CdpSession, model: BoxModel | null): Promise<st
 /** Everything an agent gets about an element the user picked. */
 export async function captureElementPick(tab: Tab, debug: TabDebug, ref: number): Promise<NewPick> {
   const { cdp } = debug
+  // It may be in a frame of another process: its session has the node.
+  const { session, node, frame } = cdp.at(ref)
   const description = await callOn<string>(cdp, ref, DESCRIBE_ELEMENT)
   const selector = await callOn<string>(cdp, ref, SELECTOR).catch(() => '')
-  const { outerHTML } = await cdp.send<{ outerHTML: string }>('DOM.getOuterHTML', {
-    backendNodeId: ref
+  const { outerHTML } = await session.send<{ outerHTML: string }>('DOM.getOuterHTML', {
+    backendNodeId: node
   })
-  const model = await cdp
-    .send<{ model: BoxModel }>('DOM.getBoxModel', { backendNodeId: ref })
-    .then(({ model }) => model)
+  const model = await session
+    .send<{ model: BoxModel }>('DOM.getBoxModel', { backendNodeId: node })
+    .then(async ({ model }) => {
+      const { x, y } = await cdp.frameOffset(frame)
+      return shiftBoxModel(model, x, y)
+    })
     .catch(() => null)
   const computed = await callOn<{ name: string; value: string }[]>(cdp, ref, COMPUTED, [
     PICK_STYLES
