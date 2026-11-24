@@ -1,8 +1,11 @@
 # Browminal
 
-A desktop browser for localhost development. Your terminal coding agent (Claude Code, Codex or
-any MCP client) sees, drives and debugs the tabs you share with it, in the browser you already
-have open.
+**An IBE: an integrated browsing environment.**
+
+An IDE puts a terminal, a debugger and your tools around the code. Browminal puts them around the
+page: a desktop browser for localhost development, with a terminal docked beside each tab and a
+coding agent (Claude Code, Codex or any MCP client) that sees, drives and debugs the tabs you share
+with it.
 
 - **A terminal beside the page.** Start an agent from the panel and it is already connected to
   the tab it sits next to.
