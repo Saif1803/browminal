@@ -182,7 +182,6 @@ export class Terminals {
   showStartPage(): void {
     this.activeId = null
     this.sendSessions()
-    this.placeView()
     this.show()
   }
 
@@ -420,7 +419,7 @@ export class Terminals {
     if (!this.isOpen || this.window.isDestroyed()) return
     // The start page is the UI's: the keyboard goes there.
     if (this.activeId === null) return this.window.webContents.focus()
-    if (!this.bounds || this.view.webContents.isDestroyed()) return
+    if (!this.bounds || !this.viewAlive()) return
     this.view.webContents.focus()
     this.send(TerminalViewChannel.Focus)
   }
@@ -432,12 +431,16 @@ export class Terminals {
     this.stopWatchingTheme()
     for (const session of this.sessions) this.end(session)
     this.sessions = []
-    if (!this.view.webContents.isDestroyed()) this.view.webContents.close()
+    const wc = this.view.webContents
+    if (wc && !wc.isDestroyed()) wc.close()
   }
 
   private show(): void {
     this.isOpen = true
     this.placePanel()
+    // The layout only calls back when the panel's place changes: a session shown in a panel
+    // that was already open (on the start page) needs its view put on screen here.
+    this.placeView()
     this.focus()
     this.changed()
   }
@@ -466,7 +469,7 @@ export class Terminals {
    * the bottom of the panel.
    */
   private placeView(): void {
-    if (this.window.isDestroyed() || this.view.webContents.isDestroyed()) return
+    if (this.window.isDestroyed() || !this.viewAlive()) return
     const content = this.window.contentView
     const attached = content.children.includes(this.view)
     const bounds = this.bounds
@@ -538,7 +541,7 @@ export class Terminals {
   private watch(session: Session): void {
     const { pty } = session
     pty.onData((data) => {
-      if (session.pty !== pty) return
+      if (this.disposed || session.pty !== pty) return
       session.buffer = appendOutput(session.buffer, data)
       this.send(TerminalViewChannel.Output, session.id, data)
     })
@@ -586,9 +589,15 @@ export class Terminals {
   }
 
   private send(channel: string, ...args: unknown[]): void {
-    if (this.viewReady && !this.view.webContents.isDestroyed()) {
-      this.view.webContents.send(channel, ...args)
-    }
+    if (this.viewReady && this.viewAlive()) this.view.webContents.send(channel, ...args)
+  }
+
+  /**
+   * Whether the terminal view's page is still there. Once it's destroyed (the window closed)
+   * Electron's `view.webContents` is undefined, and a killed shell may still flush its last output.
+   */
+  private viewAlive(): boolean {
+    return !this.disposed && this.view.webContents?.isDestroyed() === false
   }
 
   private changed(): void {

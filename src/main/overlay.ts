@@ -614,7 +614,8 @@ export class Overlay {
   }
 
   private push(): void {
-    if (!this.viewReady || this.view.webContents.isDestroyed() || this.window.isDestroyed()) return
+    if (this.disposed || !this.viewReady || this.window.isDestroyed()) return
+    if (this.view.webContents?.isDestroyed() !== false) return
     const content = this.content()
     const surface = this.surface
     const { width, height } = this.window.getContentBounds()
