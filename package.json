@@ -1,6 +1,6 @@
 {
   "name": "browminal",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "A browser for localhost development that terminal coding agents can see, drive and debug",
   "main": "./out/main/index.js",
   "author": "Saif",
